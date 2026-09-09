@@ -34,7 +34,7 @@ Your immediate task is to implement **Increment 2: Unified Diff Parser & Hunk An
 ### Steps to Follow:
 
 1. **Review & Merge Increment 1 PR**:
-   - Check the PR opened for `feat/config-and-tiers`.
+   - Check the PR opened for `feat/config-and-tiers`: [PR #1](https://github.com/xpepper/pr-review-gemini/pull/1).
    - Ensure it merges cleanly into `main` and switch to an up-to-date `main`:
      ```bash
      git checkout main
