@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/review-publisher` (ready for PR creation or merge to `main`)
-* **PR #3**: [feat(publish): implement host-gated review publishing with diff anchoring](https://github.com/xpepper/pr-review-gemini/pull/3)
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
+* **PR #3**: Merged ([feat(publish): implement host-gated review publishing with diff anchoring](https://github.com/xpepper/pr-review-gemini/pull/3))
 * **Test Suite**: `npm test` runs and passes (79 tests across 19 suites, 0 failures)
 
 ---
@@ -78,3 +78,19 @@ Your task is to implement **Increment 4: Minimum Viable Reviewer (First Dogfoodi
 4. **Verify & Test**:
    - Write tests for skill integration and reviewer runner.
    - Ensure `npm test` passes completely.
+
+---
+
+## Dogfooding Reference & Next Steps (Increment 4)
+
+As soon as the first working skeleton of the plugin is available and usable in a meaningful way, we must use it!
+An established pattern to achieve this is a standalone dogfood script (e.g. `scripts/dogfood-review.mjs`) that invokes the Copilot SDK (`@github/copilot-sdk`) like our plugin will call it, similar to:
+`https://github.com/xpepper/copilot-pr-review/blob/main/scripts/dogfood-review.mjs`.
+
+This script ties together:
+- `getPrDiff(prNumber)` from `src/diff.js`
+- `loadConfig()` from `src/config.js`
+- Review lens prompting with Copilot models
+- `publishReview()` from `src/publish.js`
+- Agent skill declaration in `skills/pr-review/SKILL.md` (Agent Plugins 1.0 spec)
+
