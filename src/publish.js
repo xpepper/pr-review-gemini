@@ -229,6 +229,16 @@ export function parseMarkdownFindings(input) {
 
     if (fileMatch || rawHeaderSeverity || sevMatch) {
       hasHeadingFindings = true;
+      let rawFilePath = fileMatch?.[1] || '';
+      let rawLine = lineMatch?.[1] || null;
+      if (rawFilePath && !rawLine) {
+        const colonMatch = rawFilePath.match(/^(.+?):(\d+)$/);
+        if (colonMatch) {
+          rawFilePath = colonMatch[1];
+          rawLine = colonMatch[2];
+        }
+      }
+
       // Strip metadata lines from commentary
       const commentaryLines = sectionBody
         .split(/\r?\n/)
@@ -238,8 +248,8 @@ export function parseMarkdownFindings(input) {
         title: headerTitle,
         severity: normalizeSeverity(rawHeaderSeverity || sevMatch?.[1]),
         confidence: normalizeConfidence(confMatch?.[1]),
-        filePath: cleanFilePath(fileMatch?.[1]),
-        line: normalizeLine(lineMatch?.[1]),
+        filePath: cleanFilePath(rawFilePath),
+        line: normalizeLine(rawLine),
         side: sideMatch?.[1]?.toUpperCase() === 'LEFT' ? 'LEFT' : 'RIGHT',
         commentary: commentaryLines.join('\n').trim(),
       });
@@ -756,5 +766,7 @@ export async function publishReview({
     inlineCommentsCount: inlineComments.length,
     demotedFindingsCount: demotedFindings.length,
     totalFindingsCount: allFindings.length,
+    reviewBody: formattedBody,
+    classification: { inlineComments, demotedFindings, allFindings },
   };
 }
