@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { runReview, resolveReviewMode, LENS_DEFINITIONS } from '../src/reviewer.js';
+import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
 
 const execFileAsync = promisify(execFile);
@@ -75,67 +76,6 @@ function parseCliArgs(args) {
   return { prNumber, mode, dryRun, publish, repo, model, mock, showHelp };
 }
 
-async function createRunner({ model, mock, cwd }) {
-  if (mock) {
-    return async ({ lens }) => {
-      return `<<<PR_REVIEW_JSON>>>
-[]
-<<<END_PR_REVIEW_JSON>>>`;
-    };
-  }
-
-  // If COPILOT_SDK_PATH is configured, dynamically load SDK
-  if (process.env.COPILOT_SDK_PATH && process.env.COPILOT_CLI_PATH) {
-    try {
-      const { pathToFileURL } = await import('node:url');
-      const sdkModule = await import(
-        pathToFileURL(path.resolve(process.env.COPILOT_SDK_PATH, 'index.js')).href
-      );
-      const { CopilotClient, RuntimeConnection } = sdkModule;
-      const client = new CopilotClient({
-        connection: RuntimeConnection.forStdio({
-          path: path.resolve(process.env.COPILOT_CLI_PATH),
-        }),
-      });
-
-      return async ({ prompt, tier, reasoningEffort }) => {
-        const session = await client.createSession({
-          model: model || (tier === 'heavy' ? 'claude-3.7-sonnet' : 'gpt-4o'),
-          reasoningEffort,
-          workingDirectory: cwd,
-        });
-        try {
-          const response = await session.send(prompt);
-          return response?.text || '';
-        } finally {
-          await session.close();
-        }
-      };
-    } catch {
-      // Fallback to CLI
-    }
-  }
-
-  // Direct Copilot CLI invocation fallback
-  return async ({ prompt, tier, reasoningEffort }) => {
-    const cliArgs = ['-s', '-p', prompt, '--no-color'];
-    if (model) {
-      cliArgs.push('--model', model);
-    }
-
-    try {
-      const { stdout } = await execFileAsync('copilot', cliArgs, {
-        cwd,
-        maxBuffer: 10 * 1024 * 1024,
-      });
-      return stdout;
-    } catch (err) {
-      console.error(`Copilot CLI execution warning: ${err.message}`);
-      return '';
-    }
-  };
-}
-
 const MOCK_DIFF = `diff --git a/src/index.js b/src/index.js
 index 1111111..2222222 100644
 --- a/src/index.js
@@ -167,7 +107,7 @@ async function main() {
   console.log(`   Mode: ${mode}`);
   console.log(`   Action: ${dryRun ? 'Dry-run (inspect only)' : publish ? 'Publish host-gated review' : 'Dry-run (default)'}`);
 
-  const runnerFn = await createRunner({ model, mock, cwd });
+  const runnerFn = await createSubagentRunner({ modelOverride: model, mock, cwd });
 
   // Wrapper for gh CLI execution
   const execGhFn = (args, options = {}) => {
