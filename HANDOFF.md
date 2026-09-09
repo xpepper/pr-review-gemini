@@ -3,14 +3,15 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/config-and-tiers`
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
+* **PR #1**: Merged ([feat(config): implement model tier and settings resolution](https://github.com/xpepper/pr-review-gemini/pull/1))
 * **Test Suite**: `npm test` runs and passes (17 tests, 0 failures)
 
 ---
 
 ## Accomplished in this Session
 
-1. **Feature Branch**: Created and worked in `feat/config-and-tiers`.
+1. **Feature Branch & Implementation**: Implemented Increment 1 in `feat/config-and-tiers`.
 2. **Increment 1: Configuration & Model Tier Management**:
    - Implemented `src/config.js` supporting:
      - Sensible default configuration:
@@ -24,6 +25,7 @@
      - Tier helper functions: `getModelForTier(config, tier)` and `getReasoningEffortForTier(config, tier)`.
    - Implemented unit test suite in `tests/config.test.mjs` using native `node:test` covering all resolution paths, filesystem integration, and error fallback scenarios.
 3. **Roadmap & Progress Tracking**: Updated `TODO.md` and `docs/roadmap.md` marking Phase 2 / Increment 1 complete.
+4. **PR & Merge**: Opened PR #1, verified green build, squashed and merged into `main`, and synced local `main`.
 
 ---
 
@@ -33,13 +35,12 @@ Your immediate task is to implement **Increment 2: Unified Diff Parser & Hunk An
 
 ### Steps to Follow:
 
-1. **Review & Merge Increment 1 PR**:
-   - Check the PR opened for `feat/config-and-tiers`: [PR #1](https://github.com/xpepper/pr-review-gemini/pull/1).
-   - Ensure it merges cleanly into `main` and switch to an up-to-date `main`:
-     ```bash
-     git checkout main
-     git pull origin main
-     ```
+1. **Confirm Clean Main**:
+   Verify you are on `main` with a clean working tree:
+   ```bash
+   git status
+   npm test
+   ```
 
 2. **Create Feature Branch**:
    ```bash
