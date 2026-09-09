@@ -3,7 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/diff-parser` (PR opened against `main`)
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
+* **PR #2**: Merged ([feat(diff): implement unified diff parser and hunk anchoring](https://github.com/xpepper/pr-review-gemini/pull/2))
 * **Test Suite**: `npm test` runs and passes (50 tests, 0 failures)
 
 ---
@@ -28,6 +29,7 @@
      - `getPrDiff(prNumber, { cwd, execFileFn })`: fetches PR diff via `gh pr diff <prNumber>` with dependency injection.
    - Implemented unit test suite in `tests/diff.test.mjs` using native `node:test` covering all parser scenarios, hunk anchoring, commentability safety gates, and CLI retrieval.
 3. **Roadmap & Progress Tracking**: Updated `TODO.md` and `docs/roadmap.md` marking Increment 2 complete.
+4. **PR & Merge**: Opened PR #2, verified all checks, squashed and merged into `main`, and synced local `main`.
 
 ---
 
@@ -37,11 +39,9 @@ Your immediate task is to implement **Increment 3: Host-Gated GitHub Review Publ
 
 ### Steps to Follow:
 
-1. **Confirm Clean State & Sync `main`**:
-   Verify PR for `feat/diff-parser` has merged into `main`, switch to `main`, pull latest, and verify tests pass:
+1. **Confirm Clean Main**:
+   Verify you are on `main` with a clean working tree:
    ```bash
-   git checkout main
-   git pull origin main
    git status
    npm test
    ```
@@ -75,3 +75,11 @@ Your immediate task is to implement **Increment 3: Host-Gated GitHub Review Publ
    * Commit using conventional commit format: `feat(publish): implement host-gated review publishing with diff anchoring`.
    * Push branch and open PR against `main` using `gh pr create`.
    * Update `TODO.md`, `docs/roadmap.md`, and `HANDOFF.md`.
+
+---
+
+## Upcoming Dogfooding Design Note (Increment 4)
+
+As soon as Increment 3 (publishing) and Increment 4 (review orchestrator) are in place, every subsequent PR will be reviewed using this tool before merging.
+A practical design to achieve this early is a standalone script (e.g. `scripts/dogfood-review.mjs`, similar to the pattern in `https://github.com/xpepper/copilot-pr-review/blob/main/scripts/dogfood-review.mjs`) that invokes `@github/copilot-sdk` with our configured lenses and uses `src/publish.js` to submit the review on GitHub.
+
