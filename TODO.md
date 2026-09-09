@@ -20,9 +20,9 @@
 
 ### Phase 3: Diff Acquisition & Hunk Anchoring (MCP Tool)
 - [ ] Create minimal MCP server structure (`mcp.json` + `server/`).
-- [ ] Implement `pr_review_get_diff` (fetching via `gh` CLI).
-- [ ] Implement unified diff hunk parser (extracting valid hunk ranges for inline comments).
-- [ ] Unit test diff parser against representative multi-file, rename, add, and delete diffs.
+- [x] Implement `getPrDiff` (fetching via `gh` CLI).
+- [x] Implement unified diff hunk parser (extracting valid hunk ranges for inline comments).
+- [x] Unit test diff parser against representative multi-file, rename, add, and delete diffs.
 
 ### Phase 4: Minimum Viable Reviewer (First Dogfooding Target)
 - [ ] Create `skills/pr-review/SKILL.md` with core review prompt and basic review lens.

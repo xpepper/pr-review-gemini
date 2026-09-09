@@ -55,10 +55,10 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Implement `src/config.js` to manage user (`~/.copilot/pr-review.json`) and project (`.github/pr-review.json`) settings.
   - Support `tiers` (`light`, `medium`, `heavy`) and `reasoningEfforts` (`off`, `low`, `medium`, `high`).
   - Unit test config resolution, defaults, and validation.
-- [ ] **Increment 2: Unified Diff Parser & Hunk Anchoring**
-  - Implement diff retrieval via `gh pr diff` and hunk header parser.
-  - Determine whether a line reference falls inside a hunk (`commentable: true`).
-  - Unit test against single-line, multi-line, rename, and binary diff fixtures.
+- [x] **Increment 2: Unified Diff Parser & Hunk Anchoring**
+  - Implement diff retrieval via `gh pr diff` and hunk header parser (`src/diff.js`).
+  - Determine whether a line reference falls inside a hunk (`commentable: true`) with commentability safety gates.
+  - Unit test against single-line, multi-line, rename, and binary diff fixtures (`tests/diff.test.mjs`).
 - [ ] **Increment 3: Host-Gated GitHub Review Publisher**
   - Implement `src/publish.js`: parses Markdown findings, validates diff anchors, enforces safety gates (stale-head check, demoting unanchored findings to summary notes, max 50 inline comments).
   - Test-driven with mocked `gh api` calls verifying single POST and no accidental `REQUEST_CHANGES`.
