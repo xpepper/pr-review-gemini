@@ -62,18 +62,18 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 - [x] **Increment 3: Host-Gated GitHub Review Publisher**
   - Implement `src/publish.js`: parses Markdown findings, validates diff anchors, enforces safety gates (stale-head check, demoting unanchored findings to summary notes, max 50 inline comments).
   - Test-driven with mocked `gh api` calls verifying single POST and no accidental `REQUEST_CHANGES`.
-- [ ] **Increment 4: Minimum Viable Reviewer (First Dogfooding Target)**
+- [x] **Increment 4: Minimum Viable Reviewer (First Dogfooding Target)**
   - Create `skills/pr-review/SKILL.md` orchestrator playbook.
   - Connect skill to diff retrieval and publication tools.
   - Run the first dogfood auto-review on a PR of this repository!
-- [ ] **Increment 5: Copilot SDK Subagents & Multi-Lens Execution**
+- [x] **Increment 5: Copilot SDK Subagents & Multi-Lens Execution**
   - Implement MCP subagent dispatcher connecting to `@github/copilot-sdk`.
   - Support parallel execution of lenses with configured model tiers and reasoning efforts.
   - Implement modes: `--quick` (3 lenses), `--balanced` (5 lenses), `--full` (6 lenses), `--deep` (1 lens).
-- [ ] **Increment 6: Incremental Re-reviews (`--incremental`)**
+- [x] **Increment 6: Incremental Re-reviews (`--incremental`)**
   - Implement prior review discovery via `gh api`.
   - Classify commit relationships (`same_head`, `incremental`, `diverged`, `none`).
   - Revalidate prior findings as `resolved`, `still open`, or `obsolete`.
-- [ ] **Increment 7: Detached Worktree Test Verification**
+- [x] **Increment 7: Detached Worktree Test Verification**
   - Implement isolated test execution against PR head SHA in a detached temporary git worktree.
   - Enforce user-only profile configuration and process group cleanup.

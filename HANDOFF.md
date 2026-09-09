@@ -4,93 +4,56 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `main` (clean, up to date with `origin/main`)
-* **PR #3**: Merged ([feat(publish): implement host-gated review publishing with diff anchoring](https://github.com/xpepper/pr-review-gemini/pull/3))
-* **Test Suite**: `npm test` runs and passes (79 tests across 19 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (151 tests across 47 suites, 0 failures)
+* **All Roadmap Increments Delivered & Merged**:
+  - PR #1: `feat(config): implement model tier and settings resolution`
+  - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
+  - PR #3: `feat(publish): implement host-gated review publishing with diff anchoring`
+  - PR #4: `feat(reviewer): implement minimum viable reviewer orchestrator and dogfood runner`
+  - PR #5: `feat(subagents): implement parallel multi-lens execution and MCP server`
+  - PR #6: `feat(prior): implement incremental re-reviews and prior finding revalidation`
+  - PR #7: `feat(verify): implement detached worktree test verification (pr_review_verify)`
 
 ---
 
-## Accomplished in this Session
+## Status: ALL_INCREMENTS_COMPLETE
 
-1. **Feature Branch & Implementation**: Implemented Increment 3 in `feat/review-publisher`.
-2. **Increment 3: Host-Gated GitHub Review Publisher**:
-   - Implemented `src/publish.js`:
-     - `parseMarkdownFindings(input)`:
-       - Parses structured findings from Markdown headers (`### [P1] Title` or `### Finding: [P2] Title`).
-       - Parses structured findings from bullet lists (`- **[P0]** \`path:line\` (confidence: 0.9): commentary`).
-       - Parses findings from delimited envelopes (`<<<PR_REVIEW_JSON>>> ... <<<END_PR_REVIEW_JSON>>>`) and fenced ```json blocks.
-       - Supports pre-parsed finding arrays.
-       - Normalizes severity (`P0`, `P1`, `P2`, `P3`, `nit`), confidence score (0.0–1.0), file path, line number, side (`RIGHT` / `LEFT`), and commentary body.
-     - `classifyFindings(findings, diffs, options)`:
-       - Validates each finding against unified diff hunks using `isLineCommentable` from `src/diff.js`.
-       - Classifies commentable findings as inline comments.
-       - Safely demotes unanchored findings (lines outside diff hunks, files not in diff, binary files, deleted files on RIGHT, added files on LEFT) to summary body.
-       - Enforces inline comment cap (`MAX_INLINE_COMMENTS = 50`), sorting overflow candidates by priority (severity urgency `P0` > `P1` > `P2` > `P3` > `nit`, then confidence) and demoting lower-priority candidates to the review summary.
-     - `determineReviewEvent({ findings, approveMaxPriorityLevel, prAuthor, currentUser, requestedEvent })`:
-       - Default event is `COMMENT`.
-       - Safety rule: NEVER emits `REQUEST_CHANGES` (forces to `COMMENT`).
-       - Safety rule: Forbids `APPROVE` on own PR (`prAuthor === currentUser`).
-       - Only emits `APPROVE` if `approveMaxPriorityLevel` is enabled (`nit`, `P3`, `P2`) and no finding exceeds that threshold.
-     - `formatInlineComment(finding)`:
-       - Formats clean markdown inline review comments with severity badges and confidence ratings.
-     - `formatReviewSummary({ summary, demotedFindings, inlineCommentsCount, reviewEvent })`:
-       - Preserves the overall review summary and appends a dedicated "Additional Findings (Unanchored / General)" section so no findings are lost.
-     - `checkHeadFreshness({ prNumber, expectedHeadSha, execGhFn, execFileFn, cwd })`:
-       - Enforces stale review protection by verifying `headRefOid` against `expectedHeadSha`.
-     - `publishReview({ prNumber, reviewBody, findings, diffText, expectedHeadSha, config, execGhFn, execFileFn, cwd, repo })`:
-       - End-to-end orchestrator that atomically submits reviews via a single POST request to `/repos/{owner}/{repo}/pulls/{prNumber}/reviews`.
-       - Supports dependency injection for pure unit testing without network dependencies.
-   - Comprehensive test suite in `tests/publish.test.mjs` covering all parsing variants, diff anchor validations, safety gates, head freshness checks, and atomic API execution.
-3. **Roadmap & Progress Tracking**: Updated `TODO.md` and `docs/roadmap.md` marking Increment 3 complete.
+All 7 roadmap increments specified in `docs/roadmap.md` and `TODO.md` are fully implemented, verified with test-first suites, reviewed via our dogfood AI reviewer, and merged into `main`.
 
 ---
 
-## Instructions for the Next Agent
+## Architecture Summary of the Completed Package
 
-Your task is to implement **Increment 4: Minimum Viable Reviewer (First Dogfooding Target)**.
+1. **Manifest & Standards (Agent Plugins 1.0)**:
+   - `plugin.json`: Compliant package manifest.
+   - `mcp.json`: Model Context Protocol server configuration exposing tools.
+   - `skills/pr-review/SKILL.md`: Declarative agent skill with multi-lens instructions, mode flags (`--quick`, `--balanced`, `--full`, `--deep`), and prior finding revalidation guidelines.
 
-### Steps to Follow:
+2. **Core Modules (`src/`)**:
+   - `src/config.js`: Layered configuration management (`~/.copilot/pr-review.json` and `.github/pr-review.json`), model tiers (`light`, `medium`, `heavy`), and reasoning efforts (`off` to `high`).
+   - `src/diff.js`: Unified diff parser, git hunk header extraction, and commentability safety gates.
+   - `src/publish.js`: Host-gated review publisher with diff anchor validation, comment capping (50), stale-head protection, and gated `APPROVE`/`COMMENT` logic.
+   - `src/reviewer.js`: Multi-lens review orchestrator, finding deduplication, and mode planning.
+   - `src/subagents.js`: Parallel subagent dispatcher leveraging `@github/copilot-sdk`.
+   - `src/prior.js`: Prior review discovery via `gh api`, commit relationship classification (`same_head`, `incremental`, `diverged`, `none`), and prior findings revalidation (`resolved`, `still open`, `obsolete`).
+   - `src/verify.js`: Detached worktree test execution (`pr_review_verify`) with process supervision, timeouts, and credential scrubbing.
 
-1. **Confirm PR & Clean Branch**:
-   Ensure PR for Increment 3 is merged into `main` (or review/merge if pending), sync local `main`, and verify tests:
-   ```bash
-   git checkout main
-   git pull origin main
-   npm test
-   ```
+3. **MCP Server (`server/index.js`)**:
+   - Implements JSON-RPC 2.0 stdio server providing:
+     - `pr_review_diff`: Unified diff extraction and metadata.
+     - `pr_review_subagents`: Multi-lens parallel analysis with mode resolution.
+     - `pr_review_publish`: Host-gated review publishing with diff anchoring.
+     - `pr_review_prior`: Prior review discovery and finding revalidation.
+     - `pr_review_verify`: Detached worktree test execution.
 
-2. **Create Feature Branch**:
-   ```bash
-   git checkout -b feat/minimum-viable-reviewer
-   ```
-
-3. **Goal of Increment 4**:
-   Build the orchestrator connecting the pieces built so far into an operational reviewer:
-   * **Agent Skill Playbook (`skills/pr-review/SKILL.md`)**:
-     - Declare skill name, description, mode flags (`--balanced`, `--quick`, `--full`, `--deep`).
-     - Define instructions for diff inspection, multi-lens review guidelines, and structured finding generation.
-   * **Dogfood Reviewer Script (`scripts/dogfood-review.mjs`)**:
-     - Connect `getPrDiff` from `src/diff.js`, model tier settings from `src/config.js`, and `publishReview` from `src/publish.js`.
-     - Fetch PR diff, format reviewer prompts, and execute via `@github/copilot-sdk` (or configured client runtime).
-     - Submit the review via `publishReview`.
-   * **First Dogfood Run**:
-     - Run the tool on a pull request in this repository! Verify the review appears on GitHub with accurate inline comments and summary notes.
-
-4. **Verify & Test**:
-   - Write tests for skill integration and reviewer runner.
-   - Ensure `npm test` passes completely.
+4. **Dogfood & Loop Tooling (`scripts/`)**:
+   - `scripts/dogfood-review.mjs`: CLI runner to review GitHub PRs using our own plugin modules.
+   - `scripts/dev-loop.sh`: Autonomous development driver with pre/post-flight verification, timeout control, and completion sentinel checks.
 
 ---
 
-## Dogfooding Reference & Next Steps (Increment 4)
+## Next Steps & Maintenance
 
-As soon as the first working skeleton of the plugin is available and usable in a meaningful way, we must use it!
-An established pattern to achieve this is a standalone dogfood script (e.g. `scripts/dogfood-review.mjs`) that invokes the Copilot SDK (`@github/copilot-sdk`) like our plugin will call it, similar to:
-`https://github.com/xpepper/copilot-pr-review/blob/main/scripts/dogfood-review.mjs`.
-
-This script ties together:
-- `getPrDiff(prNumber)` from `src/diff.js`
-- `loadConfig()` from `src/config.js`
-- Review lens prompting with Copilot models
-- `publishReview()` from `src/publish.js`
-- Agent skill declaration in `skills/pr-review/SKILL.md` (Agent Plugins 1.0 spec)
-
+Since all core roadmap items are delivered:
+- The package is fully functional and ready for usage within GitHub Copilot CLI or compliant Agent Plugins runtimes.
+- Any future work will consist of maintenance, additional specialist lenses, or extending verification profiles.

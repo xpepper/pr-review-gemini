@@ -19,22 +19,22 @@
 - [x] Unit test config loading, fallbacks, and validation.
 
 ### Phase 3: Diff Acquisition & Hunk Anchoring (MCP Tool)
-- [ ] Create minimal MCP server structure (`mcp.json` + `server/`).
+- [x] Create minimal MCP server structure (`mcp.json` + `server/`).
 - [x] Implement `getPrDiff` (fetching via `gh` CLI).
 - [x] Implement unified diff hunk parser (extracting valid hunk ranges for inline comments).
 - [x] Unit test diff parser against representative multi-file, rename, add, and delete diffs.
 
 ### Phase 4: Minimum Viable Reviewer (First Dogfooding Target)
-- [ ] Create `skills/pr-review/SKILL.md` with core review prompt and basic review lens.
+- [x] Create `skills/pr-review/SKILL.md` with core review prompt and basic review lens.
 - [x] Implement host-gated review publisher with diff-anchor validation and safety gates (`src/publish.js`).
-- [ ] End-to-end dry run on a synthetic or test PR to verify the complete dogfood loop.
+- [x] End-to-end dry run on a synthetic or test PR to verify the complete dogfood loop.
 
 ### Phase 5: Multi-Lens Parallel Subagents via Copilot SDK
-- [ ] Implement `pr_review_subagents` using `@github/copilot-sdk`.
-- [ ] Connect tier mapping (`light`, `medium`, `heavy`) and reasoning effort per lens.
-- [ ] Support review modes (`--quick`, `--balanced`, `--full`, `--deep`).
+- [x] Implement `pr_review_subagents` using `@github/copilot-sdk`.
+- [x] Connect tier mapping (`light`, `medium`, `heavy`) and reasoning effort per lens.
+- [x] Support review modes (`--quick`, `--balanced`, `--full`, `--deep`).
 
 ### Phase 6: Incremental Re-reviews & Advanced Features
-- [ ] Implement `pr_review_prior` discovery for `--incremental` re-reviews.
-- [ ] Implement detached-worktree test verification (`pr_review_verify`).
-- [ ] Gated approval policies (`approveMaxPriorityLevel`).
+- [x] Implement `pr_review_prior` discovery for `--incremental` re-reviews (`src/prior.js`).
+- [x] Implement detached-worktree test verification (`pr_review_verify` in `src/verify.js`).
+- [x] Gated approval policies (`approveMaxPriorityLevel`).

@@ -54,11 +54,19 @@ When all increments in docs/roadmap.md are completed and verified, mark ALL_INCR
 EOF
 )
 
-  # 4. Dispatch Fresh agy Session
-  echo "🤖 [Agent Execution] Launching fresh agy session..."
-  if ! agy -p "$PROMPT" --dangerously-skip-permissions; then
+  # 4. Dispatch Fresh agy Session with increased timeout
+  echo "🤖 [Agent Execution] Launching fresh agy session (timeout: 20m)..."
+  if ! agy -p "$PROMPT" --print-timeout 20m0s --dangerously-skip-permissions; then
     echo "❌ agy exited with a non-zero exit code during iteration $ITERATION."
     echo "   Pausing loop for human inspection. Check git status and logs."
+    exit 1
+  fi
+
+  # Check for uncommitted working tree changes
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "⚠️  Working tree has uncommitted changes after agent turn."
+    echo "   Pausing loop for human inspection before rebasing."
+    git status --short
     exit 1
   fi
 
