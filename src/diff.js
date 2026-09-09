@@ -438,13 +438,21 @@ export function getFileDiff(diffs, filePath) {
  * @param {Function} [options.execFileFn] - Custom execFile function for testing/injection
  * @returns {Promise<string>} Raw unified diff output
  */
-export async function getPrDiff(prNumber, { cwd = process.cwd(), execFileFn = null } = {}) {
-  const prNum = Number(prNumber);
+export async function getPrDiff(prNumberOrOptions, maybeOptions = {}) {
+  const isObject = typeof prNumberOrOptions === 'object' && prNumberOrOptions !== null;
+  const rawPrNumber = isObject ? prNumberOrOptions.prNumber : prNumberOrOptions;
+  const options = isObject ? prNumberOrOptions : maybeOptions;
+  const { cwd = process.cwd(), execFileFn = null, repo = null } = options;
+
+  const prNum = Number(rawPrNumber);
   if (!Number.isInteger(prNum) || prNum <= 0) {
-    throw new TypeError(`Invalid PR number: "${prNumber}". Expected a positive integer.`);
+    throw new TypeError(`Invalid PR number: "${rawPrNumber}". Expected a positive integer.`);
   }
 
   const args = ['pr', 'diff', String(prNum)];
+  if (repo) {
+    args.push('--repo', repo);
+  }
 
   if (execFileFn) {
     return new Promise((resolve, reject) => {
