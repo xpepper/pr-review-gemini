@@ -766,5 +766,7 @@ export async function publishReview({
     inlineCommentsCount: inlineComments.length,
     demotedFindingsCount: demotedFindings.length,
     totalFindingsCount: allFindings.length,
+    reviewBody: formattedBody,
+    classification: { inlineComments, demotedFindings, allFindings },
   };
 }

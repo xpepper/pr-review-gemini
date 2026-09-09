@@ -170,12 +170,21 @@ async function main() {
   const runnerFn = await createRunner({ model, mock, cwd });
 
   // Wrapper for gh CLI execution
-  const execGhFn = async (args, options = {}) => {
-    const { stdout } = await execFileAsync('gh', args, {
-      cwd: options.cwd || cwd,
-      input: options.input,
+  const execGhFn = (args, options = {}) => {
+    return new Promise((resolve, reject) => {
+      const child = execFile('gh', args, { cwd: options.cwd || cwd }, (err, stdout, stderr) => {
+        if (err) {
+          const detail = (stderr && stderr.trim()) || err.message;
+          reject(new Error(`gh ${args.join(' ')} failed: ${detail}`));
+          return;
+        }
+        resolve(stdout);
+      });
+      if (options.input && child?.stdin) {
+        child.stdin.write(options.input);
+        child.stdin.end();
+      }
     });
-    return stdout;
   };
 
   const shouldPublish = publish && !dryRun;
