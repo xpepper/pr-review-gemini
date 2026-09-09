@@ -1,0 +1,21 @@
+{
+  "name": "copilot-pr-review",
+  "version": "0.1.0",
+  "description": "Parallel AI code review for GitHub pull requests using GitHub Copilot CLI and Agent Plugins.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'tests/**/*.test.mjs' 'tests/**/*.test.js'"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "copilot",
+    "copilot-cli",
+    "agent-plugin",
+    "agent-skills",
+    "pr-review",
+    "code-review"
+  ]
+}
