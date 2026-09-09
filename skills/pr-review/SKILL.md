@@ -29,6 +29,8 @@ Reviewers can trigger different modes based on PR complexity and speed requireme
   Comprehensive review running 6 lenses: adds Test Quality & Coverage alongside all 5 balanced lenses.
 * **`--deep`**:
   Deep-focus mode targeting complex algorithmic or concurrency changes, dedicating maximum reasoning effort to Correctness & Concurrency.
+* **`--incremental`**:
+  Re-review mode that hunts only the new commit range (`prior_head...current_head`) since the previous review, classifying commit relationships and revalidating previous findings.
 
 ---
 
@@ -126,6 +128,27 @@ const profileId = user.profile?.id ?? null;
 ]
 <<<END_PR_REVIEW_JSON>>>
 ```
+
+---
+
+## Incremental Re-reviews & Finding Revalidation (`--incremental`)
+
+When re-evaluating pull requests that have received prior reviews, the `--incremental` workflow ensures that work is not repeated unnecessarily:
+
+1. **Prior Review Discovery**:
+   Fetches previous reviews and inline comments submitted for the PR via GitHub API, extracting prior findings and the evaluated commit SHA.
+2. **Commit Relationship Classification**:
+   - `same_head`: The PR head commit has not changed since the last review. Avoids redundant re-reviews.
+   - `incremental`: The PR head directly extends the prior reviewed commit. Re-review inspects only the delta (`prior_head...current_head`).
+   - `diverged`: The branch diverged or was rebased. Gracefully falls back to a full review of `base...head`.
+   - `none`: No prior reviews were found. Proceeds with a standard full review.
+3. **Prior Finding Revalidation**:
+   Matches previous findings against the incremental diff:
+   - **`resolved`**: The file and line range were modified in the incremental commits, addressing the issue.
+   - **`still open`**: The flagged code remains untouched in the new commits and still requires attention.
+   - **`obsolete`**: The flagged file was deleted or the surrounding block was refactored out.
+4. **Focused Specialist Inspection**:
+   Specialist lenses evaluate only the newly added/modified code in the incremental range, merging still-open prior findings with new findings for comprehensive coverage.
 
 ---
 

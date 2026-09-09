@@ -14,6 +14,13 @@ import { publishReview } from '../src/publish.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
+import {
+  fetchPriorReviews,
+  classifyCommitRelationship,
+  getIncrementalDiff,
+  revalidatePriorFindings,
+  formatRevalidationSummary,
+} from '../src/prior.js';
 
 export const MCP_TOOLS = [
   {
@@ -109,6 +116,29 @@ export const MCP_TOOLS = [
       required: ['prNumber', 'findings'],
     },
   },
+  {
+    name: 'pr_review_prior',
+    description:
+      'Discovers prior reviews on a PR, classifies commit relationship (same_head, incremental, diverged, none), and revalidates prior findings against incremental commits.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        currentHeadSha: {
+          type: 'string',
+          description: 'Current PR head commit SHA (retrieved if omitted)',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
 ];
 
 /**
@@ -119,6 +149,10 @@ export function createMcpHandler(options = {}) {
     getPrDiffFn = getPrDiff,
     publishReviewFn = publishReview,
     runReviewFn = runReview,
+    fetchPriorReviewsFn = fetchPriorReviews,
+    classifyCommitRelationshipFn = classifyCommitRelationship,
+    getIncrementalDiffFn = getIncrementalDiff,
+    revalidatePriorFindingsFn = revalidatePriorFindings,
     runnerFn,
     cwd = process.cwd(),
   } = options;
@@ -270,6 +304,62 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(pubResult, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (toolName === 'pr_review_prior') {
+              const prNum = Number(args.prNumber);
+              const currentHeadSha = args.currentHeadSha;
+              const repo = args.repo;
+
+              const prior = await fetchPriorReviewsFn({ prNumber: prNum, repo, cwd });
+              const priorHeadSha = prior?.latestReview?.commitId || null;
+
+              const relationshipInfo = await classifyCommitRelationshipFn({
+                priorHeadSha,
+                currentHeadSha,
+                cwd,
+              });
+
+              let revalidation = null;
+              if (relationshipInfo.canIncremental && prior?.findings?.length > 0) {
+                const incDiff = await getIncrementalDiffFn({
+                  priorHeadSha,
+                  currentHeadSha,
+                  repo,
+                  cwd,
+                });
+                if (incDiff) {
+                  revalidation = revalidatePriorFindingsFn({
+                    priorFindings: prior.findings,
+                    incrementalDiffText: incDiff,
+                  });
+                }
+              }
+
+              const priorResult = {
+                prNumber: prNum,
+                repo: repo || null,
+                priorReview: prior?.latestReview || null,
+                relationship: relationshipInfo.relationship,
+                canIncremental: relationshipInfo.canIncremental,
+                reason: relationshipInfo.reason,
+                findings: revalidation?.findings || prior?.findings || [],
+                revalidation: revalidation || null,
+                revalidationSummary: revalidation ? formatRevalidationSummary(revalidation) : null,
+              };
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(priorResult, null, 2),
                     },
                   ],
                 },

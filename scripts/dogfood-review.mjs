@@ -23,6 +23,7 @@ Options:
   --balanced        Default review (5 specialist lenses)
   --full            Exhaustive review (6 lenses including tests)
   --deep            Deep-focus review on correctness
+  --incremental     Re-review PR incrementally against previous review (revalidates prior findings)
   --dry-run         Run review analysis and output summary without publishing to GitHub
   --no-comment      Alias for --dry-run
   --comment         Publish the host-gated review to GitHub
@@ -42,6 +43,7 @@ function parseCliArgs(args) {
   let repo = null;
   let model = null;
   let mock = false;
+  let incremental = false;
   let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -54,6 +56,8 @@ function parseCliArgs(args) {
       mode = arg.slice('--mode='.length);
     } else if (arg === '--mode') {
       mode = args[++i] || 'balanced';
+    } else if (arg === '--incremental') {
+      incremental = true;
     } else if (arg === '--dry-run' || arg === '--no-comment') {
       dryRun = true;
     } else if (arg === '--comment' || arg === '--publish') {
@@ -73,7 +77,7 @@ function parseCliArgs(args) {
     }
   }
 
-  return { prNumber, mode, dryRun, publish, repo, model, mock, showHelp };
+  return { prNumber, mode, dryRun, publish, repo, model, mock, incremental, showHelp };
 }
 
 const MOCK_DIFF = `diff --git a/src/index.js b/src/index.js
@@ -88,7 +92,7 @@ index 1111111..2222222 100644
 `;
 
 async function main() {
-  const { prNumber, mode, dryRun, publish, repo, model, mock, showHelp } = parseCliArgs(
+  const { prNumber, mode, dryRun, publish, repo, model, mock, incremental, showHelp } = parseCliArgs(
     process.argv.slice(2)
   );
 
@@ -104,7 +108,7 @@ async function main() {
 
   const cwd = process.cwd();
   console.log(`\n🔍 Starting Copilot PR Review on PR #${prNumber}...`);
-  console.log(`   Mode: ${mode}`);
+  console.log(`   Mode: ${mode}${incremental ? ' [incremental]' : ''}`);
   console.log(`   Action: ${dryRun ? 'Dry-run (inspect only)' : publish ? 'Publish host-gated review' : 'Dry-run (default)'}`);
 
   const runnerFn = await createSubagentRunner({ modelOverride: model, mock, cwd });
@@ -140,6 +144,7 @@ async function main() {
       cwd,
       dryRun: !shouldPublish,
       publish: shouldPublish,
+      incremental,
     });
 
     console.log('\n────────────────────────────────────────────────────────');

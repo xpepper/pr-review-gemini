@@ -14,6 +14,7 @@ describe('Dogfood Review Script CLI', () => {
     assert.match(stdout, /--quick/);
     assert.match(stdout, /--balanced/);
     assert.match(stdout, /--deep/);
+    assert.match(stdout, /--incremental/);
     assert.match(stdout, /--dry-run/);
   });
 
@@ -35,6 +36,18 @@ describe('Dogfood Review Script CLI', () => {
 
     assert.match(stdout, /PR Review Summary/);
     assert.match(stdout, /Mode: `quick`/);
+    assert.match(stdout, /Dry-run complete: no review published to GitHub/);
+  });
+
+  it('runs dry-run incremental review using synthetic/mock diff', async () => {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [scriptPath, '1', '--dry-run', '--incremental', '--mock'],
+      { env: { ...process.env, NODE_ENV: 'test' } }
+    );
+
+    assert.match(stdout, /PR Review Summary/);
+    assert.match(stdout, /\[Incremental\]/i);
     assert.match(stdout, /Dry-run complete: no review published to GitHub/);
   });
 });

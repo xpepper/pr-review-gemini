@@ -48,6 +48,15 @@ describe('Agent Skill: pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /host-gated/i, 'Should mention host-gated publishing');
   });
 
+  it('documents incremental re-reviews and prior findings revalidation', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.ok(content.includes('--incremental') || content.includes('incremental'), 'Should document incremental mode');
+    assert.match(content, /revalidation|revalidate/i, 'Should document finding revalidation');
+    assert.match(content, /resolved/i, 'Should document resolved status');
+    assert.match(content, /still open/i, 'Should document still open status');
+  });
+
   it('does not contain local machine absolute paths (security rule)', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');

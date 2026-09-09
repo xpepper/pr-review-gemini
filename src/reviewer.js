@@ -13,12 +13,24 @@ import {
   createSubagentRunner,
   DEFAULT_LENS_TIERS,
 } from './subagents.js';
+import {
+  fetchPriorReviews,
+  classifyCommitRelationship,
+  getIncrementalDiff,
+  revalidatePriorFindings,
+  formatRevalidationSummary,
+} from './prior.js';
 
 export {
   resolveLensPlan,
   dispatchSubagentsParallel,
   createSubagentRunner,
   DEFAULT_LENS_TIERS,
+  fetchPriorReviews,
+  classifyCommitRelationship,
+  getIncrementalDiff,
+  revalidatePriorFindings,
+  formatRevalidationSummary,
 };
 
 export const REVIEW_MODES = {
@@ -255,12 +267,14 @@ export async function runReview({
   runnerFn,
   execGhFn,
   execFileFn,
+  execGitFn,
   cwd = process.cwd(),
   repo,
   expectedHeadSha,
   dryRun = false,
   publish = false,
   customInstructions,
+  incremental = false,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -310,6 +324,68 @@ export async function runReview({
     }
   }
 
+  // 2b. Incremental re-review discovery & relationship classification
+  let priorData = null;
+  let commitRel = null;
+  let revalidation = null;
+
+  if (incremental) {
+    priorData = await fetchPriorReviews({ prNumber: num, repo, execGhFn, cwd });
+    commitRel = await classifyCommitRelationship({
+      priorHeadSha: priorData?.latestReview?.commitId || null,
+      currentHeadSha,
+      execGitFn,
+      cwd,
+    });
+
+    if (commitRel.relationship === 'same_head') {
+      const summary = `## PR Review Summary (Mode: \`${resolvedMode.name}\` [Incremental])
+
+- **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
+- **Status**: ℹ️ PR head commit (${currentHeadSha || 'unknown'}) has not changed since the last review. No new commits to evaluate.`;
+
+      return {
+        prNumber: num,
+        repo: repo || null,
+        headSha: currentHeadSha,
+        mode: resolvedMode.name,
+        relationship: 'same_head',
+        canIncremental: false,
+        priorReview: priorData?.latestReview || null,
+        lensesExecuted: [],
+        subagentPlan: [],
+        errors: [],
+        findings: priorData?.findings || [],
+        rawFindingsCount: priorData?.findings?.length || 0,
+        summary,
+        revalidation: null,
+        classification: null,
+        publication: null,
+        published: false,
+      };
+    }
+
+    if (commitRel.relationship === 'incremental') {
+      const incDiff = await getIncrementalDiff({
+        priorHeadSha: commitRel.priorHeadSha,
+        currentHeadSha,
+        repo,
+        execGitFn,
+        execGhFn,
+        cwd,
+      });
+
+      if (incDiff && incDiff.trim()) {
+        unifiedDiffText = incDiff;
+      }
+
+      revalidation = revalidatePriorFindings({
+        priorFindings: priorData?.findings || [],
+        incrementalDiffText: incDiff || '',
+      });
+    }
+  }
+
   // 3. Execute review passes across lenses in parallel
   const plan = resolveLensPlan({ mode: resolvedMode, config: resolvedConfig });
   const executedLenses = plan.map((p) => p.lensId);
@@ -328,8 +404,13 @@ export async function runReview({
     subagentErrors = subagentResult.errors;
   }
 
-  // 4. Deduplicate findings
-  const deduplicated = deduplicateFindings(allFindings);
+  // 4. Deduplicate findings (merging still-open prior findings in incremental mode)
+  let combinedFindings = allFindings;
+  if (incremental && revalidation?.findings) {
+    const stillOpen = revalidation.findings.filter((f) => f.status === 'still open');
+    combinedFindings = [...allFindings, ...stillOpen];
+  }
+  const deduplicated = deduplicateFindings(combinedFindings);
 
   // 5. Generate Review Summary
   const severityCounts = { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 };
@@ -346,13 +427,18 @@ export async function runReview({
     .map(([sev, count]) => `**${sev}**: ${count}`)
     .join(' | ') || 'None';
 
-  const summary = `## PR Review Summary (Mode: \`${resolvedMode.name}\`)
+  const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
+  let summary = `## PR Review Summary (Mode: \`${modeLabel}\`)
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Specialist Lenses Inspected**: ${lensesList}
 - **Total Findings**: ${deduplicated.length} (${countsSummary})
 
 ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
+
+  if (revalidation) {
+    summary += '\n\n' + formatRevalidationSummary(revalidation);
+  }
 
   // 6. Publish or Dry Run
   const diffs = parseUnifiedDiff(unifiedDiffText);
@@ -376,6 +462,10 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       repo: repo || null,
       headSha: currentHeadSha,
       mode: resolvedMode.name,
+      relationship: commitRel?.relationship || null,
+      canIncremental: commitRel?.canIncremental ?? false,
+      priorReview: priorData?.latestReview || null,
+      revalidation: revalidation || null,
       lensesExecuted: executedLenses,
       subagentPlan: plan,
       errors: subagentErrors,
@@ -397,6 +487,10 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
     repo: repo || null,
     headSha: currentHeadSha,
     mode: resolvedMode.name,
+    relationship: commitRel?.relationship || null,
+    canIncremental: commitRel?.canIncremental ?? false,
+    priorReview: priorData?.latestReview || null,
+    revalidation: revalidation || null,
     lensesExecuted: executedLenses,
     subagentPlan: plan,
     errors: subagentErrors,

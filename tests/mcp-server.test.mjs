@@ -86,11 +86,17 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.ok(toolNames.includes('pr_review_subagents'));
       assert.ok(toolNames.includes('pr_review_diff'));
       assert.ok(toolNames.includes('pr_review_publish'));
+      assert.ok(toolNames.includes('pr_review_prior'));
 
       const subagentsTool = response.result.tools.find((t) => t.name === 'pr_review_subagents');
       assert.ok(subagentsTool.description);
       assert.ok(subagentsTool.inputSchema.properties.prNumber);
       assert.ok(subagentsTool.inputSchema.properties.mode);
+
+      const priorTool = response.result.tools.find((t) => t.name === 'pr_review_prior');
+      assert.ok(priorTool.description);
+      assert.ok(priorTool.inputSchema.properties.prNumber);
+      assert.ok(priorTool.inputSchema.properties.currentHeadSha);
     });
 
     it('handles tools/call for pr_review_diff', async () => {
@@ -157,6 +163,42 @@ index 1111111..2222222 100644
       assert.equal(resultData.mode, 'quick');
       assert.equal(resultData.findings.length, 0);
       assert.ok(resultData.summary.includes('PR Review Summary'));
+    });
+
+    it('handles tools/call for pr_review_prior', async () => {
+      const handler = createMcpHandler({
+        fetchPriorReviewsFn: async () => ({
+          latestReview: { id: 101, commitId: 'abc111' },
+          findings: [{ filePath: 'src/app.js', line: 10, severity: 'P1', title: 'Test issue' }],
+        }),
+        classifyCommitRelationshipFn: async () => ({
+          relationship: 'incremental',
+          priorHeadSha: 'abc111',
+          currentHeadSha: 'def222',
+          canIncremental: true,
+          reason: 'Current head directly extends prior commit.',
+        }),
+        getIncrementalDiffFn: async () => 'diff --git a/src/app.js b/src/app.js\n...',
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 55,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_prior',
+          arguments: {
+            prNumber: 42,
+            currentHeadSha: 'def222',
+          },
+        },
+      });
+
+      assert.equal(response.id, 55);
+      const resultData = JSON.parse(response.result.content[0].text);
+      assert.equal(resultData.prNumber, 42);
+      assert.equal(resultData.relationship, 'incremental');
+      assert.equal(resultData.canIncremental, true);
     });
 
     it('returns error for unknown method with code -32601', async () => {
