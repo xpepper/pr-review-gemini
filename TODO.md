@@ -26,7 +26,7 @@
 
 ### Phase 4: Minimum Viable Reviewer (First Dogfooding Target)
 - [ ] Create `skills/pr-review/SKILL.md` with core review prompt and basic review lens.
-- [ ] Implement `pr_review_publish` (host-gated review publishing with diff-anchor validation and safety gates).
+- [x] Implement host-gated review publisher with diff-anchor validation and safety gates (`src/publish.js`).
 - [ ] End-to-end dry run on a synthetic or test PR to verify the complete dogfood loop.
 
 ### Phase 5: Multi-Lens Parallel Subagents via Copilot SDK

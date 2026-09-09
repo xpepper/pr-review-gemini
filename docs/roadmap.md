@@ -59,7 +59,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Implement diff retrieval via `gh pr diff` and hunk header parser (`src/diff.js`).
   - Determine whether a line reference falls inside a hunk (`commentable: true`) with commentability safety gates.
   - Unit test against single-line, multi-line, rename, and binary diff fixtures (`tests/diff.test.mjs`).
-- [ ] **Increment 3: Host-Gated GitHub Review Publisher**
+- [x] **Increment 3: Host-Gated GitHub Review Publisher**
   - Implement `src/publish.js`: parses Markdown findings, validates diff anchors, enforces safety gates (stale-head check, demoting unanchored findings to summary notes, max 50 inline comments).
   - Test-driven with mocked `gh api` calls verifying single POST and no accidental `REQUEST_CHANGES`.
 - [ ] **Increment 4: Minimum Viable Reviewer (First Dogfooding Target)**
