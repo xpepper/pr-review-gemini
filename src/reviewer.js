@@ -7,6 +7,19 @@ import {
   checkHeadFreshness,
 } from './publish.js';
 import { loadConfig, DEFAULT_CONFIG } from './config.js';
+import {
+  resolveLensPlan,
+  dispatchSubagentsParallel,
+  createSubagentRunner,
+  DEFAULT_LENS_TIERS,
+} from './subagents.js';
+
+export {
+  resolveLensPlan,
+  dispatchSubagentsParallel,
+  createSubagentRunner,
+  DEFAULT_LENS_TIERS,
+};
 
 export const REVIEW_MODES = {
   balanced: {
@@ -297,46 +310,22 @@ export async function runReview({
     }
   }
 
-  // 3. Execute review passes across lenses
-  const executedLenses = [];
-  const allFindings = [];
+  // 3. Execute review passes across lenses in parallel
+  const plan = resolveLensPlan({ mode: resolvedMode, config: resolvedConfig });
+  const executedLenses = plan.map((p) => p.lensId);
+  let allFindings = [];
+  let subagentErrors = [];
 
-  for (const lensId of resolvedMode.lenses) {
-    const lensDef = LENS_DEFINITIONS[lensId];
-    if (!lensDef) continue;
-    executedLenses.push(lensId);
-
-    const prompt = buildReviewerPrompt({
-      lens: lensDef,
+  if (typeof runnerFn === 'function') {
+    const subagentResult = await dispatchSubagentsParallel({
+      plan,
       diffText: unifiedDiffText,
       prMetadata,
       customInstructions,
+      runnerFn,
     });
-
-    let rawOutput = '';
-    if (typeof runnerFn === 'function') {
-      try {
-        rawOutput = await runnerFn({
-          lens: lensDef,
-          prompt,
-          mode: resolvedMode.name,
-          tier: resolvedMode.defaultTier,
-          reasoningEffort: resolvedMode.reasoningEffort,
-        });
-      } catch (err) {
-        rawOutput = '';
-      }
-    }
-
-    const lensFindings = parseMarkdownFindings(rawOutput);
-    for (const f of lensFindings) {
-      allFindings.push({
-        ...f,
-        file: f.filePath || f.file,
-        filePath: f.filePath || f.file,
-        lens: lensId,
-      });
-    }
+    allFindings = subagentResult.findings;
+    subagentErrors = subagentResult.errors;
   }
 
   // 4. Deduplicate findings
@@ -388,6 +377,8 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       headSha: currentHeadSha,
       mode: resolvedMode.name,
       lensesExecuted: executedLenses,
+      subagentPlan: plan,
+      errors: subagentErrors,
       findings: deduplicated,
       rawFindingsCount: allFindings.length,
       summary: pubResult.reviewBody,
@@ -407,6 +398,8 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
     headSha: currentHeadSha,
     mode: resolvedMode.name,
     lensesExecuted: executedLenses,
+    subagentPlan: plan,
+    errors: subagentErrors,
     findings: deduplicated,
     rawFindingsCount: allFindings.length,
     summary,

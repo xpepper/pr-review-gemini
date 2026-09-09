@@ -149,6 +149,8 @@ Direct execution of user input with eval.
       assert.equal(result.prNumber, 5);
       assert.equal(result.mode, 'quick');
       assert.deepEqual(executedLenses, ['correctness', 'security', 'conventions']);
+      assert.ok(Array.isArray(result.subagentPlan));
+      assert.equal(result.subagentPlan.length, 3);
       assert.equal(result.findings.length, 1);
       assert.equal(result.findings[0].severity, 'P0');
       assert.equal(result.findings[0].file, 'src/app.js');

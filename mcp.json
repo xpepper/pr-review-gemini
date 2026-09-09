@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.json",
+  "name": "copilot-pr-review",
+  "version": "0.1.0",
+  "description": "Lightweight Model Context Protocol (MCP) server for multi-lens AI pull request review",
+  "server": {
+    "command": "node",
+    "args": ["server/index.js"]
+  },
+  "mcpServers": {
+    "copilot-pr-review": {
+      "command": "node",
+      "args": ["server/index.js"]
+    }
+  }
+}
