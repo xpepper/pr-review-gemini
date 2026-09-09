@@ -21,6 +21,11 @@ import {
   revalidatePriorFindings,
   formatRevalidationSummary,
 } from '../src/prior.js';
+import {
+  runVerification,
+  listVerificationProfiles,
+  formatVerificationSummary,
+} from '../src/verify.js';
 
 export const MCP_TOOLS = [
   {
@@ -139,6 +144,44 @@ export const MCP_TOOLS = [
       required: ['prNumber'],
     },
   },
+  {
+    name: 'pr_review_verify',
+    description:
+      'Executes verification commands (e.g. tests or build) against the exact PR head in an isolated detached git worktree.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['run', 'list'],
+          description: 'Verification action (run: execute test in worktree, list: list available profiles)',
+          default: 'run',
+        },
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        headSha: {
+          type: 'string',
+          description: 'PR head commit SHA (retrieved automatically if omitted)',
+        },
+        profile: {
+          type: 'string',
+          description: 'Verification profile name (e.g. "test", "build", "lint")',
+          default: 'test',
+        },
+        command: {
+          type: 'string',
+          description: 'Optional custom command override',
+        },
+        timeoutMs: {
+          type: 'integer',
+          description: 'Execution timeout in milliseconds',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
 ];
 
 /**
@@ -153,6 +196,8 @@ export function createMcpHandler(options = {}) {
     classifyCommitRelationshipFn = classifyCommitRelationship,
     getIncrementalDiffFn = getIncrementalDiff,
     revalidatePriorFindingsFn = revalidatePriorFindings,
+    runVerificationFn = runVerification,
+    listVerificationProfilesFn = listVerificationProfiles,
     runnerFn,
     cwd = process.cwd(),
   } = options;
@@ -360,6 +405,88 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(priorResult, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (toolName === 'pr_review_verify') {
+              const prNum = parseInt(args.prNumber, 10);
+              const action = args.action || 'run';
+              const headSha = args.headSha;
+              const profile = args.profile || 'test';
+              const command = args.command;
+              const timeoutMs = args.timeoutMs;
+
+              const config = loadConfig(cwd);
+
+              if (action === 'list') {
+                const profiles = listVerificationProfilesFn(config);
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: JSON.stringify({ profiles }, null, 2),
+                      },
+                    ],
+                  },
+                };
+              }
+
+              if (!prNum) {
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    isError: true,
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'prNumber is required for pr_review_verify',
+                      },
+                    ],
+                  },
+                };
+              }
+
+              // Custom command overlay if supplied
+              if (command) {
+                config.verificationProfiles = {
+                  ...config.verificationProfiles,
+                  [profile]: {
+                    command,
+                    timeoutMs: timeoutMs || 60000,
+                  },
+                };
+              }
+
+              const verifyResult = await runVerificationFn({
+                prNumber: prNum,
+                headSha,
+                profileName: profile,
+                config,
+                repoPath: cwd,
+              });
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(
+                        {
+                          ...verifyResult,
+                          summary: formatVerificationSummary(verifyResult),
+                        },
+                        null,
+                        2
+                      ),
                     },
                   ],
                 },
