@@ -218,5 +218,96 @@ Direct execution of user input with eval.
         /diff is empty/i
       );
     });
+
+    it('handles incremental re-review when head is unchanged (same_head)', async () => {
+      const mockExecGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({
+            headRefOid: 'head123',
+            author: { login: 'dev' },
+            title: 'Feature',
+          });
+        }
+        if (args[0] === 'api' && args[1].includes('/reviews')) {
+          return JSON.stringify([
+            {
+              id: 11,
+              commit_id: 'head123',
+              state: 'COMMENTED',
+              submitted_at: '2026-09-08T00:00:00Z',
+              body: 'Prior review summary',
+            },
+          ]);
+        }
+        return '[]';
+      };
+
+      const result = await runReview({
+        prNumber: 5,
+        diffText: sampleDiff,
+        incremental: true,
+        execGhFn: mockExecGh,
+        runnerFn: async () => '',
+      });
+
+      assert.equal(result.relationship, 'same_head');
+      assert.ok(result.summary.includes('not changed'));
+      assert.equal(result.published, false);
+    });
+
+    it('handles incremental re-review with new commits, revalidating prior findings', async () => {
+      const mockExecGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({
+            headRefOid: 'head222',
+            author: { login: 'dev' },
+            title: 'Feature v2',
+          });
+        }
+        if (args[0] === 'api' && args[1].includes('/reviews')) {
+          return JSON.stringify([
+            {
+              id: 11,
+              commit_id: 'head111',
+              state: 'COMMENTED',
+              submitted_at: '2026-09-08T00:00:00Z',
+              body: '### [P1] Missing check\n- **File**: `src/app.js:12`\n- **Side**: RIGHT\n',
+            },
+          ]);
+        }
+        return '[]';
+      };
+
+      const mockGit = async (args) => {
+        if (args[0] === 'merge-base') return '';
+        if (args[0] === 'diff') {
+          return `diff --git a/src/app.js b/src/app.js
+index 1111111..2222222 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -10,4 +10,4 @@
+-const old = 1;
++const old = 2;
+`;
+        }
+        return '';
+      };
+
+      const mockRunner = async () => '';
+
+      const result = await runReview({
+        prNumber: 5,
+        diffText: sampleDiff,
+        incremental: true,
+        execGhFn: mockExecGh,
+        execGitFn: mockGit,
+        runnerFn: mockRunner,
+      });
+
+      assert.equal(result.relationship, 'incremental');
+      assert.ok(result.revalidation);
+      assert.equal(result.revalidation.counts.resolved, 1);
+      assert.ok(result.summary.includes('Prior Findings Revalidation'));
+    });
   });
 });
