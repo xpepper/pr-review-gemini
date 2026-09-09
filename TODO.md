@@ -9,9 +9,9 @@
 ## Roadmap
 
 ### Phase 1: Groundwork & Repository Setup
-- [ ] Initialize repository with `.gitignore`, `package.json`, `plugin.json`, `README.md`, and `TODO.md`.
-- [ ] Connect remote and push initial commit to GitHub.
-- [ ] Configure test runner (`node:test` or vitest) and initial verification suite.
+- [x] Initialize repository with `.gitignore`, `package.json`, `plugin.json`, `README.md`, and `TODO.md`.
+- [x] Connect remote and push initial commit to GitHub (`xpepper/pr-review-gemini`).
+- [x] Configure test runner (`node:test`) and initial verification suite.
 
 ### Phase 2: Configuration & Model Tiers
 - [ ] Design configuration schema (`~/.copilot/pr-review.json` & `.github/pr-review.json`).
