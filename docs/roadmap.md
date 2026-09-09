@@ -51,7 +51,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 - [x] **Increment 0: Repository & Scaffolding**
   - Project initialized with `.gitignore`, `package.json`, `plugin.json`, and `tests/plugin-manifest.test.mjs`.
   - Pushed to GitHub (`xpepper/pr-review-gemini`).
-- [ ] **Increment 1: Configuration & Model Tier Management**
+- [x] **Increment 1: Configuration & Model Tier Management**
   - Implement `src/config.js` to manage user (`~/.copilot/pr-review.json`) and project (`.github/pr-review.json`) settings.
   - Support `tiers` (`light`, `medium`, `heavy`) and `reasoningEfforts` (`off`, `low`, `medium`, `high`).
   - Unit test config resolution, defaults, and validation.
