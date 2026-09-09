@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/review-publisher` (ready for PR creation or merge to `main`)
-* **PR**: Creating PR for Increment 3
+* **PR #3**: [feat(publish): implement host-gated review publishing with diff anchoring](https://github.com/xpepper/pr-review-gemini/pull/3)
 * **Test Suite**: `npm test` runs and passes (79 tests across 19 suites, 0 failures)
 
 ---
