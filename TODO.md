@@ -14,9 +14,9 @@
 - [x] Configure test runner (`node:test`) and initial verification suite.
 
 ### Phase 2: Configuration & Model Tiers
-- [ ] Design configuration schema (`~/.copilot/pr-review.json` & `.github/pr-review.json`).
-- [ ] Implement config loader for model tiers (`light`, `medium`, `heavy`) & reasoning efforts (`low`, `medium`, `high`, `off`).
-- [ ] Unit test config loading, fallbacks, and validation.
+- [x] Design configuration schema (`~/.copilot/pr-review.json` & `.github/pr-review.json`).
+- [x] Implement config loader for model tiers (`light`, `medium`, `heavy`) & reasoning efforts (`low`, `medium`, `high`, `off`).
+- [x] Unit test config loading, fallbacks, and validation.
 
 ### Phase 3: Diff Acquisition & Hunk Anchoring (MCP Tool)
 - [ ] Create minimal MCP server structure (`mcp.json` + `server/`).
