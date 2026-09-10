@@ -110,6 +110,15 @@ describe('Dogfood Review Script CLI', () => {
     assert.equal(parsedSelf.replaceStandardRoles, true);
   });
 
+  it('displays --no-untracked option in self-review.mjs usage help', async () => {
+    const { printUsage } = await import('../scripts/self-review.mjs');
+    let captured = '';
+    printUsage((msg) => {
+      captured += msg;
+    });
+    assert.match(captured, /--no-untracked/);
+  });
+
   it('publishes cached review findings when cache is present', async () => {
     const { saveReviewCache } = await import('../src/cache.js');
     const os = await import('node:os');

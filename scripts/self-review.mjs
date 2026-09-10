@@ -23,6 +23,7 @@ Options:
   --staged            Review only staged changes (git diff --cached)
   --unstaged          Review only unstaged changes (git diff)
   --head              Review all changes against HEAD (git diff HEAD)
+  --no-untracked      Exclude untracked files from the review
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
   --role <id>         Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
