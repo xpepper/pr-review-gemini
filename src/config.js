@@ -77,7 +77,7 @@ function sanitizeStringList(list) {
   return result;
 }
 
-function formatDefaultRoleName(roleId) {
+export function formatDefaultRoleName(roleId) {
   if (!roleId || typeof roleId !== 'string') return 'Custom Role';
   return roleId
     .replace(/[_-]+/g, ' ')

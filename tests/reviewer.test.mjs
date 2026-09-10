@@ -68,6 +68,23 @@ describe('Reviewer Core & Orchestration', () => {
       assert.match(prompt, /Strictly inspect for TypeScript-safe patterns/);
     });
 
+    it('builds prompt for custom review role using custom lens object with domain prompt', () => {
+      const prompt = buildReviewerPrompt({
+        lens: {
+          id: 'accessibility',
+          name: 'Accessibility & WCAG',
+          instructions: 'Evaluate WCAG 2.1 AA accessibility guidelines: keyboard navigation, ARIA attributes, semantic HTML.',
+          isCustomRole: true,
+        },
+        diffText: 'diff --git a/src/button.html b/src/button.html\n+<button class="icon"></button>',
+      });
+
+      assert.match(prompt, /# Specialist Code Review: Accessibility & WCAG/);
+      assert.match(prompt, /Evaluate WCAG 2\.1 AA accessibility guidelines: keyboard navigation, ARIA attributes, semantic HTML\./);
+      assert.match(prompt, /button class="icon"/);
+      assert.match(prompt, /<<<PR_REVIEW_JSON>>>/);
+    });
+
     it('inlines full unified diff when diff is <= 200 KB (backward compatibility)', () => {
       const normalDiff = 'diff --git a/file.js b/file.js\n+console.log("hello");';
       const prompt = buildReviewerPrompt({

@@ -233,7 +233,7 @@ export function buildReviewerPrompt({
 }) {
   const lensDef = typeof lens === 'string' ? LENS_DEFINITIONS[lens] : lens;
   const lensName = lensDef?.name || 'Code Review';
-  const instructions = lensDef?.instructions || '';
+  const instructions = lensDef?.instructions || lensDef?.prompt || '';
 
   const prContext = prMetadata
     ? `Pull Request Context:\n- PR #${prMetadata.number ?? ''}: ${prMetadata.title ?? ''}\n`
