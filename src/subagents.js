@@ -372,7 +372,9 @@ export async function dispatchSubagentsParallel({
             attemptIndex: i,
           });
 
-          const parsed = parseMarkdownFindings(rawOutput || '');
+          const textOutput =
+            typeof rawOutput === 'string' ? rawOutput : rawOutput?.output || rawOutput?.text || '';
+          const parsed = parseMarkdownFindings(textOutput);
           const lensFindings = parsed.map((f) => ({
             ...f,
             file: f.filePath || f.file,

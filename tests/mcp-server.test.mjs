@@ -89,6 +89,14 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.ok(toolNames.includes('gem_pr_review_publish_cached'));
       assert.ok(toolNames.includes('gem_pr_review_prior'));
       assert.ok(toolNames.includes('gem_pr_review_verify'));
+      assert.ok(toolNames.includes('gem_self_review'));
+      assert.ok(toolNames.includes('gem_pr_review_self'));
+
+      const selfTool = response.result.tools.find((t) => t.name === 'gem_self_review');
+      assert.ok(selfTool.description);
+      assert.ok(selfTool.inputSchema.properties.scope);
+      assert.ok(selfTool.inputSchema.properties.mode);
+      assert.ok(selfTool.inputSchema.properties.failOn);
 
       const subagentsTool = response.result.tools.find((t) => t.name === 'gem_pr_review_subagents');
       assert.ok(subagentsTool.description);
@@ -340,6 +348,91 @@ index 1111111..2222222 100644
       assert.equal(publishCachedCalledWith.prNumber, 77);
       assert.equal(publishCachedCalledWith.headSha, 'sha77');
       assert.deepEqual(publishCachedCalledWith.selectedIndices, [0]);
+    });
+
+    it('handles tools/call for gem_self_review and returns fail-closed result', async () => {
+      let runSelfReviewArgs = null;
+      const handler = createMcpHandler({
+        runSelfReviewFn: async (args) => {
+          runSelfReviewArgs = args;
+          return {
+            status: 'failed',
+            verdict: 'FAIL',
+            mode: args.mode || 'balanced',
+            blockingCount: 1,
+            counts: { P0: 0, P1: 1, P2: 0, P3: 0, nit: 0 },
+            findings: [
+              { severity: 'P1', title: 'Unhandled rejection', file: 'src/app.js', line: 12 },
+            ],
+            remediation: [
+              { severity: 'P1', title: 'Unhandled rejection', file: 'src/app.js', line: 12, remediation: 'Add await' },
+            ],
+            summary: '# ❌ SELF-REVIEW FAILED (FAIL)',
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 70,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            scope: 'staged',
+            mode: 'quick',
+            failOn: 'P1',
+            includeUntracked: false,
+          },
+        },
+      });
+
+      assert.equal(response.id, 70);
+      const data = JSON.parse(response.result.content[0].text);
+      assert.equal(data.status, 'failed');
+      assert.equal(data.verdict, 'FAIL');
+      assert.equal(data.blockingCount, 1);
+      assert.equal(data.findings.length, 1);
+      assert.ok(data.summary.includes('SELF-REVIEW FAILED'));
+
+      assert.ok(runSelfReviewArgs);
+      assert.equal(runSelfReviewArgs.scope, 'staged');
+      assert.equal(runSelfReviewArgs.mode, 'quick');
+      assert.equal(runSelfReviewArgs.failOn, 'P1');
+      assert.equal(runSelfReviewArgs.includeUntracked, false);
+    });
+
+    it('handles tools/call for backward-compatible alias gem_pr_review_self', async () => {
+      let called = false;
+      const handler = createMcpHandler({
+        runSelfReviewFn: async () => {
+          called = true;
+          return {
+            status: 'passed',
+            verdict: 'PASS',
+            blockingCount: 0,
+            counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
+            findings: [],
+            summary: '# ✅ SELF-REVIEW PASSED (PASS)',
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 71,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_self',
+          arguments: {},
+        },
+      });
+
+      assert.equal(response.id, 71);
+      assert.equal(called, true);
+      const data = JSON.parse(response.result.content[0].text);
+      assert.equal(data.status, 'passed');
+      assert.equal(data.verdict, 'PASS');
     });
 
     it('returns error for unknown method with code -32601', async () => {

@@ -93,4 +93,15 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /quota|429|capacity/i, 'Should document quota/capacity error detection');
     assert.match(content, /timeout/i, 'Should document zero timeout execution');
   });
+
+  it('documents one-shot coding-task self-review (gem_self_review) and fail-closed safety gate', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /gem_self_review/i, 'Should document gem_self_review');
+    assert.match(content, /self-review/i, 'Should document self-review');
+    assert.match(content, /fail-closed/i, 'Should document fail-closed safety gate');
+    assert.match(content, /worktree/i, 'Should document local worktree diff acquisition');
+    assert.match(content, /synthetic/i, 'Should document synthetic diffs for untracked files');
+    assert.match(content, /scripts\/self-review\.mjs/i, 'Should document self-review script');
+  });
 });

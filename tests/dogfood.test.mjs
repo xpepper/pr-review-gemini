@@ -126,4 +126,30 @@ describe('Dogfood Review Script CLI', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('runs self-review via dogfood-review.mjs --self --mock without requiring PR number', async () => {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [scriptPath, '--self', '--mock', '--quick'],
+      { env: { ...process.env, NODE_ENV: 'test' } }
+    );
+
+    assert.match(stdout, /SELF-REVIEW PASSED \(PASS\)/);
+    assert.match(stdout, /\*\*Status\*\*:\s*`passed`/);
+  });
+
+  it('runs dedicated scripts/self-review.mjs CLI runner with --mock', async () => {
+    const selfReviewScriptPath = path.resolve('scripts/self-review.mjs');
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [selfReviewScriptPath, '--mock', '--quick', '--json'],
+      { env: { ...process.env, NODE_ENV: 'test' } }
+    );
+
+    const data = JSON.parse(stdout);
+    assert.equal(data.status, 'passed');
+    assert.equal(data.verdict, 'PASS');
+    assert.equal(data.blockingCount, 0);
+  });
 });
+

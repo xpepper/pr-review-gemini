@@ -160,6 +160,13 @@ Guarantees uninterrupted review runs even during API rate limits and model capac
 - **Automatic Failover**: Automatically retries the failing review lens against secondary models in the configured fallback chain (e.g. `heavy_fallbacks: ["claude-3.5-sonnet", "gpt-4o"]`) without losing or repeating already-completed sibling lens evaluations.
 - **Zero Plugin-Imposed Timeouts**: Strict timeout-free execution avoids artificial review deadlines or stuck-reviewer heuristics.
 
+### 7. One-Shot Coding-Task Self-Review (`gem_self_review`)
+Provides coding agents and developers with a fail-closed self-review safety gate before committing or concluding tasks:
+- **Local Git Worktree Diff Acquisition**: Automatically captures uncommitted changes across staged files (`git diff --cached`), unstaged modifications (`git diff`), and untracked files (`git status --porcelain` via synthetic diffs) with zero remote PR or network dependencies.
+- **Fail-Closed Safety Gate**: Returns an explicit `status: 'passed'` vs `status: 'failed'` (`verdict: 'PASS'` vs `'FAIL'`), failing closed whenever blocking defects (`P0` or `P1`) are detected so agents can self-correct before committing.
+- **Actionable Remediation**: Produces concrete file and line-anchored remediation instructions for each detected defect.
+- **CLI Runners**: Run via `npm run self-review`, `node scripts/self-review.mjs [options]`, or `node scripts/dogfood-review.mjs --self`.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -178,6 +185,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 ```
 
 ### Exposed Tools
+- **`gem_self_review`** *(alias `gem_pr_review_self`)*: One-shot coding-task self-review on uncommitted local worktree changes with fail-closed safety gate.
 - **`gem_pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
 - **`gem_pr_review_diff_read`**: Host-supervised diff reading (`read`, `grep`, `find`) with access budget capping.
 - **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
@@ -278,7 +286,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 248+ unit tests across 62 suites verify parser accuracy, host-gated security, subagent orchestration, fallback retry resilience, interactive selection, review caching, and worktree lifecycles.
+All 280+ unit tests across 68 suites verify parser accuracy, host-gated security, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, and worktree lifecycles.
 
 ---
 

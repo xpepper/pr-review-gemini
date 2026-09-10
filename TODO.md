@@ -6,20 +6,25 @@
 
 ---
 
-## Active Next Task: Increment 11 / Issue #18 — One-Shot Coding-Task Self-Review (`gem_self_review`)
-- [ ] Create branch `feat/self-review` for Issue #18.
-- [ ] Implement local git worktree diff acquisition (`git diff HEAD`, staged, unstaged, and untracked files).
-- [ ] Implement self-review orchestrator in `src/self-review.js` (reusing lens definitions & subagent runners without remote PR number).
-- [ ] Implement fail-closed safety gate: `status: 'passed' | 'failed'` based on presence of P0/P1 blocking issues.
-- [ ] Expose MCP tool `gem_self_review` (and alias `gem_pr_review_self`) in `server/index.js`.
-- [ ] Add CLI runner `scripts/self-review.mjs` or flag `--self` in `scripts/dogfood-review.mjs`.
-- [ ] Unit tests covering worktree diff acquisition, fail-closed thresholds, and MCP tool execution.
-- [ ] Verify test suite (`npm test`).
-- [ ] Run dogfood review against PR and submit against `main`.
+## Active Next Task: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output
+- [ ] Implement partial/malformed output recovery heuristics for specialist review lenses.
+- [ ] Deterministically extract valid finding objects from corrupted or truncated JSON blocks.
+- [ ] Safeguard against loss of high-signal findings during degraded LLM responses.
+- [ ] Unit tests for candidate finding recovery and malformed envelope resilience.
+- [ ] Dogfood auto-review and PR submission.
 
 ---
 
 ## Completed Increments
+- [x] **Increment 11 / Issue #18: One-Shot Coding-Task Self-Review (`gem_self_review`)**
+  - [x] Local git worktree diff acquisition (`getWorktreeDiff`) across staged changes (`git diff --cached`), unstaged modifications (`git diff`), and untracked files (`git status --porcelain`).
+  - [x] Synthetic unified diff generator (`generateSyntheticDiff`) for untracked files with valid headers and line commentability.
+  - [x] Local multi-lens self-review engine (`src/self-review.js`, `runSelfReview`) without remote GitHub PR or network mutation dependencies.
+  - [x] Fail-closed safety gate (`evaluateSelfReviewVerdict`): returns explicit `passed` vs `failed` status (`PASS` vs `FAIL`), blocking completion on P0 or P1 defects with actionable remediation instructions.
+  - [x] MCP tools integration (`gem_self_review` and alias `gem_pr_review_self`) in `server/index.js`.
+  - [x] CLI runners: `scripts/self-review.mjs` (and npm script `npm run self-review`) and `--self` flag in `scripts/dogfood-review.mjs`.
+  - [x] 31 new unit tests across `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs` (280 tests passing across 68 suites).
+  - [x] Documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 10 / Issue #16: Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)**
   - [x] Fallback tier configuration (`heavy_fallbacks`, `medium_fallbacks`, `light_fallbacks`, `fallbacks`) in `src/config.js` and per-lens fallbacks.
   - [x] Accurate quota & capacity error classification (`isQuotaOrCapacityError`, `isQuotaError`, HTTP 429, resource exhaustion, capacity overload) in `src/subagents.js` without swallowing unrelated bugs.
@@ -91,6 +96,6 @@
 - [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
 - [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
 - [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
-- [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
+- [x] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
 - [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
 

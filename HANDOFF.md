@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (249 tests across 62 suites, 0 failures)
+* **Current Branch**: `feat/self-review`
+* **Test Suite**: `npm test` runs and passes (280 tests across 68 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -21,17 +21,18 @@
   - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
   - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
   - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
+  - PR (Issue #18 / Increment 11): `feat: one-shot coding-task self-review (gem_self_review)`
 
 ---
 
-## Status: INCREMENT_10_COMPLETE / PHASE_7_IN_PROGRESS
+## Status: INCREMENT_11_COMPLETE / PHASE_7_IN_PROGRESS
 
-Increment 10 is fully implemented, verified test-first (249 passing tests across 62 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+Increment 11 is fully implemented, verified test-first (280 passing tests across 68 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 Phase 7 backlog:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
-- [ ] Increment 11: One-shot coding-task self-review (`gem_self_review`)
+- [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
 - [ ] Increment 12: Candidate finding recovery from degraded/malformed model outputs
 
 ---
@@ -158,45 +159,68 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 11 — One-Shot Coding-Task Self-Review (`gem_self_review`)
+## Completed Work: Increment 11 — One-Shot Coding-Task Self-Review (`gem_self_review`) (Issue #18)
 
 - **GitHub Issue**: [#18: feat: one-shot coding-task self-review (gem_self_review)](https://github.com/xpepper/pr-review-gemini/issues/18)
-- **Target Branch**: `feat/self-review`
+- **Branch**: `feat/self-review`
+- **Changes Delivered**:
+  - `src/diff.js`:
+    - `generateSyntheticDiff(filePath, fileContent)`: Formats untracked files into valid git unified diffs (`new file mode 100644`, hunk headers, `+` lines, and binary markers) compatible with `parseUnifiedDiff`, `isLineInHunk`, and `generateDiffManifest`.
+    - `getWorktreeDiff(options)`: Reliably acquires local uncommitted changes without remote PR or GitHub network dependencies: staged (`git diff --cached`), unstaged (`git diff`), combined (`git diff HEAD` with unborn branch fallback), and untracked files (`git status --porcelain`).
+  - `src/self-review.js`:
+    - `evaluateSelfReviewVerdict(findings, options)`: Evaluates findings against fail-closed safety gate: returns `status: 'passed'` (`verdict: 'PASS'`) when zero blocking issues exist, and `status: 'failed'` (`verdict: 'FAIL'`) when blocking P0 or P1 issues are detected. Supports configurable threshold (`failOn`, default `P1`).
+    - `formatSelfReviewSummary(options)`: Formats clean, actionable markdown reports highlighting verdict banners, diff metrics, evaluated specialist lenses, and line-anchored remediation steps for blocking issues.
+    - `runSelfReview(options)`: Multi-lens self-review orchestrator executing specialist review passes locally with parallel subagent dispatch, file-backed large diff handling (> 200 KB), finding deduplication, and zero remote mutations.
+  - `src/reviewer.js`:
+    - Re-exported `runSelfReview`, `evaluateSelfReviewVerdict`, `formatSelfReviewSummary`, `getWorktreeDiff`, and `generateSyntheticDiff`.
+  - `src/subagents.js`:
+    - Enhanced `dispatchSubagentsParallel` raw output extraction to seamlessly handle both string and `{ output }` objects from model runners.
+  - `server/index.js` (MCP Server):
+    - Added MCP tool `gem_self_review` and backward-compatible alias `gem_pr_review_self` supporting `scope`, `mode`, `includeUntracked`, `failOn`, and `customInstructions`.
+  - `scripts/`:
+    - Added `scripts/self-review.mjs` dedicated CLI runner with exit code 0 on pass and 1 on fail.
+    - Added `--self` flag support to `scripts/dogfood-review.mjs` allowing self-review execution without requiring a PR number.
+    - Added npm script `"self-review": "node scripts/self-review.mjs"` to `package.json`.
+  - Documentation & Skill:
+    - Documented one-shot coding-task self-review, local diff acquisition, fail-closed safety gate, MCP tool reference, and CLI commands in `skills/gem-pr-review/SKILL.md` and `README.md`.
+  - Tests:
+    - Added 31 unit tests across `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs`. Total 280 tests passing across 68 suites.
+
+---
+
+## Next Session Mission: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output
+
+- **Target Branch**: `feat/candidate-finding-recovery`
 
 ### Goal
-Expose a fail-closed self-review tool (`gem_self_review` / `gem_pr_review_self`) for coding agents to review uncommitted local changes (staged, unstaged, untracked) before concluding a task or preparing commits, preventing subtle bugs and regressions from slipping through.
+Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses rather than dropping entire review passes or failing silently when LLMs produce JSON syntax flaws or unescaped characters.
 
 ### Requirements & Architecture
-1. **Local Git Worktree Diff Acquisition**:
-   - Inspect uncommitted changes using git commands: staged (`git diff --cached`), unstaged (`git diff`), or combined worktree (`git diff HEAD`), including untracked files (`git status --porcelain`).
-2. **Local Multi-Lens Review Engine (`src/self-review.js` or in `src/reviewer.js`)**:
-   - Run specialist lenses (e.g. correctness, security, conventions) over local changes without requiring a remote GitHub PR number or network API calls.
-3. **Fail-Closed Safety Gate**:
-   - Return explicit verdict: `status: 'passed'` vs `status: 'failed'`.
-   - Fail closed when P0 or P1 blocking issues are detected, reporting concrete remediation suggestions for the agent to fix.
-4. **MCP Tool & CLI Integration**:
-   - Expose MCP tool `gem_self_review` (with backward-compatible alias `gem_pr_review_self`).
-   - Add CLI runner `scripts/self-review.mjs` or `--self` flag in `scripts/dogfood-review.mjs`.
-5. **Zero Remote Mutations**:
-   - Purely local evaluation without publishing remote GitHub reviews or modifying git state.
+1. **Partial / Malformed JSON Recovery**:
+   - Resiliently extract finding blocks even when the model output contains truncated JSON, missing closing brackets, trailing commas, or markdown formatting quirks within `<<<PR_REVIEW_JSON>>>` envelopes.
+2. **Contract Normalization**:
+   - Validate and normalize candidate findings against the structured findings contract (severity `P0`–`nit`, valid side `LEFT`/`RIGHT`, file path, line numbers).
+3. **Loss Prevention**:
+   - Ensure high-signal findings are preserved even when the primary parser encounters syntax anomalies.
+4. **Test-First Verification**:
+   - Add unit tests covering malformed envelopes, unclosed arrays, and corrupt candidate recovery.
 
 ---
 
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 11 on this repository: "One-Shot Coding-Task Self-Review (gem_self_review)" (addressing Issue #18: https://github.com/xpepper/pr-review-gemini/issues/18).
+Please implement Increment 12 on this repository: "Candidate Finding Recovery from Degraded/Malformed Model Output".
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/self-review.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/candidate-finding-recovery.
 
 Implementation requirements:
-- Local Diff Acquisition: Reliably acquire uncommitted worktree changes (staged, unstaged, untracked) via git without side effects.
-- Self-Review Engine: Implement local multi-lens analysis (e.g. in src/self-review.js) reusing existing specialist lenses and prompt builders without requiring a remote PR number.
-- Fail-Closed Safety Gate: Return explicit pass/fail status ('passed' | 'failed'), failing when blocking P0/P1 issues are detected so coding agents self-correct before finishing tasks.
-- MCP Tool & CLI Runner: Expose gem_self_review (and alias gem_pr_review_self) on the MCP server and provide a CLI runner (e.g. scripts/self-review.mjs or scripts/dogfood-review.mjs --self).
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 249+ tests passing and adding unit tests for worktree diff acquisition, fail-closed policy, finding formatting, and MCP tool execution.
+- Resilient Finding Extraction: Deterministically extract and recover contract-valid candidate findings from degraded or malformed model outputs (truncated JSON, missing brackets, trailing commas).
+- Contract Normalization: Validate extracted candidates against structured finding schemas (severity, file, line, side, confidence).
+- Test-First Verification: Follow test-first development, keeping all 280+ tests passing and adding unit tests for recovery heuristics.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
+
 
