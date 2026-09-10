@@ -6,6 +6,8 @@ import {
   dispatchSubagentsParallel,
   createSubagentRunner,
   buildSdkReaderTools,
+  isQuotaOrCapacityError,
+  isQuotaError,
 } from '../src/subagents.js';
 import { loadConfig, DEFAULT_CONFIG } from '../src/config.js';
 import { REVIEW_MODES, LENS_DEFINITIONS } from '../src/reviewer.js';
@@ -480,6 +482,61 @@ index 1111111..2222222 100644
       assert.ok(Array.isArray(passedTools));
       assert.equal(passedTools.length, 3);
       assert.equal(result.errors.length, 0);
+    });
+  });
+
+  describe('isQuotaOrCapacityError and Error Classification', () => {
+    it('detects HTTP 429 status and statusCode variations', () => {
+      assert.equal(isQuotaOrCapacityError({ status: 429 }), true);
+      assert.equal(isQuotaOrCapacityError({ statusCode: 429 }), true);
+      assert.equal(isQuotaOrCapacityError({ response: { status: 429 } }), true);
+      assert.equal(isQuotaOrCapacityError({ response: { statusCode: 429 } }), true);
+      assert.equal(isQuotaOrCapacityError({ code: 429 }), true);
+      assert.equal(isQuotaOrCapacityError({ code: '429' }), true);
+    });
+
+    it('detects quota and capacity error codes', () => {
+      assert.equal(isQuotaOrCapacityError({ code: 'RESOURCE_EXHAUSTED' }), true);
+      assert.equal(isQuotaOrCapacityError({ code: 'RATE_LIMIT_EXCEEDED' }), true);
+      assert.equal(isQuotaOrCapacityError({ code: 'INSUFFICIENT_QUOTA' }), true);
+      assert.equal(isQuotaOrCapacityError({ code: 'QUOTA_EXCEEDED' }), true);
+      assert.equal(isQuotaOrCapacityError({ code: 'MODEL_CAPACITY_EXCEEDED' }), true);
+      assert.equal(isQuotaOrCapacityError({ error: { code: 'insufficient_quota' } }), true);
+      assert.equal(isQuotaOrCapacityError({ response: { data: { error: { code: 'rate_limit_exceeded' } } } }), true);
+    });
+
+    it('detects quota, rate limit, capacity, and overloaded keywords in messages', () => {
+      assert.equal(isQuotaOrCapacityError(new Error('HTTP 429: Too Many Requests')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('Quota exceeded for model claude-3.7-sonnet')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('You have exceeded your current quota, please check your plan')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('Rate limit reached for requests per minute')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('Rate-limited by upstream API gateway')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('The model is currently overloaded. Please try again later.')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('Server capacity exceeded, request dropped')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('Resource has been exhausted (e.g. check quota).')), true);
+      assert.equal(isQuotaOrCapacityError(new Error('TPM limit exceeded')), true);
+      assert.equal(isQuotaOrCapacityError({ status: 503, message: 'Model is overloaded' }), true);
+    });
+
+    it('does not classify unrelated runtime, syntax, network, or timeout bugs as quota errors', () => {
+      assert.equal(isQuotaOrCapacityError(new Error('Connection timed out after 30000ms')), false);
+      assert.equal(isQuotaOrCapacityError(new Error('ETIMEDOUT: connect timed out')), false);
+      assert.equal(isQuotaOrCapacityError({ code: 'ETIMEDOUT', message: 'connection timed out' }), false);
+      assert.equal(isQuotaOrCapacityError({ code: 'ECONNREFUSED', message: 'connect ECONNREFUSED 127.0.0.1:80' }), false);
+      assert.equal(isQuotaOrCapacityError({ code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND api.github.com' }), false);
+      assert.equal(isQuotaOrCapacityError(new TypeError('Cannot read properties of undefined (reading status)')), false);
+      assert.equal(isQuotaOrCapacityError(new SyntaxError('Unexpected token < in JSON at position 0')), false);
+      assert.equal(isQuotaOrCapacityError(new ReferenceError('missingVar is not defined')), false);
+      assert.equal(isQuotaOrCapacityError(new Error('404 Not Found')), false);
+      assert.equal(isQuotaOrCapacityError(new Error('401 Unauthorized: bad credentials')), false);
+      assert.equal(isQuotaOrCapacityError(new Error('500 Internal Server Error')), false);
+      assert.equal(isQuotaOrCapacityError(null), false);
+      assert.equal(isQuotaOrCapacityError(undefined), false);
+      assert.equal(isQuotaOrCapacityError(''), false);
+    });
+
+    it('isQuotaError is an alias for isQuotaOrCapacityError', () => {
+      assert.equal(isQuotaError, isQuotaOrCapacityError);
     });
   });
 });
