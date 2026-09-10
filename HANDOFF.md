@@ -38,10 +38,10 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
 1. **Manifest & Standards (Agent Plugins 1.0)**:
    - `plugin.json`: Compliant package manifest.
    - `mcp.json`: Model Context Protocol server configuration exposing tools.
-   - `skills/pr-review/SKILL.md`: Declarative agent skill with multi-lens instructions, mode flags (`--quick`, `--balanced`, `--full`, `--deep`), and prior finding revalidation guidelines.
+   - `skills/gem-pr-review/SKILL.md`: Declarative agent skill with multi-lens instructions, mode flags (`--quick`, `--balanced`, `--full`, `--deep`), and prior finding revalidation guidelines.
 
 2. **Core Modules (`src/`)**:
-   - `src/config.js`: Layered configuration management (`~/.copilot/pr-review.json` and `.github/pr-review.json`), model tiers (`light`, `medium`, `heavy`), reasoning efforts (`off` to `high`), and per-lens overrides (`lenses`).
+   - `src/config.js`: Layered configuration management (`~/.copilot/gem-pr-review.json` / `.github/gem-pr-review.json`), model tiers (`light`, `medium`, `heavy`), reasoning efforts (`off` to `high`), and per-lens overrides (`lenses`).
    - `src/diff.js`: Unified diff parser, git hunk header extraction, and commentability safety gates.
    - `src/publish.js`: Host-gated review publisher with diff anchor validation, comment capping (50), stale-head protection, and gated `APPROVE`/`COMMENT` logic.
    - `src/reviewer.js`: Multi-lens review orchestrator, finding deduplication, and mode planning.
