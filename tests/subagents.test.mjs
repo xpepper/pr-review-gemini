@@ -474,6 +474,24 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       assert.equal(plan[0].tier, 'light');
       assert.deepEqual(plan[0].fallbacks, ['valid-fallback']);
     });
+
+    it('deduplicates role IDs when duplicate roles are specified in CLI or config', () => {
+      const planFromList = resolveLensPlan({
+        mode: 'balanced',
+        roles: ['security', 'security', 'security'],
+      });
+      assert.equal(planFromList.length, 1);
+      assert.equal(planFromList[0].lensId, 'security');
+
+      const planFromConfig = resolveLensPlan({
+        mode: 'balanced',
+        config: {
+          enabled_roles: ['correctness', 'correctness'],
+        },
+      });
+      assert.equal(planFromConfig.length, 1);
+      assert.equal(planFromConfig[0].lensId, 'correctness');
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {

@@ -194,12 +194,12 @@ export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
   let enabledList = null;
   if (explicitRoles) {
     if (Array.isArray(explicitRoles)) {
-      enabledList = explicitRoles.map(String).map((s) => s.trim()).filter(Boolean);
+      enabledList = [...new Set(explicitRoles.map(String).map((s) => s.trim()).filter(Boolean))];
     } else if (typeof explicitRoles === 'string') {
-      enabledList = explicitRoles.split(',').map((s) => s.trim()).filter(Boolean);
+      enabledList = [...new Set(explicitRoles.split(',').map((s) => s.trim()).filter(Boolean))];
     }
   } else if (Array.isArray(resolvedConfig.enabled_roles) && resolvedConfig.enabled_roles.length > 0) {
-    enabledList = resolvedConfig.enabled_roles;
+    enabledList = [...new Set(resolvedConfig.enabled_roles)];
   }
 
   // Determine role IDs to schedule
