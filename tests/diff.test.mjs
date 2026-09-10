@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   parseUnifiedDiff,
   isLineInHunk,
@@ -14,6 +15,8 @@ import {
   isLargeDiff,
   generateDiffManifest,
   formatDiffManifest,
+  createFileBackedDiff,
+  createHostSupervisedDiffReader,
 } from '../src/diff.js';
 
 describe('Unified Diff Parser & Hunk Anchoring', () => {
@@ -715,6 +718,177 @@ new file mode 100644
       assert.match(formatted, /\*\*Total Files\*\*: 5/);
       assert.match(formatted, /\*\*Total Additions\*\*: \+7/);
       assert.match(formatted, /\*\*Total Deletions\*\*: -4/);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Tests: File-Backed Diff Transport & Host-Supervised Reader
+  // --------------------------------------------------------------------------
+  describe('File-Backed Diff Transport & Host-Supervised Reader', () => {
+    it('createFileBackedDiff creates diff file on disk and cleans up properly', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+
+      assert.ok(transport);
+      assert.ok(transport.diffFilePath);
+      assert.ok(transport.tempDir);
+      assert.equal(fs.existsSync(transport.diffFilePath), true);
+      assert.equal(fs.readFileSync(transport.diffFilePath, 'utf8'), MULTI_FILE_COMBINED_DIFF);
+      assert.equal(transport.isLarge, false);
+      assert.equal(transport.manifest.totalFiles, 5);
+      assert.ok(transport.reader);
+
+      // Clean up
+      await transport.cleanup();
+      assert.equal(fs.existsSync(transport.tempDir), false);
+    });
+
+    it('supervised reader read() returns slice of diff with budget tracking', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.read({ offset: 0, limit: 100 });
+
+        assert.ok(res.content);
+        assert.equal(res.content.length <= 100, true);
+        assert.equal(res.bytesRead > 0, true);
+        assert.equal(res.readsCount, 1);
+        assert.equal(res.remainingReads, 15);
+        assert.equal(res.truncated, false);
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader read() extracts specific file diff', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.read({ file: 'src/calc.js' });
+
+        assert.ok(res.content.includes('diff --git a/src/calc.js b/src/calc.js'));
+        assert.ok(res.content.includes('Math.abs(a - b)'));
+        assert.equal(res.content.includes('src/utils/logger.js'), false);
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader read() rejects path traversal attempts', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.read({ file: '../../etc/passwd' });
+
+        assert.ok(res.error);
+        assert.match(res.error, /invalid|traversal|not found/i);
+        assert.equal(res.content, '');
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader read() supports line-based slicing', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.read({ file: 'src/calc.js', startLine: 1, lineCount: 3 });
+
+        assert.ok(res.content);
+        const lines = res.content.split('\n');
+        assert.equal(lines.length, 3);
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader grep() finds pattern occurrences with file and line context', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.grep({ query: 'Math.abs' });
+
+        assert.ok(res.matches);
+        assert.equal(res.matches.length, 1);
+        assert.equal(res.matches[0].file, 'src/calc.js');
+        assert.match(res.matches[0].content, /Math\.abs/);
+        assert.equal(res.readsCount, 1);
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader grep() supports regex and file filter', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = await reader.grep({ query: 'log\\(', isRegex: true, file: 'src/utils/logger.js' });
+
+        assert.ok(res.matches);
+        assert.ok(res.matches.length >= 1);
+        assert.equal(res.matches[0].file, 'src/utils/logger.js');
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader find() filters files in manifest without consuming read count', async () => {
+      const transport = await createFileBackedDiff(MULTI_FILE_COMBINED_DIFF);
+      try {
+        const reader = transport.reader;
+        const res = reader.find({ status: 'added' });
+
+        assert.ok(res.files);
+        assert.equal(res.files.length, 1);
+        assert.equal(res.files[0].path, 'src/utils/logger.js');
+
+        const budget = reader.getBudgetState();
+        assert.equal(budget.readsCount, 0, 'find() should not consume read operations');
+      } finally {
+        await transport.cleanup();
+      }
+    });
+
+    it('supervised reader caps access at maxReads (16 reads)', async () => {
+      const reader = createHostSupervisedDiffReader({
+        diffText: MULTI_FILE_COMBINED_DIFF,
+        maxReads: 3, // Lower threshold for test
+      });
+
+      // Perform 3 reads
+      await reader.read({ offset: 0, limit: 50 });
+      await reader.read({ offset: 50, limit: 50 });
+      await reader.read({ offset: 100, limit: 50 });
+
+      assert.equal(reader.getBudgetState().readsCount, 3);
+      assert.equal(reader.getBudgetState().remainingReads, 0);
+
+      // 4th read exceeds budget
+      const fourth = await reader.read({ offset: 150, limit: 50 });
+      assert.ok(fourth.error);
+      assert.match(fourth.error, /budget.*exceeded/i);
+      assert.equal(fourth.truncated, true);
+    });
+
+    it('supervised reader caps access at maxBudgetBytes and enforces 1 MB ceiling', async () => {
+      const reader = createHostSupervisedDiffReader({
+        diffText: 'A'.repeat(500),
+        maxBudgetBytes: 300,
+      });
+
+      const first = await reader.read({ offset: 0, limit: 200 });
+      assert.equal(first.bytesRead, 200);
+
+      const second = await reader.read({ offset: 200, limit: 200 });
+      // Total requested 400 bytes, but capped at 300 bytes max!
+      assert.equal(second.truncated, true);
+      assert.equal(reader.getBudgetState().bytesRead, 300);
+
+      // Ceiling test: requesting 2 MB budget should be clamped to 1 MB (1024 * 1024)
+      const clampedReader = createHostSupervisedDiffReader({
+        diffText: 'sample',
+        maxBudgetBytes: 2 * 1024 * 1024,
+      });
+      assert.equal(clampedReader.getBudgetState().maxBudgetBytes, 1024 * 1024);
     });
   });
 });
