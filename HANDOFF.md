@@ -24,7 +24,7 @@
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
-  - Increment 14: `feat: pluggable custom review roles & specialist lenses` (Branch `feat/custom-review-roles`)
+  - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Branch `feat/custom-review-roles`)
 
 ---
 
@@ -291,6 +291,7 @@ Possible future enhancements:
 
 ## Completed Work: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
 
+- **GitHub PR**: [#24: feat: pluggable custom review roles and specialist lenses (Increment 14)](https://github.com/xpepper/pr-review-gemini/pull/24)
 - **Branch**: `feat/custom-review-roles`
 - **Changes Delivered**:
   - `src/config.js`:
