@@ -401,6 +401,26 @@ new file mode 100644
       assert.match(formatted, /All clean\./);
       assert.doesNotMatch(formatted, /Additional Findings/);
     });
+
+    it('normalizes double-escaped literal newlines (\\n) into real newlines in formatReviewSummary', () => {
+      const summaryWithLiteralEscapes = '### 🟡 Changes recommended\\n\\nA translation-only edit unnecessarily triggers a full Elm compilation.';
+      const formatted = formatReviewSummary({ summary: summaryWithLiteralEscapes });
+      assert.equal(
+        formatted,
+        '### 🟡 Changes recommended\n\nA translation-only edit unnecessarily triggers a full Elm compilation.'
+      );
+    });
+
+    it('normalizes double-escaped literal newlines (\\n) in formatInlineComment', () => {
+      const finding = {
+        title: 'Watcher issue',
+        severity: 'P1',
+        confidence: 0.9,
+        commentary: 'First paragraph.\\n\\nSecond paragraph.',
+      };
+      const text = formatInlineComment(finding);
+      assert.match(text, /First paragraph\.\n\nSecond paragraph\./);
+    });
   });
 
   // --------------------------------------------------------------------------

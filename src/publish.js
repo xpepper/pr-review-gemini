@@ -384,6 +384,22 @@ export function classifyFindings(findings, diffs, options = {}) {
 }
 
 /**
+ * Normalizes double-escaped literal newlines (\n) into actual newline characters
+ * when the string lacks real newlines. Prevents Markdown rendering issues on GitHub
+ * if an LLM or caller passes double-escaped prose.
+ *
+ * @param {string | null | undefined} text
+ * @returns {string}
+ */
+export function normalizeNewlines(text) {
+  if (!text || typeof text !== 'string') return '';
+  if (text.includes('\\n') && !text.includes('\n')) {
+    return text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+  return text;
+}
+
+/**
  * Formats a finding into an inline review comment body.
  *
  * @param {object} finding
@@ -396,9 +412,10 @@ export function formatInlineComment(finding) {
 
   parts.push(`**[${finding.severity}]${titlePart}**${confText}`);
 
-  if (finding.commentary) {
+  const commentary = normalizeNewlines(finding.commentary);
+  if (commentary) {
     parts.push('');
-    parts.push(finding.commentary);
+    parts.push(commentary);
   }
 
   return parts.join('\n');
@@ -422,8 +439,9 @@ export function formatReviewSummary({
   reviewEvent = 'COMMENT',
 } = {}) {
   const sections = [];
-  if (summary && summary.trim()) {
-    sections.push(summary.trim());
+  const cleanSummary = normalizeNewlines(summary).trim();
+  if (cleanSummary) {
+    sections.push(cleanSummary);
   }
 
   if (Array.isArray(demotedFindings) && demotedFindings.length > 0) {

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js >= 20.0.0, GitHub CLI (gh), Agent Plugins 1.0
 metadata:
   version: "0.1.0"
-allowed-tools: Bash, gh, git
+allowed-tools: Bash, gh, git, node
 ---
 
 # Gem PR Review: Parallel Multi-Lens AI Code Review
@@ -167,3 +167,47 @@ The host execution environment validates all model outputs before submitting to 
 5. **Review Event Safety**:
    - `REQUEST_CHANGES` is strictly forbidden and automatically forced to `COMMENT`.
    - `APPROVE` is only permissible if explicitly configured via `approveMaxPriorityLevel` and never on the author's own pull request.
+
+---
+
+## Safe Review Publishing Execution Workflow
+
+To avoid shell escape errors, rate-limiting, and broken markdown formatting (e.g. literal `\n\n` on GitHub):
+
+### 1. Primary Method: MCP Tool or CLI Runner (Recommended)
+- **Via MCP Server Tool**:
+  If the `gem_pr_review_publish` (or `pr_review_publish`) tool is available, invoke it directly with structured JSON:
+  ```json
+  {
+    "prNumber": 123,
+    "findings": [...],
+    "reviewBody": "### 🟡 Changes recommended\n\nSummary text..."
+  }
+  ```
+- **Via CLI Runner**:
+  ```bash
+  node scripts/dogfood-review.mjs <PR_NUMBER> --publish
+  ```
+
+### 2. Manual `gh api` Submission Rules (Formatting Safety)
+If posting manually via `gh api` in bash/zsh:
+- **CRITICAL**: Never pass multiline review markdown using single-quoted `-f body='...\n\n...'` or `-f 'comments[][body]=...'`. Single quotes in shells do NOT expand `\n`, which posts literal `\n\n` characters on GitHub.
+- **ALWAYS** pipe the JSON payload via stdin using `--input -`:
+  ```bash
+  gh api --method POST repos/:owner/:repo/pulls/<PR_NUMBER>/reviews --input - <<'EOF'
+  {
+    "commit_id": "<HEAD_SHA>",
+    "event": "COMMENT",
+    "body": "### 🟡 Changes recommended\n\nExplanation of issues...",
+    "comments": [
+      {
+        "path": "path/to/file.ext",
+        "line": 42,
+        "side": "RIGHT",
+        "body": "**[P1] Finding Title** (confidence: 0.95)\n\nDetailed finding explanation."
+      }
+    ]
+  }
+  EOF
+  ```
+

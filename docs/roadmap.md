@@ -77,3 +77,17 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 - [x] **Increment 7: Detached Worktree Test Verification**
   - Implement isolated test execution against PR head SHA in a detached temporary git worktree.
   - Enforce user-only profile configuration and process group cleanup.
+- [ ] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
+  - Detect diffs exceeding 200 KB and switch to a file-backed transport instead of raw prompt inlining.
+  - Provide reviewers with a bounded changed-file manifest and host-enforced read tools (`read`, `grep`, `find`) with capped access (~640 KB across 16 reads) up to 1 MB.
+- [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**
+  - Implement interactive CLI/modal finding selection prior to publishing (`--all` to publish all, or interactive toggle).
+  - Add in-session caching (`publish-later`) to retain reviewed findings and publish without re-evaluating model passes.
+- [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**
+  - On capacity or rate limit errors (HTTP 429), automatically dispatch the configured backup tier (e.g. `heavy_fallbacks`).
+  - Keep execution timeout-free: do not impose artificial plugin-level deadlines or stuck-reviewer heuristics.
+- [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**
+  - Expose a fail-closed tool for coding agents to review uncommitted local changes (staged, tracked, untracked) before finalizing tasks.
+- [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**
+  - Recover contract-valid candidate finding blocks from partial or malformed lane history instead of dropping passes.
+

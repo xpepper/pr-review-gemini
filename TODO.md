@@ -38,3 +38,11 @@
 - [x] Implement `pr_review_prior` discovery for `--incremental` re-reviews (`src/prior.js`).
 - [x] Implement detached-worktree test verification (`pr_review_verify` in `src/verify.js`).
 - [x] Gated approval policies (`approveMaxPriorityLevel`).
+
+### Phase 7: Advanced Resiliency, Large Diff Transport & Interaction
+- [ ] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
+- [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
+- [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
+- [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
+- [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
+
