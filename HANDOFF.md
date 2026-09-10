@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/interactive-selection`
+* **Current Branch**: `main`
 * **Test Suite**: `npm test` runs and passes (229 tests across 61 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -19,7 +19,7 @@
   - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
   - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
-  - Increment 9 (Issue #14): `feat: interactive finding selection and cached publish-later` (Active PR)
+  - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
 
 ---
 
@@ -101,7 +101,8 @@ Phase 7 backlog:
 
 ## Completed Work: Increment 9 — Interactive Finding Selection & Cached Publish-Later (Issue #14)
 
-- **GitHub Issue**: [#14: feat: interactive finding selection and cached publish-later](https://github.com/xpepper/pr-review-gemini/issues/14)
+- **GitHub PR**: [#15: feat: interactive finding selection and cached publish-later](https://github.com/xpepper/pr-review-gemini/pull/15) (Merged, commit `a0def2c`)
+- **GitHub Issue**: [#14: feat: interactive finding selection and cached publish-later](https://github.com/xpepper/pr-review-gemini/issues/14) (Closed)
 - **Branch**: `feat/interactive-selection`
 - **Changes Delivered**:
   - `src/selection.js`:
@@ -132,18 +133,21 @@ Phase 7 backlog:
 
 ## Next Session Mission: Increment 10 — Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)
 
+- **GitHub Issue**: [#16: feat: automatic fallback model retry on quota/capacity errors (without timeouts)](https://github.com/xpepper/pr-review-gemini/issues/16)
 - **Target Branch**: `feat/quota-fallback-retry`
 
 ### Goal
 Implement automatic failover retry when encountering API quota exhaustion, capacity, or rate-limit errors (e.g. HTTP 429 / resource exhausted), falling back to configured secondary models (e.g. `heavy_fallbacks`) while strictly avoiding artificial timeouts or stuck-reviewer heuristics.
 
 ### Requirements & Architecture
-1. **Fallback Tier Configuration**:
-   - Support fallback model chains in configuration (e.g. `heavy_fallbacks`, `medium_fallbacks`).
-2. **Quota & Rate-Limit Error Detection**:
-   - Detect quota exhaustion, rate limits (HTTP 429), and capacity errors without catching unrelated syntax or runtime bugs.
-3. **Automatic Failover Retry**:
+1. **Fallback Tier Configuration (`src/config.js`)**:
+   - Support fallback model chains in configuration (e.g. `heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o']`, `medium_fallbacks`, `light_fallbacks`).
+   - Validate schema in `resolveConfig` and preserve backward compatibility with existing tier configs.
+2. **Quota & Rate-Limit Error Detection (`src/subagents.js`)**:
+   - Detect quota exhaustion, rate limits (HTTP 429), and capacity errors from Copilot SDK / LLM execution without catching unrelated syntax, network timeout, or runtime bugs.
+3. **Automatic Failover Retry (`src/subagents.js`)**:
    - When a primary subagent lens fails due to quota or capacity limits, automatically retry the review pass using the next available model in the fallback tier.
+   - Do not discard or rerun already-completed sibling lens results.
 4. **Zero Plugin-Imposed Timeouts**:
    - Do not impose arbitrary plugin-level execution deadlines or stuck heuristics.
 5. **Test-First Verification**:
@@ -154,18 +158,18 @@ Implement automatic failover retry when encountering API quota exhaustion, capac
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 10 on this repository: "Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)".
+Please implement Increment 10 on this repository: "Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)" (addressing Issue #16: https://github.com/xpepper/pr-review-gemini/issues/16).
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
 2. Confirm git working tree is clean on main, then create a feature branch: feat/quota-fallback-retry.
 
 Implementation requirements:
-- Fallback Tier Configuration: Support fallback model tiers (e.g. heavy_fallbacks) in config.js.
-- Quota Error Classification: Reliably detect 429/quota/rate-limit errors from Copilot SDK or LLM clients.
-- Automatic Failover: Re-dispatch failing lens to fallback models without losing completed sibling lens passes.
-- Zero Timeouts: Preserve timeout-free execution without artificial stuck-reviewer timers.
-- Test-First Verification: Write unit tests verifying fallback resolution, retry dispatch, and error isolation.
+- Fallback Tier Configuration: Support fallback model tier mappings in src/config.js (e.g. heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'], medium_fallbacks: [...]).
+- Quota & Capacity Error Detection: Reliably detect 429 / quota exhaustion / capacity errors from Copilot SDK or client execution in src/subagents.js without swallowing unrelated bugs.
+- Automatic Failover Retry: When a primary lens fails due to quota/capacity limits, automatically retry that lens using the configured fallback models without dropping completed sibling lens passes.
+- Zero Timeouts: Preserve timeout-free execution without artificial stuck-reviewer timers or plugin-imposed deadlines.
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 229+ tests passing and adding unit tests for fallback tier resolution, error detection, and retry dispatch.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 

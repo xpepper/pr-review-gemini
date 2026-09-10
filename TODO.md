@@ -6,16 +6,14 @@
 
 ---
 
-## Active Next Task: Increment 9 / Issue #14 — Interactive Finding Selection & Cached Publish-Later
-- [x] Create branch `feat/interactive-selection` for Issue #14.
-- [x] Implement finding selection, table formatting, and input parsing (`src/selection.js`) test-first (`tests/selection.test.mjs`).
-- [x] Implement in-session review caching & freshness/stale-head invalidation (`src/cache.js`) test-first (`tests/cache.test.mjs`).
-- [x] Integrate automatic caching and finding filtering into reviewer orchestrator (`src/reviewer.js`).
-- [x] Add `gem_pr_review_publish_cached` tool to MCP server (`server/index.js`) and tests (`tests/mcp-server.test.mjs`).
-- [x] Integrate interactive selection and `--publish-cached` into CLI runner (`scripts/dogfood-review.mjs`) and tests (`tests/dogfood.test.mjs`).
-- [x] Update documentation in `skills/gem-pr-review/SKILL.md` and `README.md`.
-- [x] Verify complete test suite (`npm test`).
-- [x] Run dogfood review on PR and hand off.
+## Active Next Task: Increment 10 / Issue #16 — Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)
+- [ ] Create branch `feat/quota-fallback-retry` for Issue #16.
+- [ ] Add fallback tier mappings (e.g. `heavy_fallbacks`, `medium_fallbacks`) in `src/config.js` and tests in `tests/config.test.mjs`.
+- [ ] Implement quota and capacity error detection (`isQuotaError`, HTTP 429, resource exhaustion) in `src/subagents.js` and tests in `tests/subagents.test.mjs`.
+- [ ] Implement automatic failover retry in `dispatchSubagentsParallel` so failing lenses retry on fallback models without losing completed sibling passes.
+- [ ] Ensure timeout-free execution: zero arbitrary timeouts or stuck-reviewer heuristics.
+- [ ] Verify test suite (`npm test`).
+- [ ] Run dogfood review against PR and submit against `main`.
 
 ---
 
@@ -82,7 +80,7 @@
 
 ### Phase 7: Advanced Resiliency, Large Diff Transport & Interaction
 - [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
-- [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
+- [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
 - [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
 - [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
 - [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
