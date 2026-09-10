@@ -86,6 +86,7 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.ok(toolNames.includes('gem_pr_review_subagents'));
       assert.ok(toolNames.includes('gem_pr_review_diff'));
       assert.ok(toolNames.includes('gem_pr_review_publish'));
+      assert.ok(toolNames.includes('gem_pr_review_publish_cached'));
       assert.ok(toolNames.includes('gem_pr_review_prior'));
       assert.ok(toolNames.includes('gem_pr_review_verify'));
 
@@ -298,6 +299,47 @@ index 1111111..2222222 100644
       assert.equal(resultData.prNumber, 42);
       assert.equal(resultData.relationship, 'incremental');
       assert.equal(resultData.canIncremental, true);
+    });
+
+    it('handles tools/call for gem_pr_review_publish_cached', async () => {
+      let publishCachedCalledWith = null;
+      const handler = createMcpHandler({
+        publishCachedReviewFn: async (args) => {
+          publishCachedCalledWith = args;
+          return {
+            published: true,
+            reviewId: 555,
+            publishedCount: 1,
+            totalCachedCount: 2,
+            summary: 'Review published from cache.',
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 56,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_publish_cached',
+          arguments: {
+            prNumber: 77,
+            repo: 'xpepper/test',
+            expectedHeadSha: 'sha77',
+            selectedIndices: [0],
+          },
+        },
+      });
+
+      assert.equal(response.id, 56);
+      const resultData = JSON.parse(response.result.content[0].text);
+      assert.equal(resultData.published, true);
+      assert.equal(resultData.reviewId, 555);
+      assert.equal(resultData.publishedCount, 1);
+      assert.ok(publishCachedCalledWith);
+      assert.equal(publishCachedCalledWith.prNumber, 77);
+      assert.equal(publishCachedCalledWith.headSha, 'sha77');
+      assert.deepEqual(publishCachedCalledWith.selectedIndices, [0]);
     });
 
     it('returns error for unknown method with code -32601', async () => {
