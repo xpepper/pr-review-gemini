@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/11-per-lens-overrides`
-* **Test Suite**: `npm test` runs and passes (163 tests across 47 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (164 tests across 47 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -23,7 +23,7 @@
 
 ## Status: ISSUE_11_COMPLETE / PHASE_7_PLANNED
 
-Issue #11 is fully implemented, verified test-first (163 passing tests across 47 suites), and documented in `README.md`.
+Issue #11 is fully implemented, verified test-first (164 passing tests across 47 suites), auto-reviewed via dogfood AI review, and documented in `README.md`.
 Phase 7 has been scoped and planned to capture next-generation features inspired by `pi-pr-review` (excluding artificial timeouts):
 - Increment 8: Large-diff file-backed transport (> 200 KB)
 - Increment 9: Interactive finding selection UI & cached publish-later
@@ -41,11 +41,11 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
    - `skills/pr-review/SKILL.md`: Declarative agent skill with multi-lens instructions, mode flags (`--quick`, `--balanced`, `--full`, `--deep`), and prior finding revalidation guidelines.
 
 2. **Core Modules (`src/`)**:
-   - `src/config.js`: Layered configuration management (`~/.copilot/pr-review.json` and `.github/pr-review.json`), model tiers (`light`, `medium`, `heavy`), and reasoning efforts (`off` to `high`).
+   - `src/config.js`: Layered configuration management (`~/.copilot/pr-review.json` and `.github/pr-review.json`), model tiers (`light`, `medium`, `heavy`), reasoning efforts (`off` to `high`), and per-lens overrides (`lenses`).
    - `src/diff.js`: Unified diff parser, git hunk header extraction, and commentability safety gates.
    - `src/publish.js`: Host-gated review publisher with diff anchor validation, comment capping (50), stale-head protection, and gated `APPROVE`/`COMMENT` logic.
    - `src/reviewer.js`: Multi-lens review orchestrator, finding deduplication, and mode planning.
-   - `src/subagents.js`: Parallel subagent dispatcher leveraging `@github/copilot-sdk`.
+   - `src/subagents.js`: Parallel subagent dispatcher leveraging `@github/copilot-sdk` with per-lens overrides precedence.
    - `src/prior.js`: Prior review discovery via `gh api`, commit relationship classification (`same_head`, `incremental`, `diverged`, `none`), and prior findings revalidation (`resolved`, `still open`, `obsolete`).
    - `src/verify.js`: Detached worktree test execution (`pr_review_verify`) with process supervision, timeouts, and credential scrubbing.
 
@@ -69,10 +69,11 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
 
 - **GitHub Issue**: [#11: feat: allow per-lens model and reasoning-effort overrides](https://github.com/xpepper/pr-review-gemini/issues/11)
 - **Changes Delivered**:
-  - `src/config.js`: Extended `DEFAULT_CONFIG` with `lenses: Object.freeze({})` and `resolveConfig` / `loadConfig` to validate, parse, and merge per-lens overrides (`model`, `reasoningEffort`, `tier`).
+  - `src/config.js`: Extended `DEFAULT_CONFIG` with `lenses: Object.freeze({})` and `resolveConfig` / `loadConfig` to validate, parse, and merge per-lens overrides (`model`, `reasoningEffort`, `tier`) with prototype pollution defense (`UNSAFE_OBJECT_KEYS`).
   - `src/subagents.js`: Updated `resolveLensPlan()` to apply precedence: `lens override -> tier configuration -> plugin defaults`.
   - `README.md`: Corrected `reasoningEfforts` example keys to `light`/`medium`/`heavy` and documented the `lenses` configuration schema and resolution precedence.
-  - Tests: Added 8 comprehensive test cases across `tests/config.test.mjs` and `tests/subagents.test.mjs`, bringing total test count to 163 passing tests across 47 suites.
+  - Tests: Added 9 comprehensive test cases across `tests/config.test.mjs` and `tests/subagents.test.mjs`, bringing total test count to 164 passing tests across 47 suites.
+  - AI Dogfood Review: Triaged and addressed findings from dogfood code review on PR #12.
 
 ---
 

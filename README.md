@@ -238,7 +238,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 163 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
+All 164 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
 
 ---
 

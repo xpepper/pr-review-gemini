@@ -42,6 +42,8 @@ export const DEFAULT_CONFIG = Object.freeze({
   approveMaxPriorityLevel: 'off',
 });
 
+const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'prototype', 'constructor']);
+
 function isPlainObject(val) {
   return val !== null && typeof val === 'object' && !Array.isArray(val);
 }
@@ -117,7 +119,7 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
 
     if (isPlainObject(src.lenses)) {
       for (const [lensId, lensConfig] of Object.entries(src.lenses)) {
-        if (!isPlainObject(lensConfig)) continue;
+        if (UNSAFE_OBJECT_KEYS.includes(lensId) || !isPlainObject(lensConfig)) continue;
         const validLens = {};
         if (typeof lensConfig.model === 'string' && lensConfig.model.trim().length > 0) {
           validLens.model = lensConfig.model.trim();

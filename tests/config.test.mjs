@@ -269,6 +269,25 @@ describe('Configuration & Model Tier Management', () => {
       });
     });
 
+    it('guards against prototype pollution keys in lenses', () => {
+      const maliciousConfig = JSON.parse(`{
+        "lenses": {
+          "__proto__": { "polluted": true, "model": "evil" },
+          "constructor": { "polluted": true, "model": "evil" },
+          "prototype": { "polluted": true, "model": "evil" },
+          "correctness": { "model": "safe-model" }
+        }
+      }`);
+
+      const resolved = resolveConfig({ userConfig: maliciousConfig });
+      assert.deepEqual(resolved.lenses, {
+        correctness: {
+          model: 'safe-model',
+        },
+      });
+      assert.equal(Object.prototype.polluted, undefined);
+    });
+
     it('ignores non-object configurations gracefully', () => {
       assert.deepEqual(resolveConfig({ userConfig: 'invalid-string' }), DEFAULT_CONFIG);
       assert.deepEqual(resolveConfig({ userConfig: [1, 2, 3] }), DEFAULT_CONFIG);

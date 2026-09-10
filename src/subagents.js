@@ -83,7 +83,7 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
     // Resolve reasoning effort: lens override -> tier configuration -> default assignment
     if (lensOverride?.reasoningEffort) {
       reasoningEffort = lensOverride.reasoningEffort;
-    } else if (resolvedMode.name !== 'deep' && resolvedConfig.reasoningEfforts?.[tier]) {
+    } else if (resolvedConfig.reasoningEfforts?.[tier]) {
       // When lens reasoning effort is 'off', respect config if set, otherwise keep lens recommendation
       if (reasoningEffort === 'off' && resolvedConfig.reasoningEfforts[tier] !== 'off') {
         reasoningEffort = resolvedConfig.reasoningEfforts[tier];
