@@ -14,6 +14,7 @@ import {
   getReasoningEffortForTier,
   getFallbackModelsForTier,
   getFallbackModels,
+  getCustomRoles,
 } from '../src/config.js';
 
 describe('Configuration & Model Tier Management', () => {
@@ -643,6 +644,189 @@ describe('Configuration & Model Tier Management', () => {
         getFallbackModels(config, { tier: 'light' }),
         []
       );
+    });
+  });
+
+  describe('Custom Roles & Flexible Composition Configuration', () => {
+    it('defines defaults for custom_roles, replace_standard_roles, and enabled_roles', () => {
+      assert.deepEqual(DEFAULT_CONFIG.custom_roles, {});
+      assert.equal(DEFAULT_CONFIG.replace_standard_roles, false);
+      assert.deepEqual(DEFAULT_CONFIG.enabled_roles, []);
+    });
+
+    it('resolves valid custom_roles with prompt, model, reasoningEffort, and tier', () => {
+      const config = resolveConfig({
+        userConfig: {
+          custom_roles: {
+            accessibility: {
+              name: 'Accessibility & WCAG',
+              prompt: 'Evaluate WCAG 2.1 AA accessibility guidelines, semantic HTML, ARIA attributes...',
+              model: 'claude-3.7-sonnet',
+              reasoningEffort: 'medium',
+              tier: 'heavy',
+              fallbacks: ['gpt-4o'],
+            },
+          },
+        },
+      });
+
+      assert.ok(config.custom_roles.accessibility);
+      assert.equal(config.custom_roles.accessibility.name, 'Accessibility & WCAG');
+      assert.equal(config.custom_roles.accessibility.prompt, 'Evaluate WCAG 2.1 AA accessibility guidelines, semantic HTML, ARIA attributes...');
+      assert.equal(config.custom_roles.accessibility.model, 'claude-3.7-sonnet');
+      assert.equal(config.custom_roles.accessibility.reasoningEffort, 'medium');
+      assert.equal(config.custom_roles.accessibility.tier, 'heavy');
+      assert.deepEqual(config.custom_roles.accessibility.fallbacks, ['gpt-4o']);
+    });
+
+    it('supports "roles" alias and "instructions" alias', () => {
+      const config = resolveConfig({
+        projectConfig: {
+          roles: {
+            migrations: {
+              name: 'Database Migration Safety',
+              instructions: 'Inspect database migrations for table locks and backwards compatibility.',
+              model: 'gpt-4o',
+            },
+          },
+        },
+      });
+
+      assert.ok(config.custom_roles.migrations);
+      assert.equal(config.custom_roles.migrations.name, 'Database Migration Safety');
+      assert.equal(config.custom_roles.migrations.prompt, 'Inspect database migrations for table locks and backwards compatibility.');
+      assert.equal(config.custom_roles.migrations.instructions, 'Inspect database migrations for table locks and backwards compatibility.');
+      assert.equal(config.custom_roles.migrations.model, 'gpt-4o');
+    });
+
+    it('supports camelCase configuration keys (customRoles, replaceStandardRoles, enabledRoles)', () => {
+      const config = resolveConfig({
+        overrides: {
+          customRoles: {
+            compliance: {
+              prompt: 'Ensure GDPR and SOC2 compliance controls.',
+            },
+          },
+          replaceStandardRoles: true,
+          enabledRoles: ['compliance', 'security'],
+        },
+      });
+
+      assert.ok(config.custom_roles.compliance);
+      assert.equal(config.custom_roles.compliance.prompt, 'Ensure GDPR and SOC2 compliance controls.');
+      assert.equal(config.replace_standard_roles, true);
+      assert.deepEqual(config.enabled_roles, ['compliance', 'security']);
+    });
+
+    it('guards against prototype pollution keys in custom_roles', () => {
+      const maliciousPayload = JSON.parse(`{
+        "custom_roles": {
+          "__proto__": { "prompt": "evil" },
+          "prototype": { "prompt": "evil" },
+          "constructor": { "prompt": "evil" },
+          "valid_role": { "prompt": "Inspect safely." }
+        }
+      }`);
+
+      const config = resolveConfig({ userConfig: maliciousPayload });
+      assert.equal(config.custom_roles.__proto__.prompt, undefined);
+      assert.equal(config.custom_roles.prototype, undefined);
+      assert.equal(config.custom_roles.constructor?.prompt, undefined);
+      assert.ok(config.custom_roles.valid_role);
+      assert.equal(config.custom_roles.valid_role.prompt, 'Inspect safely.');
+    });
+
+    it('ignores invalid custom role definitions without prompt or instructions', () => {
+      const config = resolveConfig({
+        userConfig: {
+          custom_roles: {
+            invalidRole1: null,
+            invalidRole2: 'not an object',
+            invalidRole3: { model: 'gpt-4o' }, // missing prompt/instructions
+            validRole: { prompt: 'Valid prompt.' },
+          },
+        },
+      });
+
+      assert.equal(config.custom_roles.invalidRole1, undefined);
+      assert.equal(config.custom_roles.invalidRole2, undefined);
+      assert.equal(config.custom_roles.invalidRole3, undefined);
+      assert.ok(config.custom_roles.validRole);
+    });
+
+    it('sanitizes invalid reasoningEffort and tier on custom roles', () => {
+      const config = resolveConfig({
+        userConfig: {
+          custom_roles: {
+            testRole: {
+              prompt: 'Review test coverage.',
+              reasoningEffort: 'ultra-high-invalid',
+              tier: 'super-tier-invalid',
+            },
+          },
+        },
+      });
+
+      assert.ok(config.custom_roles.testRole);
+      assert.equal(config.custom_roles.testRole.reasoningEffort, undefined);
+      assert.equal(config.custom_roles.testRole.tier, undefined);
+    });
+
+    it('layers custom roles across user, project, and runtime overrides', () => {
+      const userConfig = {
+        custom_roles: {
+          accessibility: {
+            name: 'Accessibility Base',
+            prompt: 'Base accessibility checks.',
+            model: 'claude-3.5-haiku',
+          },
+          security_extra: {
+            prompt: 'Extra security audit.',
+          },
+        },
+      };
+
+      const projectConfig = {
+        custom_roles: {
+          accessibility: {
+            name: 'Project Accessibility',
+            model: 'claude-3.7-sonnet',
+          },
+          migrations: {
+            prompt: 'Inspect DB migrations.',
+          },
+        },
+      };
+
+      const overrides = {
+        replace_standard_roles: true,
+        enabled_roles: ['accessibility', 'migrations'],
+      };
+
+      const config = resolveConfig({ userConfig, projectConfig, overrides });
+
+      assert.equal(config.replace_standard_roles, true);
+      assert.deepEqual(config.enabled_roles, ['accessibility', 'migrations']);
+      assert.ok(config.custom_roles.security_extra);
+      assert.ok(config.custom_roles.migrations);
+      assert.equal(config.custom_roles.accessibility.name, 'Project Accessibility');
+      assert.equal(config.custom_roles.accessibility.prompt, 'Base accessibility checks.');
+      assert.equal(config.custom_roles.accessibility.model, 'claude-3.7-sonnet');
+    });
+
+    it('getCustomRoles helper returns custom_roles dictionary', () => {
+      const config = resolveConfig({
+        userConfig: {
+          custom_roles: {
+            a11y: { prompt: 'a11y prompt' },
+          },
+        },
+      });
+
+      const roles = getCustomRoles(config);
+      assert.ok(roles.a11y);
+      assert.equal(roles.a11y.prompt, 'a11y prompt');
+      assert.deepEqual(getCustomRoles(null), {});
     });
   });
 });
