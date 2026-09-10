@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/11-per-lens-overrides`
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
 * **Test Suite**: `npm test` runs and passes (165 tests across 47 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -17,7 +17,7 @@
   - PR #9: `docs: add copilot plugin install instructions and collision guidance`
   - PR #10: `feat: rename plugin, skill, and MCP tools to gem-pr-review`
   - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
-  - Issue #11 (Increment 7b): `feat: allow per-lens model and reasoning-effort overrides`
+  - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
 
 ---
 
@@ -95,8 +95,18 @@ Implement large-diff detection and file-backed paging transport to prevent conte
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 8: "Large-Diff Transport & File-Backed Paging (> 200 KB)".
-Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md before starting.
-Work in a feature branch (feat/large-diff-transport), follow test-first development in small verified steps, run the full test suite (npm test), and submit a pull request for review.
+Please implement Increment 8 on this repository: "Large-Diff Transport & File-Backed Paging (> 200 KB)".
+
+Before writing code:
+1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/large-diff-transport.
+
+Implementation requirements:
+- Threshold Detection: In the diff acquisition and reviewer pipeline, detect when the raw unified diff exceeds 200 KB (200 * 1024 bytes).
+- File-Backed Transport: Instead of inlining the entire massive diff into reviewer prompts, write the diff to a temporary file, generate a structured changed-file manifest with file statuses and byte sizes, and pass the manifest and diff file reference.
+- Host-Supervised File Reading: Provide subagent sessions with host-enforced tools/mechanisms (read, grep, find) capped at a maximum access budget (~640 KB across 16 reads, up to 1 MB maximum) to prevent context overflow while allowing deep inspection of critical files.
+- Backward Compatibility: Diffs <= 200 KB continue to use direct in-memory prompt inlining.
+- Test-First Verification: Follow test-first development in small verified steps (tests/diff.test.mjs, tests/subagents.test.mjs, tests/reviewer.test.mjs), keeping all 165+ tests passing.
+- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 

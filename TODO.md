@@ -6,13 +6,24 @@
 
 ---
 
-## Active Next Task: Issue #11 — Per-Lens Model & Reasoning-Effort Overrides
-- [x] Create branch `feat/11-per-lens-overrides`
-- [x] Extend configuration schema in `src/config.js` (`resolveConfig`, `loadConfig`) to support optional `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
-- [x] Update `resolveLensPlan()` in `src/subagents.js` with resolution order: `lens override -> tier config -> default tier mapping`.
-- [x] Fix user-facing documentation in `README.md` (`reasoningEfforts` keys using `light`/`medium`/`heavy` instead of modes, plus `lenses` schema example).
-- [x] Add comprehensive test-first suites in `tests/config.test.mjs` and `tests/subagents.test.mjs`.
-- [x] Verify test suite passes (`npm test`) and dogfood-review / open PR on GitHub.
+## Active Next Task: Increment 8 — Large-Diff Transport & File-Backed Paging (> 200 KB)
+- [ ] Create branch `feat/large-diff-transport`
+- [ ] Implement diff size threshold detection (> 200 KB) in diff/acquisition pipeline.
+- [ ] Implement file-backed diff transport and bounded changed-file manifest.
+- [ ] Provide host-supervised reading tools (`read`, `grep`, `find`) capped at ~640 KB across 16 reads.
+- [ ] Add comprehensive test suites in `tests/diff.test.mjs` and `tests/subagents.test.mjs`.
+- [ ] Run full test suite (`npm test`) and dogfood-review / open PR on GitHub.
+
+---
+
+## Completed Increments
+- [x] **Increment 7b / Issue #11: Per-Lens Model & Reasoning-Effort Overrides**
+  - [x] Configuration support in `src/config.js` (`resolveConfig`, `loadConfig`) for `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
+  - [x] Resolution precedence in `src/subagents.js`: `lens override -> tier configuration -> plugin defaults`.
+  - [x] Prototype pollution defense on untrusted lens keys (`UNSAFE_OBJECT_KEYS`).
+  - [x] Documentation fixes in `README.md` (`reasoningEfforts` keys using `light`/`medium`/`heavy` and `lenses` schema).
+  - [x] 10 unit tests in `tests/config.test.mjs` and `tests/subagents.test.mjs` (165 tests passing).
+  - [x] Merged via PR #12.
 
 ---
 
