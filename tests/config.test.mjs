@@ -568,6 +568,18 @@ describe('Configuration & Model Tier Management', () => {
       const config = loadConfig({ homeDir, cwd });
       assert.equal(config.defaultReviewMode, 'quick');
     });
+
+    it('accepts string argument as cwd in loadConfig for backward compatibility', () => {
+      const cwd = path.join(tmpDir, 'project-str-cwd');
+      const dotGithub = path.join(cwd, '.github');
+      fs.mkdirSync(dotGithub, { recursive: true });
+      fs.writeFileSync(
+        path.join(dotGithub, 'gem-pr-review.json'),
+        JSON.stringify({ tiers: { light: 'string-arg-model' } })
+      );
+      const config = loadConfig(cwd);
+      assert.equal(config.tiers.light, 'string-arg-model');
+    });
   });
 
   describe('Tier helper functions', () => {

@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   generateSyntheticDiff,
   getWorktreeDiff,
@@ -675,6 +677,45 @@ new file mode 100644
 
       assert.deepEqual(result.lenses, ['migrations']);
       assert.match(result.summary, /Database Migration Safety/);
+    });
+
+    it('loads project custom roles from options.cwd when config is not pre-passed', async () => {
+      const os = await import('node:os');
+      const tempCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'self-review-cwd-'));
+      const githubDir = path.join(tempCwd, '.github');
+      fs.mkdirSync(githubDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(githubDir, 'gem-pr-review.json'),
+        JSON.stringify({
+          custom_roles: {
+            infra: {
+              name: 'Infrastructure & Terraform',
+              prompt: 'Verify cloud resources.',
+            },
+          },
+        })
+      );
+
+      const diffText = `diff --git a/main.tf b/main.tf
+new file mode 100644
+--- /dev/null
++++ b/main.tf
+@@ -0,0 +1,1 @@
++resource "aws_s3_bucket" "b" {}
+`;
+      const runnerFn = async () => ({ output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' });
+      const result = await runSelfReview({
+        cwd: tempCwd,
+        diffText,
+        mode: 'quick',
+        runnerFn,
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.ok(result.lenses.includes('infra'));
+      assert.match(result.summary, /Infrastructure & Terraform/);
+
+      fs.rmSync(tempCwd, { recursive: true, force: true });
     });
   });
 });

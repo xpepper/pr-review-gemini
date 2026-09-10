@@ -228,7 +228,7 @@ export async function runSelfReview(options = {}) {
   } = options;
 
   const modeObj = resolveReviewMode(rawMode);
-  const resolvedConfig = options.config || loadConfig(cwd);
+  const resolvedConfig = options.config || loadConfig({ cwd });
 
   // 1. Acquire diff
   let diffText = options.diffText;

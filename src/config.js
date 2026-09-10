@@ -331,18 +331,19 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
  * @returns {typeof DEFAULT_CONFIG} Resolved configuration object
  */
 export function loadConfig(options = {}) {
-  const homeDir = options.homeDir || os.homedir();
-  const cwd = options.cwd || process.cwd();
+  const opts = typeof options === 'string' ? { cwd: options } : (options || {});
+  const homeDir = opts.homeDir || os.homedir();
+  const cwd = opts.cwd || process.cwd();
 
   const userGemConfigPath = path.join(homeDir, '.copilot', 'gem-pr-review.json');
   const userFallbackConfigPath = path.join(homeDir, '.copilot', 'pr-review.json');
-  const userConfigPath = options.userConfigPath || (
+  const userConfigPath = opts.userConfigPath || (
     fs.existsSync(userGemConfigPath) ? userGemConfigPath : userFallbackConfigPath
   );
 
   const projectGemConfigPath = path.join(cwd, '.github', 'gem-pr-review.json');
   const projectFallbackConfigPath = path.join(cwd, '.github', 'pr-review.json');
-  const projectConfigPath = options.projectConfigPath || (
+  const projectConfigPath = opts.projectConfigPath || (
     fs.existsSync(projectGemConfigPath) ? projectGemConfigPath : projectFallbackConfigPath
   );
 
@@ -352,7 +353,7 @@ export function loadConfig(options = {}) {
   return resolveConfig({
     userConfig,
     projectConfig,
-    overrides: options.overrides,
+    overrides: opts.overrides,
   });
 }
 
