@@ -7,6 +7,13 @@ import {
   isLineCommentable,
   getFileDiff,
   getPrDiff,
+  LARGE_DIFF_THRESHOLD_BYTES,
+  MAX_SUPERVISED_READS,
+  DEFAULT_SUPERVISED_BUDGET_BYTES,
+  MAX_SUPERVISED_BUDGET_BYTES,
+  isLargeDiff,
+  generateDiffManifest,
+  formatDiffManifest,
 } from '../src/diff.js';
 
 describe('Unified Diff Parser & Hunk Anchoring', () => {
@@ -611,6 +618,103 @@ index 1234567..89abcdef 100644
           message: /invalid pr number/i,
         }
       );
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Tests: Threshold Detection & Manifest Generation
+  // --------------------------------------------------------------------------
+  describe('Large Diff Threshold Detection & Manifest Generation', () => {
+    it('defines standard threshold constants', () => {
+      assert.equal(LARGE_DIFF_THRESHOLD_BYTES, 200 * 1024, '200 KB threshold');
+      assert.equal(MAX_SUPERVISED_READS, 16, '16 reads maximum');
+      assert.equal(DEFAULT_SUPERVISED_BUDGET_BYTES, 640 * 1024, '640 KB default access budget');
+      assert.equal(MAX_SUPERVISED_BUDGET_BYTES, 1024 * 1024, '1 MB maximum access budget');
+    });
+
+    it('isLargeDiff returns false for small diffs and empty inputs', () => {
+      assert.equal(isLargeDiff(''), false);
+      assert.equal(isLargeDiff(null), false);
+      assert.equal(isLargeDiff(undefined), false);
+      assert.equal(isLargeDiff(SINGLE_FILE_MODIFIED_DIFF), false);
+
+      // Boundary: exactly 200 KB is not large (> 200 KB)
+      const exactly200KB = 'x'.repeat(200 * 1024);
+      assert.equal(isLargeDiff(exactly200KB), false);
+    });
+
+    it('isLargeDiff returns true when diff exceeds 200 KB', () => {
+      const over200KB = 'x'.repeat(200 * 1024 + 1);
+      assert.equal(isLargeDiff(over200KB), true);
+
+      // Respects custom threshold
+      assert.equal(isLargeDiff('12345', 4), true);
+      assert.equal(isLargeDiff('12345', 5), false);
+    });
+
+    it('generateDiffManifest produces structured summary for changed files', () => {
+      const manifest = generateDiffManifest(MULTI_FILE_COMBINED_DIFF);
+
+      assert.ok(manifest);
+      assert.equal(manifest.totalFiles, 5);
+      assert.ok(manifest.totalAdditions > 0);
+      assert.ok(manifest.totalDeletions > 0);
+      assert.ok(manifest.totalBytes > 0);
+      assert.equal(manifest.isLarge, false);
+      assert.equal(Array.isArray(manifest.files), true);
+      assert.equal(manifest.files.length, 5);
+
+      const calcFile = manifest.files.find((f) => f.path === 'src/calc.js');
+      assert.ok(calcFile);
+      assert.equal(calcFile.status, 'modified');
+      assert.equal(calcFile.hunksCount, 1);
+      assert.equal(calcFile.additions, 2);
+      assert.equal(calcFile.deletions, 1);
+      assert.ok(calcFile.byteSize > 0);
+      assert.equal(calcFile.isBinary, false);
+
+      const addedFile = manifest.files.find((f) => f.path === 'src/utils/logger.js');
+      assert.ok(addedFile);
+      assert.equal(addedFile.status, 'added');
+      assert.equal(addedFile.additions, 5);
+      assert.equal(addedFile.deletions, 0);
+
+      const deletedFile = manifest.files.find((f) => f.path === 'src/legacy.js');
+      assert.ok(deletedFile);
+      assert.equal(deletedFile.status, 'deleted');
+      assert.equal(deletedFile.additions, 0);
+      assert.equal(deletedFile.deletions, 3);
+
+      const binaryFile = manifest.files.find((f) => f.path === 'assets/logo.png');
+      assert.ok(binaryFile);
+      assert.equal(binaryFile.isBinary, true);
+      assert.equal(binaryFile.status, 'binary');
+    });
+
+    it('generateDiffManifest detects large diff flag when exceeding threshold', () => {
+      const largeDummyDiff = `diff --git a/big.txt b/big.txt
+new file mode 100644
+--- /dev/null
++++ b/big.txt
+@@ -0,0 +1,5000 @@
+` + '+line\n'.repeat(35000);
+
+      const manifest = generateDiffManifest(largeDummyDiff);
+      assert.ok(manifest.totalBytes > LARGE_DIFF_THRESHOLD_BYTES);
+      assert.equal(manifest.isLarge, true);
+    });
+
+    it('formatDiffManifest creates a readable markdown summary table', () => {
+      const manifest = generateDiffManifest(MULTI_FILE_COMBINED_DIFF);
+      const formatted = formatDiffManifest(manifest);
+
+      assert.ok(typeof formatted === 'string');
+      assert.match(formatted, /\| Status \| File \| \+\/- Lines \| Diff Size \| Hunks \|/);
+      assert.match(formatted, /src\/calc\.js/);
+      assert.match(formatted, /\+2 \/ -1/);
+      assert.match(formatted, /\*\*Total Files\*\*: 5/);
+      assert.match(formatted, /\*\*Total Additions\*\*: \+7/);
+      assert.match(formatted, /\*\*Total Deletions\*\*: -4/);
     });
   });
 });

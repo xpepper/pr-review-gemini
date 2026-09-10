@@ -82,6 +82,11 @@ function finalizeFile(file) {
     }
   }
 
+  if (file.rawLines) {
+    file.diffText = file.rawLines.join('\n');
+    file.byteSize = Buffer.byteLength(file.diffText, 'utf8');
+  }
+
   return file;
 }
 
@@ -126,6 +131,7 @@ export function parseUnifiedDiff(diffText) {
         status: null,
         isBinary: false,
         hunks: [],
+        rawLines: [line],
       };
       continue;
     }
@@ -139,12 +145,16 @@ export function parseUnifiedDiff(diffText) {
         status: null,
         isBinary: false,
         hunks: [],
+        rawLines: [line],
       };
+      continue;
     }
 
     if (!currentFile) {
       continue;
     }
+
+    currentFile.rawLines.push(line);
 
     // Metadata lines
     if (line.startsWith('old mode ')) {
@@ -475,3 +485,121 @@ export async function getPrDiff(prNumberOrOptions, maybeOptions = {}) {
     throw new Error(`Failed to fetch diff for PR #${prNum}: ${detail}`);
   }
 }
+
+/**
+ * Standard thresholds and budget constraints for large diff transport.
+ */
+export const LARGE_DIFF_THRESHOLD_BYTES = 200 * 1024; // 204,800 bytes (200 KB)
+export const MAX_SUPERVISED_READS = 16;
+export const DEFAULT_SUPERVISED_BUDGET_BYTES = 640 * 1024; // 655,360 bytes (640 KB)
+export const MAX_SUPERVISED_BUDGET_BYTES = 1024 * 1024; // 1,048,576 bytes (1 MB)
+
+/**
+ * Detects whether a raw unified diff exceeds the inline transport threshold (> 200 KB).
+ *
+ * @param {string | null | undefined} diffText
+ * @param {number} [threshold=LARGE_DIFF_THRESHOLD_BYTES]
+ * @returns {boolean}
+ */
+export function isLargeDiff(diffText, threshold = LARGE_DIFF_THRESHOLD_BYTES) {
+  if (typeof diffText !== 'string' || !diffText.trim()) {
+    return false;
+  }
+  return Buffer.byteLength(diffText, 'utf8') > threshold;
+}
+
+/**
+ * Generates a structured changed-file manifest from raw diff text or parsed files.
+ *
+ * @param {string | Array<object>} diffTextOrFiles
+ * @param {object} [options]
+ * @param {number} [options.threshold=LARGE_DIFF_THRESHOLD_BYTES]
+ * @returns {object}
+ */
+export function generateDiffManifest(diffTextOrFiles, options = {}) {
+  const threshold = options.threshold ?? LARGE_DIFF_THRESHOLD_BYTES;
+  const isString = typeof diffTextOrFiles === 'string';
+  const diffText = isString ? diffTextOrFiles : '';
+  const parsedFiles = isString
+    ? parseUnifiedDiff(diffText)
+    : (Array.isArray(diffTextOrFiles) ? diffTextOrFiles : []);
+
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  let totalBytes = isString ? Buffer.byteLength(diffText, 'utf8') : 0;
+
+  const files = parsedFiles.map((file) => {
+    let additions = 0;
+    let deletions = 0;
+    for (const hunk of file.hunks || []) {
+      for (const dl of hunk.diffLines || []) {
+        if (dl.type === 'add') additions++;
+        if (dl.type === 'delete') deletions++;
+      }
+    }
+    totalAdditions += additions;
+    totalDeletions += deletions;
+
+    const fileBytes = file.byteSize || (file.diffText ? Buffer.byteLength(file.diffText, 'utf8') : 0);
+    if (!isString) {
+      totalBytes += fileBytes;
+    }
+
+    return {
+      path: file.path,
+      oldPath: file.oldPath,
+      newPath: file.newPath,
+      status: file.status || 'modified',
+      hunksCount: file.hunks?.length || 0,
+      additions,
+      deletions,
+      byteSize: fileBytes,
+      isBinary: Boolean(file.isBinary),
+    };
+  });
+
+  return {
+    totalFiles: files.length,
+    totalAdditions,
+    totalDeletions,
+    totalBytes,
+    isLarge: totalBytes > threshold,
+    files,
+  };
+}
+
+/**
+ * Formats a structured diff manifest into a readable markdown summary table.
+ *
+ * @param {object} manifest
+ * @returns {string}
+ */
+export function formatDiffManifest(manifest) {
+  if (!manifest || !Array.isArray(manifest.files) || manifest.files.length === 0) {
+    return 'No changed files in manifest.';
+  }
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const rows = [
+    '| Status | File | +/- Lines | Diff Size | Hunks |',
+    '| :--- | :--- | :--- | :--- | :--- |',
+  ];
+
+  for (const f of manifest.files) {
+    const linesCol = `+${f.additions} / -${f.deletions}`;
+    const sizeCol = formatBytes(f.byteSize);
+    const hunksCol = f.isBinary ? '-' : String(f.hunksCount);
+    rows.push(`| ${f.status} | \`${f.path}\` | ${linesCol} | ${sizeCol} | ${hunksCol} |`);
+  }
+
+  const summaryLine = `\n**Total Files**: ${manifest.totalFiles} | **Total Additions**: +${manifest.totalAdditions} | **Total Deletions**: -${manifest.totalDeletions} | **Total Diff Size**: ${formatBytes(manifest.totalBytes)}`;
+
+  return rows.join('\n') + '\n' + summaryLine;
+}
+
