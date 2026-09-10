@@ -441,6 +441,39 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
         /No review roles scheduled|Cannot execute review with zero lenses/i
       );
     });
+
+    it('normalizes and sanitizes runtime customRoles passed to resolveLensPlan', () => {
+      // 1. Promptless role is ignored and rejected if requested
+      assert.throws(
+        () =>
+          resolveLensPlan({
+            mode: 'balanced',
+            roles: ['empty_role'],
+            customRoles: {
+              empty_role: { name: 'Empty', prompt: '   ' },
+            },
+          }),
+        /Unknown review role/i
+      );
+
+      // 2. Invalid tier falls back to mode tier and malformed fallbacks are sanitized
+      const plan = resolveLensPlan({
+        mode: 'quick',
+        replaceStandardRoles: true,
+        customRoles: {
+          test_role: {
+            prompt: 'Valid prompt',
+            tier: 'invalid-tier',
+            fallbacks: ['valid-fallback', '', 123, null],
+          },
+        },
+      });
+
+      assert.equal(plan.length, 1);
+      assert.equal(plan[0].lensId, 'test_role');
+      assert.equal(plan[0].tier, 'light');
+      assert.deepEqual(plan[0].fallbacks, ['valid-fallback']);
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {

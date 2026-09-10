@@ -87,6 +87,19 @@ export function formatDefaultRoleName(roleId) {
     .join(' ');
 }
 
+export function sanitizeCustomRoles(rawRoles) {
+  if (!isPlainObject(rawRoles)) return {};
+  const sanitized = {};
+  for (const [roleId, roleConfig] of Object.entries(rawRoles)) {
+    if (UNSAFE_OBJECT_KEYS.includes(roleId) || !isPlainObject(roleConfig)) continue;
+    const clean = sanitizeRoleConfig(roleId, roleConfig);
+    if (clean) {
+      sanitized[roleId] = clean;
+    }
+  }
+  return sanitized;
+}
+
 function sanitizeRoleConfig(roleId, roleConfig, existingRole = null) {
   if (!isPlainObject(roleConfig)) return null;
 

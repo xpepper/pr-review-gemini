@@ -22,6 +22,7 @@ import {
   DEFAULT_CONFIG,
   VALID_TIERS,
   formatDefaultRoleName,
+  sanitizeCustomRoles,
 } from './config.js';
 import { parseMarkdownFindings } from './publish.js';
 import { isLargeDiff, createFileBackedDiff } from './diff.js';
@@ -182,7 +183,7 @@ export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
 
   const customRoles = {
     ...(resolvedConfig.custom_roles || {}),
-    ...(explicitCustomRoles || {}),
+    ...sanitizeCustomRoles(explicitCustomRoles),
   };
 
   const replaceStandard =
