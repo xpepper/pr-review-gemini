@@ -15,7 +15,7 @@
 - [x] Integrate interactive selection and `--publish-cached` into CLI runner (`scripts/dogfood-review.mjs`) and tests (`tests/dogfood.test.mjs`).
 - [x] Update documentation in `skills/gem-pr-review/SKILL.md` and `README.md`.
 - [x] Verify complete test suite (`npm test`).
-- [ ] Run dogfood review on PR and hand off.
+- [x] Run dogfood review on PR and hand off.
 
 ---
 
