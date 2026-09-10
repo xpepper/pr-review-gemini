@@ -37,6 +37,7 @@ export const DEFAULT_CONFIG = Object.freeze({
     medium: 'off',
     heavy: 'medium',
   }),
+  lenses: Object.freeze({}),
   autoPostReviews: false,
   approveMaxPriorityLevel: 'off',
 });
@@ -77,6 +78,7 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     defaultReviewMode: DEFAULT_CONFIG.defaultReviewMode,
     tiers: { ...DEFAULT_CONFIG.tiers },
     reasoningEfforts: { ...DEFAULT_CONFIG.reasoningEfforts },
+    lenses: { ...DEFAULT_CONFIG.lenses },
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
   };
@@ -109,6 +111,28 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
       for (const tier of VALID_TIERS) {
         if (typeof src.reasoningEfforts[tier] === 'string' && VALID_REASONING_EFFORTS.includes(src.reasoningEfforts[tier])) {
           resolved.reasoningEfforts[tier] = src.reasoningEfforts[tier];
+        }
+      }
+    }
+
+    if (isPlainObject(src.lenses)) {
+      for (const [lensId, lensConfig] of Object.entries(src.lenses)) {
+        if (!isPlainObject(lensConfig)) continue;
+        const validLens = {};
+        if (typeof lensConfig.model === 'string' && lensConfig.model.trim().length > 0) {
+          validLens.model = lensConfig.model.trim();
+        }
+        if (typeof lensConfig.reasoningEffort === 'string' && VALID_REASONING_EFFORTS.includes(lensConfig.reasoningEffort)) {
+          validLens.reasoningEffort = lensConfig.reasoningEffort;
+        }
+        if (typeof lensConfig.tier === 'string' && VALID_TIERS.includes(lensConfig.tier)) {
+          validLens.tier = lensConfig.tier;
+        }
+        if (Object.keys(validLens).length > 0) {
+          resolved.lenses[lensId] = {
+            ...(resolved.lenses[lensId] || {}),
+            ...validLens,
+          };
         }
       }
     }
