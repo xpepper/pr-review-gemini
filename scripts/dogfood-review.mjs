@@ -8,13 +8,23 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import { runReview, resolveReviewMode, LENS_DEFINITIONS } from '../src/reviewer.js';
+import {
+  runReview,
+  resolveReviewMode,
+  LENS_DEFINITIONS,
+  publishCachedReview,
+  getReviewCache,
+  formatFindingsTable,
+  promptFindingSelection,
+  parseSelectionInput,
+  filterFindings,
+} from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
 
 const execFileAsync = promisify(execFile);
 
-function printUsage(output = console.log) {
+export function printUsage(output = console.log) {
   output(`
 Usage: node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 
@@ -28,6 +38,11 @@ Options:
   --no-comment      Alias for --dry-run
   --comment         Publish the host-gated review to GitHub
   --publish         Alias for --comment
+  --publish-cached  Publish previously cached review findings without rerunning inference
+  --all             Publish all findings without interactive triage prompt
+  --interactive     Prompt for interactive finding selection before publishing
+  --select <spec>   Filter findings by indices, ranges, or severities (e.g. "1,3", "p0,p1")
+  --cache-dir <dir> Custom directory for session cache (defaults to .gem-pr-cache)
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
   --mock            Use synthetic runner for testing without inference
@@ -35,14 +50,20 @@ Options:
 `);
 }
 
-function parseCliArgs(args) {
+export function parseCliArgs(args) {
   let prNumber = null;
   let mode = 'balanced';
   let dryRun = false;
   let publish = false;
+  let publishCached = false;
+  let all = false;
+  let interactive = false;
+  let select = null;
+  let cacheDir = null;
   let repo = null;
   let model = null;
   let mock = false;
+  let mockGh = process.env.MOCK_GH === '1';
   let incremental = false;
   let showHelp = false;
 
@@ -62,6 +83,20 @@ function parseCliArgs(args) {
       dryRun = true;
     } else if (arg === '--comment' || arg === '--publish') {
       publish = true;
+    } else if (arg === '--publish-cached') {
+      publishCached = true;
+    } else if (arg === '--all') {
+      all = true;
+    } else if (arg === '--interactive') {
+      interactive = true;
+    } else if (arg.startsWith('--select=')) {
+      select = arg.slice('--select='.length);
+    } else if (arg === '--select') {
+      select = args[++i] || null;
+    } else if (arg.startsWith('--cache-dir=')) {
+      cacheDir = arg.slice('--cache-dir='.length);
+    } else if (arg === '--cache-dir') {
+      cacheDir = args[++i] || null;
     } else if (arg.startsWith('--repo=')) {
       repo = arg.slice('--repo='.length);
     } else if (arg === '--repo') {
@@ -72,12 +107,30 @@ function parseCliArgs(args) {
       model = args[++i] || null;
     } else if (arg === '--mock') {
       mock = true;
+    } else if (arg === '--mock-gh') {
+      mockGh = true;
     } else if (/^\d+$/.test(arg) && !prNumber) {
       prNumber = parseInt(arg, 10);
     }
   }
 
-  return { prNumber, mode, dryRun, publish, repo, model, mock, incremental, showHelp };
+  return {
+    prNumber,
+    mode,
+    dryRun,
+    publish,
+    publishCached,
+    all,
+    interactive,
+    select,
+    cacheDir,
+    repo,
+    model,
+    mock,
+    mockGh,
+    incremental,
+    showHelp,
+  };
 }
 
 const MOCK_DIFF = `diff --git a/src/index.js b/src/index.js
@@ -91,10 +144,24 @@ index 1111111..2222222 100644
  }
 `;
 
-async function main() {
-  const { prNumber, mode, dryRun, publish, repo, model, mock, incremental, showHelp } = parseCliArgs(
-    process.argv.slice(2)
-  );
+export async function main() {
+  const {
+    prNumber,
+    mode,
+    dryRun,
+    publish,
+    publishCached,
+    all,
+    interactive,
+    select,
+    cacheDir,
+    repo,
+    model,
+    mock,
+    mockGh,
+    incremental,
+    showHelp,
+  } = parseCliArgs(process.argv.slice(2));
 
   if (showHelp) {
     printUsage();
@@ -107,14 +174,32 @@ async function main() {
   }
 
   const cwd = process.cwd();
-  console.log(`\n🔍 Starting Gem PR Review on PR #${prNumber}...`);
-  console.log(`   Mode: ${mode}${incremental ? ' [incremental]' : ''}`);
-  console.log(`   Action: ${dryRun ? 'Dry-run (inspect only)' : publish ? 'Publish host-gated review' : 'Dry-run (default)'}`);
 
-  const runnerFn = await createSubagentRunner({ modelOverride: model, mock, cwd });
+  // Track cached head for mock matching
+  let mockHeadSha = null;
 
   // Wrapper for gh CLI execution
   const execGhFn = (args, options = {}) => {
+    if (mockGh) {
+      if (args[0] === 'pr' && args[1] === 'view') {
+        return Promise.resolve(
+          JSON.stringify({
+            headRefOid: mockHeadSha || 'mock-head-sha',
+            author: { login: 'mock-author' },
+            state: 'OPEN',
+            title: `Mock PR #${prNumber}`,
+          })
+        );
+      }
+      if (args[0] === 'api' && args[1] === 'user') {
+        return Promise.resolve(JSON.stringify({ login: 'copilot-reviewer' }));
+      }
+      if (args[0] === 'api' && args.includes('POST')) {
+        return Promise.resolve(JSON.stringify({ id: 9999, state: 'COMMENTED' }));
+      }
+      return Promise.resolve('[]');
+    }
+
     return new Promise((resolve, reject) => {
       const child = execFile('gh', args, { cwd: options.cwd || cwd }, (err, stdout, stderr) => {
         if (err) {
@@ -131,10 +216,86 @@ async function main() {
     });
   };
 
+  // 1. Workflow: Publish-Cached (no subagent model inference pass)
+  if (publishCached) {
+    console.log(`\n📦 Publishing cached review for PR #${prNumber}...`);
+
+    try {
+      const cached = await getReviewCache({ prNumber, repo }, { cacheDir });
+      if (!cached) {
+        throw new Error(
+          `No cached review found for PR #${prNumber}. Run an analysis review first.`
+        );
+      }
+
+      mockHeadSha = cached.headSha;
+
+      console.log(`✓ Retrieved ${cached.findings.length} cached findings (Mode: ${cached.mode}, Commit: ${cached.headSha.slice(0, 7)}).`);
+
+      let selectedIndices = null;
+
+      if (select) {
+        selectedIndices = parseSelectionInput(select, cached.findings.length, cached.findings);
+      } else if (interactive || (process.stdin.isTTY && !all)) {
+        const selectionResult = await promptFindingSelection({
+          findings: cached.findings,
+          isInteractive: true,
+        });
+        if (selectionResult.cancelled) {
+          console.log('\nPublish cancelled.');
+          process.exit(0);
+        }
+        selectedIndices = selectionResult.selectedIndices;
+      }
+
+      const pubResult = await publishCachedReview({
+        prNumber,
+        repo,
+        headSha: cached.headSha,
+        selectedIndices,
+        diffText: mock ? MOCK_DIFF : undefined,
+        execGhFn,
+        cwd,
+        cacheDir,
+      });
+
+      console.log('\n────────────────────────────────────────────────────────');
+      console.log(pubResult.reviewBody || cached.summary);
+      console.log('────────────────────────────────────────────────────────\n');
+
+      if (pubResult.classification) {
+        const { inlineComments, demotedFindings } = pubResult.classification;
+        console.log(`📍 Inline comments generated: ${inlineComments.length}`);
+        console.log(`📋 Demoted findings (summary): ${demotedFindings.length}`);
+
+        if (inlineComments.length > 0) {
+          console.log('\nInline Comments:');
+          for (const c of inlineComments) {
+            console.log(`  - [${c.severity}] ${c.filePath}:${c.line} (${Math.round((c.confidence ?? 1) * 100)}% conf) ${c.title}`);
+          }
+        }
+      }
+
+      console.log(`\n✅ Cached review successfully posted to GitHub for PR #${prNumber}! (${pubResult.publishedCount} findings published)`);
+      return;
+    } catch (err) {
+      console.error(`\n❌ Review failed: ${err.message}`);
+      process.exit(1);
+    }
+  }
+
+  // 2. Standard Review Analysis Workflow
+  console.log(`\n🔍 Starting Gem PR Review on PR #${prNumber}...`);
+  console.log(`   Mode: ${mode}${incremental ? ' [incremental]' : ''}`);
+  console.log(`   Action: ${dryRun ? 'Dry-run (inspect only)' : publish ? 'Publish host-gated review' : 'Dry-run (default)'}`);
+
+  const runnerFn = await createSubagentRunner({ modelOverride: model, mock, cwd });
   const shouldPublish = publish && !dryRun;
+  const isInteractiveTriage = shouldPublish && (interactive || (process.stdin.isTTY && !all));
 
   try {
-    const result = await runReview({
+    // If interactive triage is needed before publishing, run review in dry-run first to capture findings
+    const reviewResult = await runReview({
       prNumber,
       mode,
       repo,
@@ -142,17 +303,18 @@ async function main() {
       runnerFn,
       execGhFn,
       cwd,
-      dryRun: !shouldPublish,
-      publish: shouldPublish,
+      dryRun: isInteractiveTriage ? true : !shouldPublish,
+      publish: isInteractiveTriage ? false : shouldPublish,
       incremental,
+      cacheDir,
     });
 
     console.log('\n────────────────────────────────────────────────────────');
-    console.log(result.summary);
+    console.log(reviewResult.summary);
     console.log('────────────────────────────────────────────────────────\n');
 
-    if (result.classification) {
-      const { inlineComments, demotedFindings } = result.classification;
+    if (reviewResult.classification) {
+      const { inlineComments, demotedFindings } = reviewResult.classification;
       console.log(`📍 Inline comments generated: ${inlineComments.length}`);
       console.log(`📋 Demoted findings (summary): ${demotedFindings.length}`);
 
@@ -164,10 +326,43 @@ async function main() {
       }
     }
 
-    if (result.published) {
+    // Handle interactive selection prompt if requested
+    if (isInteractiveTriage && reviewResult.findings.length > 0) {
+      const selectionResult = await promptFindingSelection({
+        findings: reviewResult.findings,
+        isInteractive: true,
+      });
+
+      if (selectionResult.cancelled) {
+        console.log('\nPublish cancelled: no review posted to GitHub.');
+        return;
+      }
+
+      console.log(`\nSubmitting host-gated review with ${selectionResult.selectedFindings.length} selected findings...`);
+
+      const pubResult = await publishCachedReview({
+        prNumber,
+        repo,
+        headSha: reviewResult.headSha,
+        selectedIndices: selectionResult.selectedIndices,
+        diffText: mock ? MOCK_DIFF : undefined,
+        execGhFn: mock ? undefined : execGhFn,
+        cwd,
+        cacheDir,
+      });
+
+      console.log(`\n✅ Review successfully posted to GitHub for PR #${prNumber}! (${pubResult.publishedCount} findings published)`);
+      return;
+    }
+
+    if (reviewResult.published) {
       console.log(`\n✅ Review successfully posted to GitHub for PR #${prNumber}!`);
     } else {
       console.log('\nDry-run complete: no review published to GitHub.');
+      if (reviewResult.cached) {
+        console.log(`💡 Findings retained in session cache. To publish later without rerunning inference:`);
+        console.log(`   node scripts/dogfood-review.mjs ${prNumber} --publish-cached`);
+      }
     }
   } catch (err) {
     console.error(`\n❌ Review failed: ${err.message}`);
@@ -183,3 +378,4 @@ if (isDirectRun) {
     process.exit(1);
   });
 }
+

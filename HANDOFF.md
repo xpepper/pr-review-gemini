@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (clean, up to date with `origin/main`)
-* **Test Suite**: `npm test` runs and passes (191 tests across 50 suites, 0 failures)
+* **Current Branch**: `feat/interactive-selection`
+* **Test Suite**: `npm test` runs and passes (229 tests across 61 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -18,16 +18,17 @@
   - PR #10: `feat: rename plugin, skill, and MCP tools to gem-pr-review`
   - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
-  - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)` (Merged)
+  - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
+  - Increment 9 (Issue #14): `feat: interactive finding selection and cached publish-later` (Active PR)
 
 ---
 
-## Status: INCREMENT_8_COMPLETE / PHASE_7_IN_PROGRESS
+## Status: INCREMENT_9_COMPLETE / PHASE_7_IN_PROGRESS
 
-Increment 8 is fully implemented, verified test-first (191 passing tests across 50 suites), auto-reviewed via dogfood AI review published to GitHub PR #13, and documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+Increment 9 is fully implemented, verified test-first (229 passing tests across 61 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 Phase 7 backlog:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
-- [ ] Increment 9: Interactive finding selection UI & cached publish-later
+- [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [ ] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts)
 - [ ] Increment 11: One-shot coding-task self-review (`gem_self_review`)
 - [ ] Increment 12: Candidate finding recovery from degraded/malformed model outputs
@@ -96,45 +97,75 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 9 / Issue #14 — Interactive Finding Selection & Cached Publish-Later
+---
+
+## Completed Work: Increment 9 — Interactive Finding Selection & Cached Publish-Later (Issue #14)
 
 - **GitHub Issue**: [#14: feat: interactive finding selection and cached publish-later](https://github.com/xpepper/pr-review-gemini/issues/14)
-- **Target Branch**: `feat/interactive-selection`
+- **Branch**: `feat/interactive-selection`
+- **Changes Delivered**:
+  - `src/selection.js`:
+    - `formatFindingRow(finding, index)`: Single-line row formatting displaying index `[1]`, severity `[P0]`, confidence percentage (e.g. `95%`), location (`file:line (side)`), and title.
+    - `formatFindingsTable(findings)`: Actionable console table with severity counts summary header and divider lines.
+    - `parseSelectionInput(input, totalCount, findings, options)`: Parses index numbers (`1, 3`), ranges (`2-4`), exclusions (`-2`, `!3`), severity names (`p0, p1`), minimum severity thresholds (`min:p2`, `>=p2`), stylistic filters (`no-nits`), and keywords (`all`, `none`).
+    - `filterFindings(findings, selection)`: Filters findings by index array, string specification, or returns all.
+    - `promptFindingSelection(options)`: Interactive readline prompt for finding triage before publishing, with user cancellation support (`q` / `cancel`).
+  - `src/cache.js`:
+    - Session and workspace review caching (`saveReviewCache`, `getReviewCache`, `invalidateReviewCache`, `listReviewCaches`, `clearAllCaches`) keyed by PR number and head commit SHA (defaults to `.gem-pr-cache/`).
+    - Freshness verification: Automatically rejects and invalidates stale cached findings when current PR head commit has advanced.
+    - `publishCachedReview(options)`: Submits cached review findings through host-gated diff hunk validation and safety gates without rerunning subagent model passes.
+  - `src/reviewer.js`:
+    - In `runReview`, automatically caches findings on every evaluation pass when `currentHeadSha` is known.
+    - Added finding selection filtering (`selectedIndices` / `selection`) before publishing.
+    - Re-exported selection and cache utilities.
+  - `server/index.js` (MCP Server):
+    - Added MCP tool `gem_pr_review_publish_cached` allowing agents to submit cached review findings safely with freshness verification.
+  - `scripts/dogfood-review.mjs`:
+    - Added CLI options `--publish-cached`, `--all`, `--interactive`, `--select <spec>`, and `--cache-dir <dir>`.
+    - Integrated interactive triage prompt before review publishing, with mock runner support.
+  - Documentation & Skill:
+    - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on interactive selection, cached publish-later, and MCP tool reference.
+  - Tests:
+    - Added 38 unit tests across `tests/selection.test.mjs`, `tests/cache.test.mjs`, `tests/reviewer.test.mjs`, `tests/mcp-server.test.mjs`, `tests/skills.test.mjs`, and `tests/dogfood.test.mjs`. Total 229 tests passing across 61 suites.
+
+---
+
+## Next Session Mission: Increment 10 — Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)
+
+- **Target Branch**: `feat/quota-fallback-retry`
 
 ### Goal
-Implement interactive finding selection before publishing reviews, allowing reviewers to triage findings interactively or via batch selection flags (`--all`), and support in-session cached retention (`publish-later` / `publish-cached`) so reviewers can inspect findings and publish without re-evaluating costly model inference passes.
+Implement automatic failover retry when encountering API quota exhaustion, capacity, or rate-limit errors (e.g. HTTP 429 / resource exhausted), falling back to configured secondary models (e.g. `heavy_fallbacks`) while strictly avoiding artificial timeouts or stuck-reviewer heuristics.
 
 ### Requirements & Architecture
-1. **Interactive Finding Selection**:
-   - Provide an interactive prompt or CLI flags (e.g. `--all` vs interactive triage) in `scripts/dogfood-review.mjs` and reviewer orchestrator before publishing review comments to GitHub.
-   - Display a clean, actionable selection table showing finding severity (`P0`–`P3`, `nit`), confidence score, file path, line number, and title.
-   - Allow selecting/unselecting findings individually or by severity threshold.
-2. **In-Session Caching & Publish-Later**:
-   - Cache reviewed findings in an in-memory session or temporary artifact cache keyed by PR number and head commit SHA.
-   - Support publishing cached findings directly without rerunning specialist subagent passes (`--publish-cached` CLI option and MCP tool `gem_pr_review_publish_cached`).
-   - Freshness & Invalidation: Verify that cached findings match the current PR head SHA; invalidate if the head commit has moved.
-3. **Host-Gating Preserved**:
-   - Ensure all published comments remain strictly subject to host-enforced hunk validation, author checks, and safety rules.
-4. **Test-First Verification**:
-   - Add unit tests for interactive selection filtering, cache persistence/retrieval, stale-head cache rejection, and CLI parameter parsing.
+1. **Fallback Tier Configuration**:
+   - Support fallback model chains in configuration (e.g. `heavy_fallbacks`, `medium_fallbacks`).
+2. **Quota & Rate-Limit Error Detection**:
+   - Detect quota exhaustion, rate limits (HTTP 429), and capacity errors without catching unrelated syntax or runtime bugs.
+3. **Automatic Failover Retry**:
+   - When a primary subagent lens fails due to quota or capacity limits, automatically retry the review pass using the next available model in the fallback tier.
+4. **Zero Plugin-Imposed Timeouts**:
+   - Do not impose arbitrary plugin-level execution deadlines or stuck heuristics.
+5. **Test-First Verification**:
+   - Unit test retry loop, error classification, and configuration fallback resolution.
 
 ---
 
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 9 on this repository: "Interactive Finding Selection & Cached Publish-Later" (addressing Issue #14: https://github.com/xpepper/pr-review-gemini/issues/14).
+Please implement Increment 10 on this repository: "Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)".
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/interactive-selection.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/quota-fallback-retry.
 
 Implementation requirements:
-- Interactive Finding Selection: Provide interactive selection UI / CLI controls (--all vs choosing specific findings) before publishing reviews to GitHub, showing severity, confidence, location, and title.
-- In-Session Caching (Publish-Later): Store reviewed findings in a cache keyed by PR and head SHA to allow publishing without rerunning subagent model inference (supporting --publish-cached and MCP tool gem_pr_review_publish_cached).
-- Freshness & Invalidation: Reject/invalidate cached findings if the PR head SHA has changed.
-- Preservation of host-gated publishing guarantees: Selected findings must still be verified against diff hunks and pass all safety checks.
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 191+ tests passing and adding unit tests for selection and caching.
+- Fallback Tier Configuration: Support fallback model tiers (e.g. heavy_fallbacks) in config.js.
+- Quota Error Classification: Reliably detect 429/quota/rate-limit errors from Copilot SDK or LLM clients.
+- Automatic Failover: Re-dispatch failing lens to fallback models without losing completed sibling lens passes.
+- Zero Timeouts: Preserve timeout-free execution without artificial stuck-reviewer timers.
+- Test-First Verification: Write unit tests verifying fallback resolution, retry dispatch, and error isolation.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 

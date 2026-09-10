@@ -29,6 +29,20 @@ import {
   revalidatePriorFindings,
   formatRevalidationSummary,
 } from './prior.js';
+import {
+  saveReviewCache,
+  getReviewCache,
+  invalidateReviewCache,
+  listReviewCaches,
+  publishCachedReview,
+} from './cache.js';
+import {
+  formatFindingRow,
+  formatFindingsTable,
+  parseSelectionInput,
+  filterFindings,
+  promptFindingSelection,
+} from './selection.js';
 
 export {
   resolveLensPlan,
@@ -40,6 +54,16 @@ export {
   getIncrementalDiff,
   revalidatePriorFindings,
   formatRevalidationSummary,
+  saveReviewCache,
+  getReviewCache,
+  invalidateReviewCache,
+  listReviewCaches,
+  publishCachedReview,
+  formatFindingRow,
+  formatFindingsTable,
+  parseSelectionInput,
+  filterFindings,
+  promptFindingSelection,
 };
 
 export const REVIEW_MODES = {
@@ -331,6 +355,10 @@ export async function runReview({
   publish = false,
   customInstructions,
   incremental = false,
+  selectedIndices,
+  selection,
+  cacheReview = true,
+  cacheDir,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -529,14 +557,45 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
           byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
         };
 
+    // 5b. In-session caching (publish-later retention)
+    let cachedRecord = null;
+    if (cacheReview !== false && currentHeadSha) {
+      try {
+        cachedRecord = await saveReviewCache(
+          {
+            prNumber: num,
+            headSha: currentHeadSha,
+            repo,
+            mode: resolvedMode.name,
+            findings: deduplicated,
+            rawFindingsCount: allFindings.length,
+            summary,
+            lensesExecuted: executedLenses,
+            diffTransport: transportInfo,
+            revalidation,
+          },
+          { cacheDir }
+        );
+      } catch {
+        // Cache save failure is non-fatal for direct review execution
+      }
+    }
+
     // 6. Publish or Dry Run
     const diffs = parseUnifiedDiff(unifiedDiffText);
 
     if (publish && !dryRun) {
+      let findingsToPublish = deduplicated;
+      if (Array.isArray(selectedIndices)) {
+        findingsToPublish = filterFindings(deduplicated, selectedIndices);
+      } else if (selection !== undefined && selection !== null) {
+        findingsToPublish = filterFindings(deduplicated, selection);
+      }
+
       const pubResult = await publishReview({
         prNumber: num,
         reviewBody: summary,
-        findings: deduplicated,
+        findings: findingsToPublish,
         diffText: unifiedDiffText,
         expectedHeadSha: currentHeadSha,
         config: resolvedConfig,
@@ -565,6 +624,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         publication: pubResult,
         published: true,
         diffTransport: transportInfo,
+        cached: Boolean(cachedRecord),
       };
     }
 
@@ -591,6 +651,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       publication: null,
       published: false,
       diffTransport: transportInfo,
+      cached: Boolean(cachedRecord),
     };
   } finally {
     if (autoCreatedTransport && diffTransport) {

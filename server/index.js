@@ -19,6 +19,7 @@ import {
   LARGE_DIFF_THRESHOLD_BYTES,
 } from '../src/diff.js';
 import { publishReview } from '../src/publish.js';
+import { publishCachedReview } from '../src/cache.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
@@ -184,6 +185,43 @@ export const MCP_TOOLS = [
     },
   },
   {
+    name: 'gem_pr_review_publish_cached',
+    description:
+      'Publishes previously cached review findings for a PR without rerunning model inference, after verifying that the PR head commit has not changed and diff hunks remain valid.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+        expectedHeadSha: {
+          type: 'string',
+          description: 'Expected PR head commit SHA for freshness check',
+        },
+        selectedIndices: {
+          type: 'array',
+          items: { type: 'integer' },
+          description: 'Optional 0-based indices of cached findings to publish',
+        },
+        minSeverity: {
+          type: 'string',
+          enum: ['P0', 'P1', 'P2', 'P3', 'nit'],
+          description: 'Optional minimum severity threshold to include',
+        },
+        reviewBody: {
+          type: 'string',
+          description: 'Optional review summary markdown body override',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
+  {
     name: 'gem_pr_review_prior',
     description:
       'Discovers prior reviews on a PR, classifies commit relationship (same_head, incremental, diverged, none), and revalidates prior findings against incremental commits.',
@@ -253,6 +291,7 @@ export function createMcpHandler(options = {}) {
   const {
     getPrDiffFn = getPrDiff,
     publishReviewFn = publishReview,
+    publishCachedReviewFn = publishCachedReview,
     runReviewFn = runReview,
     fetchPriorReviewsFn = fetchPriorReviews,
     classifyCommitRelationshipFn = classifyCommitRelationship,
@@ -482,6 +521,34 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(pubResult, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_pr_review_publish_cached' ||
+              toolName === 'pr_review_publish_cached'
+            ) {
+              const pubCachedResult = await publishCachedReviewFn({
+                prNumber: args.prNumber,
+                repo: args.repo,
+                headSha: args.expectedHeadSha,
+                selectedIndices: args.selectedIndices,
+                minSeverity: args.minSeverity,
+                reviewBody: args.reviewBody,
+                cwd,
+              });
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(pubCachedResult, null, 2),
                     },
                   ],
                 },
