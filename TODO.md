@@ -6,9 +6,18 @@
 
 ---
 
-## Active Next Task: Increment 14 / Phase 8 Ideas
-- [ ] Additional Specialist Lenses (e.g. Accessibility / a11y, Database Migration safety).
-- [ ] Streamlined Pre-Commit Hook Installer (`--install-hook` setting up pre-commit self-review).
+## Active Next Task: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
+- [ ] Configuration schema support in `src/config.js` for custom review roles (`custom_roles` / `lenses`):
+  - Custom `prompt`: Specialist domain guidelines, requirements, and review checklist.
+  - Custom `model`: Preferred model name override.
+  - Custom `reasoningEffort`: Preferred thinking level (`off`, `low`, `medium`, `high`).
+- [ ] Flexible role composition:
+  - Add extra custom review roles alongside standard lenses (e.g., Accessibility/a11y, Database migrations, Compliance).
+  - Ability to replace or filter standard lenses (`enabled_roles` or `replace_standard_roles: true`).
+- [ ] Dynamic lens plan resolution in `src/subagents.js` (`resolveLensPlan`) dispatching custom roles with configured models and prompts.
+- [ ] Seamless integration into multi-lens summary reporting, deduplication, and diff anchoring in `src/reviewer.js`.
+- [ ] Unit tests covering config parsing, validation, lens planning, and subagent dispatch.
+- [ ] Documentation and example configurations in `README.md` and `skills/gem-pr-review/SKILL.md`.
 
 ---
 

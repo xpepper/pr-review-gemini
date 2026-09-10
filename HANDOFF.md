@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/github-action-ci`
+* **Current Branch**: `main`
 * **Test Suite**: `npm test` runs and passes (334 tests across 82 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -23,7 +23,7 @@
   - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
-  - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)`
+  - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
 
 ---
 
@@ -281,18 +281,83 @@ Possible future enhancements:
 
 ## Future Opportunities / Phase 8 Ideas
 
-1. **Additional Specialist Lenses**: Domain-specific lenses like Accessibility (a11y), Internationalization (i18n), or Database Migration safety.
+1. **Pluggable Custom Review Roles / Specialist Lenses** (Increment 14): Allow teams to define custom review roles with custom prompts, models, and reasoning efforts via configuration.
 2. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
 3. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
 
 ---
 
-## Next Session Mission: Increment 14 — Pre-Commit Hook Installer & Accessibility Specialist Lens
+## Next Session Mission: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
 
-- **Target Branch**: `feat/precommit-hook-a11y`
+- **Target Branch**: `feat/custom-review-roles`
 - **Goal**:
-  1. Add `npm run setup-hook` / CLI installer to configure git pre-commit hooks running `npm run self-review`.
-  2. Implement an Accessibility & Inclusive Design specialist lens (`a11y`) evaluating WCAG / ARIA compliance in UI and web PRs.
+  Enable teams to plug in extra "review roles" (or replace standard ones) through layered configuration (`.github/gem-pr-review.json` / `~/.copilot/gem-pr-review.json`), defining:
+  1. A custom **prompt** (specialist domain review guidelines, rules, and checklist).
+  2. A preferred **model** (e.g. `claude-3.7-sonnet`, `gpt-4o`).
+  3. A preferred **reasoning effort** (`off`, `low`, `medium`, `high`).
+
+### Architecture & Requirements for Increment 14
+
+1. **Configuration Schema (`src/config.js`)**:
+   - Support `custom_roles` (or `roles`) dictionary in config:
+     ```json
+     {
+       "custom_roles": {
+         "accessibility": {
+           "name": "Accessibility & WCAG",
+           "prompt": "Evaluate WCAG 2.1 AA accessibility guidelines, semantic HTML, ARIA attributes, keyboard navigation...",
+           "model": "claude-3.7-sonnet",
+           "reasoningEffort": "medium"
+         },
+         "migrations": {
+           "name": "Database Migration Safety",
+           "prompt": "Inspect database migrations for table locks, missing down migrations, zero-downtime safety...",
+           "model": "gpt-4o",
+           "reasoningEffort": "high"
+         }
+       },
+       "replace_standard_roles": false,
+       "enabled_roles": ["correctness", "security", "accessibility"]
+     }
+     ```
+   - Validate and sanitize custom role definitions (reject prototype pollution, validate reasoning efforts and model strings).
+
+2. **Subagent Plan Resolution (`src/subagents.js`)**:
+   - In `resolveLensPlan`, incorporate custom roles:
+     - If `replace_standard_roles: true` or `enabled_roles` is provided, dynamically assemble the plan from the specified roles.
+     - By default, extra custom roles are mounted alongside the mode's standard specialist lenses.
+   - Inject the custom prompt into `buildReviewerPrompt` during subagent execution.
+
+3. **Multi-Lens Orchestration & Reporting (`src/reviewer.js`)**:
+   - Ensure custom role findings are properly tagged with their custom `lensId` and lens name.
+   - Aggregate custom role findings into the summary table, deduplication pipeline, diff anchoring, and GitHub review publisher.
+
+4. **CLI & Documentation**:
+   - Support `--role <role_id>` or `--extra-role <name:prompt>` CLI flags in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`.
+   - Update `README.md` and `skills/gem-pr-review/SKILL.md` with schema reference and examples.
+   - Test-first verification covering config loading, role resolution, subagent execution, and finding deduplication.
+
+---
+
+## Ready-to-Use Prompt for the Next Session
+
+```text
+Please implement Increment 14 on this repository: "Pluggable Custom Review Roles & Specialist Lenses".
+
+Before writing code:
+1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/custom-review-roles.
+
+Requirements:
+- Custom Role Definition: Enable users and teams to plug in custom review roles in `.github/gem-pr-review.json` and `~/.copilot/gem-pr-review.json` under `custom_roles` (or `roles`), specifying:
+  - `prompt`: Domain-specific review checklist and instructions.
+  - `model`: Preferred model name override.
+  - `reasoningEffort`: Preferred reasoning effort (off, low, medium, high).
+- Flexible Role Composition: Allow adding custom roles alongside standard lenses by default, or replacing/filtering standard lenses via `enabled_roles` or `replace_standard_roles: true`.
+- Subagent Dispatch & Reporting: In `src/subagents.js` (`resolveLensPlan`) and `src/reviewer.js`, dynamically mount custom roles in review passes, isolate errors, and aggregate findings into host-gated diff-anchored reviews and summaries.
+- Test-First Verification: Add unit tests covering schema validation, lens plan resolution, custom prompt injection, and finding normalization, keeping all 334+ existing tests passing.
+- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
+```
 
 
 

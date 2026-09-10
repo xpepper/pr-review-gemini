@@ -107,6 +107,15 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Implement CI quality gate (`evaluateCiQualityGate`) and runner (`scripts/ci-action.mjs`) exiting with code 1 when blocking findings meet or exceed `fail_on` threshold (e.g. `fail_on: P1`).
   - Add reusable starter workflow template `.github/workflows/gem-pr-review.yml`.
   - Comprehensive unit and integration test suite (`tests/ci.test.mjs`, `tests/skills.test.mjs`) verifying action schema, event parsing, outputs, and quality gates.
+- [ ] **Increment 14: Pluggable Custom Review Roles / Specialist Lenses**
+  - Allow teams and developers to configure custom reviewer roles alongside or replacing default specialist lenses.
+  - Each custom role defines:
+    - `prompt`: Domain instructions, checklist, and guidelines for the lens.
+    - `model`: Preferred model name (e.g. `claude-3.7-sonnet`, `gpt-4o`).
+    - `reasoningEffort`: Preferred reasoning effort level (`off`, `low`, `medium`, `high`).
+  - Support adding custom roles to default modes or replacing standard roles entirely via `custom_roles` and `enabled_roles` in project (`.github/gem-pr-review.json`) and user (`~/.copilot/gem-pr-review.json`) configuration.
+  - Dynamically mount custom lenses in `resolveLensPlan`, dispatching them in parallel with isolated error boundaries, and aggregating findings into host-gated diff-anchored reviews.
+
 
 
 
