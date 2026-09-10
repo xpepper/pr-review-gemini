@@ -6,32 +6,24 @@
 
 ---
 
-## Active Next Task: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
-- [ ] Step 1: Configuration schema in `src/config.js` (`custom_roles`, `roles`, `replace_standard_roles`, `enabled_roles`)
-  - [ ] Write unit tests in `tests/config.test.mjs` for schema parsing, sanitization, prototype pollution defense, and layering
-  - [ ] Implement `custom_roles`, `roles`, `replace_standard_roles`, and `enabled_roles` in `src/config.js` and export `getCustomRoles`
-- [ ] Step 2: Dynamic lens plan resolution & prompt building in `src/subagents.js` and `src/reviewer.js`
-  - [ ] Write unit tests in `tests/subagents.test.mjs` and `tests/reviewer.test.mjs` for custom role resolution, prompt injection, and composition
-  - [ ] Implement flexible role composition in `resolveLensPlan` (`enabled_roles`, `replace_standard_roles`, default mounting)
-  - [ ] Support custom lens definition and domain prompt in `buildReviewerPrompt`
-- [ ] Step 3: Integration into reviewer orchestrator and self-review reporting
-  - [ ] Pass role options in `runReview` and update summary reporting with custom role names
-  - [ ] Pass role options in `runSelfReview` and update self-review report formatting
-  - [ ] Write unit tests in `tests/self-review.test.mjs` and `tests/reviewer.test.mjs`
-- [ ] Step 4: MCP Server and CLI runner support
-  - [ ] Extend MCP tools schemas and handlers in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`)
-  - [ ] Add CLI flags (`--role <id>`, `--replace-standard-roles`) in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`
-  - [ ] Write unit tests in `tests/mcp-server.test.mjs` and `tests/dogfood.test.mjs`
-- [ ] Step 5: Documentation & skill update
-  - [ ] Document custom roles schema, examples, and CLI flags in `README.md` and `skills/gem-pr-review/SKILL.md`
-  - [ ] Update `tests/skills.test.mjs` and ensure all tests pass
-- [ ] Step 6: Dogfood review, commit, PR, and handoff
-  - [ ] Run dogfood auto-review on the increment
-  - [ ] Create pull request against main, update `HANDOFF.md` and `docs/roadmap.md`
+## Active Next Task: Backlog / Increment 15 Planning
+- [ ] Determine next feature focus or maintenance items (e.g. batch multi-PR reviews, enhanced SARIF output, custom rule linters)
+- [ ] Monitor dogfood review metrics and user feedback
 
 ---
 
 ## Completed Increments
+- [x] **Increment 14: Pluggable Custom Review Roles & Specialist Lenses**
+  - [x] Implemented layered configuration support in `src/config.js` for `custom_roles` (and alias `roles`), `replace_standard_roles`, and `enabled_roles` with prototype pollution guards and sanitizers.
+  - [x] Exported `getCustomRoles` and `formatDefaultRoleName` helpers with backward-compatible schemas.
+  - [x] Updated dynamic lens planning in `src/subagents.js` (`resolveLensPlan`) supporting default mounting alongside standard lenses, replacing standard lenses (`replace_standard_roles: true`), filtering active roles (`enabled_roles`), and standard lens definition override by ID.
+  - [x] Enhanced prompt builder in `src/reviewer.js` (`buildReviewerPrompt`) to inject domain-specific checklists and guidelines for custom specialist roles.
+  - [x] Subagent parallel dispatcher (`dispatchSubagentsParallel`) executes custom roles concurrently, tags findings with custom role `lensId`, and isolates lens errors.
+  - [x] Orchestrator integration in `runReview` and `runSelfReview` passing role options and formatting summary reports with human-readable custom role names.
+  - [x] MCP tools extended in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`) with `roles`, `replaceStandardRoles`, and `customRoles` parameters.
+  - [x] CLI flags added to `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`: `--role <id>` and `--replace-standard-roles`.
+  - [x] 27 new unit and integration tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs` (361 total tests passing across 83 suites).
+  - [x] Documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 13 / Issue #22: Reusable GitHub Action & Automated CI Review Workflow (action.yml)**
   - [x] Defined composite GitHub Action manifest (`action.yml`) at repository root with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`, `select`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
   - [x] Implemented CI event payload resolution (`parseEventPayload`, `resolveCiEnvironment`) in `src/ci.js` (auto-extracting PR number, repository, and commit SHAs from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` on `synchronize` events).
