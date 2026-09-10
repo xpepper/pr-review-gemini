@@ -6,18 +6,21 @@
 
 ---
 
-## Active Next Task: Increment 10 / Issue #16 — Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)
-- [ ] Create branch `feat/quota-fallback-retry` for Issue #16.
-- [ ] Add fallback tier mappings (e.g. `heavy_fallbacks`, `medium_fallbacks`) in `src/config.js` and tests in `tests/config.test.mjs`.
-- [ ] Implement quota and capacity error detection (`isQuotaError`, HTTP 429, resource exhaustion) in `src/subagents.js` and tests in `tests/subagents.test.mjs`.
-- [ ] Implement automatic failover retry in `dispatchSubagentsParallel` so failing lenses retry on fallback models without losing completed sibling passes.
-- [ ] Ensure timeout-free execution: zero arbitrary timeouts or stuck-reviewer heuristics.
-- [ ] Verify test suite (`npm test`).
-- [ ] Run dogfood review against PR and submit against `main`.
+## Active Next Task: Increment 11 / One-Shot Coding-Task Self-Review (`gem_self_review`)
+- [ ] Implement `gem_self_review` tool for local uncommitted changes.
+- [ ] Inspect working directory git status (staged, unstaged, untracked).
+- [ ] Fail-closed validation before committing or completing coding agent tasks.
 
 ---
 
 ## Completed Increments
+- [x] **Increment 10 / Issue #16: Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)**
+  - [x] Fallback tier configuration (`heavy_fallbacks`, `medium_fallbacks`, `light_fallbacks`, `fallbacks`) in `src/config.js` and per-lens fallbacks.
+  - [x] Accurate quota & capacity error classification (`isQuotaOrCapacityError`, `isQuotaError`, HTTP 429, resource exhaustion, capacity overload) in `src/subagents.js` without swallowing unrelated bugs.
+  - [x] Automatic failover retry in `dispatchSubagentsParallel` and `runReview` to retry failing lenses against configured fallback models without dropping completed sibling lens passes.
+  - [x] Zero plugin-imposed timeouts or stuck-reviewer heuristics.
+  - [x] 20 new unit tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, and `tests/skills.test.mjs` (249 tests passing across 62 suites).
+  - [x] Documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later (Issue #14)**
   - [x] Interactive console finding table (`formatFindingsTable`, `formatFindingRow`) showing index, severity, confidence, location, and title.
   - [x] Flexible finding selection parser (`parseSelectionInput`) supporting indices (`1, 3`), ranges (`2-4`), exclusions (`-2`, `!3`), and severity filters (`p0, p1`, `min:p2`, `no-nits`).
@@ -81,7 +84,7 @@
 ### Phase 7: Advanced Resiliency, Large Diff Transport & Interaction
 - [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
 - [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
-- [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
+- [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
 - [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
 - [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
 
