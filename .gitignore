@@ -7,3 +7,5 @@ dist/
 coverage/
 tmp/
 scratch/
+.gem-pr-cache/
+.cache/
