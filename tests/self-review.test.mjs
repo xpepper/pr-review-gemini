@@ -612,5 +612,69 @@ new file mode 100644
       assert.equal(result.findings[0].severity, 'P1');
       assert.equal(result.findings[0].filePath, 'src/auth.js');
     });
+
+    it('mounts custom roles in runSelfReview and lists them in the summary report', async () => {
+      const diffText = `diff --git a/src/button.js b/src/button.js
+new file mode 100644
+--- /dev/null
++++ b/src/button.js
+@@ -0,0 +1,3 @@
++export function renderButton() {
++  return '<button>Click</button>';
++}
++`;
+      const config = {
+        custom_roles: {
+          accessibility: {
+            name: 'Accessibility & WCAG',
+            prompt: 'Verify WCAG compliance.',
+          },
+        },
+      };
+
+      const runnerFn = async () => ({
+        output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>',
+      });
+
+      const result = await runSelfReview({
+        diffText,
+        mode: 'quick',
+        config,
+        runnerFn,
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.ok(result.lenses.includes('accessibility'));
+      assert.match(result.summary, /Accessibility & WCAG/);
+    });
+
+    it('supports customRoles and replaceStandardRoles in runSelfReview', async () => {
+      const diffText = `diff --git a/src/db.js b/src/db.js
+new file mode 100644
+--- /dev/null
++++ b/src/db.js
+@@ -0,0 +1,2 @@
++export const query = 'SELECT * FROM users';
++`;
+
+      const runnerFn = async () => ({
+        output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>',
+      });
+
+      const result = await runSelfReview({
+        diffText,
+        replaceStandardRoles: true,
+        customRoles: {
+          migrations: {
+            name: 'Database Migration Safety',
+            prompt: 'Check SQL schema changes.',
+          },
+        },
+        runnerFn,
+      });
+
+      assert.deepEqual(result.lenses, ['migrations']);
+      assert.match(result.summary, /Database Migration Safety/);
+    });
   });
 });

@@ -516,5 +516,72 @@ Race condition on state initialization.
         ['claude-3.7-sonnet', 'claude-3.5-sonnet']
       );
     });
+
+    it('mounts custom roles, tags findings, and includes custom role name in review summary', async () => {
+      const customConfig = {
+        custom_roles: {
+          accessibility: {
+            name: 'Accessibility & WCAG',
+            prompt: 'Verify accessibility standards.',
+          },
+        },
+      };
+
+      const mockRunner = async ({ lens }) => {
+        if (lens.id === 'accessibility') {
+          return `
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Missing alt attribute on image",
+    "severity": "P2",
+    "file": "src/index.js",
+    "line": 1,
+    "confidence": 0.9,
+    "body": "Image tag lacks alt text."
+  }
+]
+<<<END_PR_REVIEW_JSON>>>`;
+        }
+        return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+      };
+
+      const result = await runReview({
+        prNumber: 99,
+        mode: 'quick',
+        diffText: sampleDiff,
+        config: customConfig,
+        runnerFn: mockRunner,
+        dryRun: true,
+      });
+
+      assert.ok(result.lensesExecuted.includes('accessibility'));
+      assert.match(result.summary, /Accessibility & WCAG/);
+      assert.equal(result.findings.length, 1);
+      assert.equal(result.findings[0].lens, 'accessibility');
+      assert.equal(result.findings[0].title, 'Missing alt attribute on image');
+    });
+
+    it('supports replaceStandardRoles and specific roles filtering in runReview', async () => {
+      const mockRunner = async () => '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+
+      const result = await runReview({
+        prNumber: 100,
+        diffText: sampleDiff,
+        roles: ['a11y'],
+        customRoles: {
+          a11y: {
+            name: 'Accessibility Only',
+            prompt: 'A11y checks.',
+          },
+        },
+        replaceStandardRoles: true,
+        runnerFn: mockRunner,
+        dryRun: true,
+      });
+
+      assert.deepEqual(result.lensesExecuted, ['a11y']);
+      assert.match(result.summary, /Accessibility Only/);
+    });
   });
 });

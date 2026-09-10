@@ -114,6 +114,7 @@ export function formatSelfReviewSummary({
   remediation = [],
   emptyDiff = false,
   executionErrors = [],
+  customRoles = {},
 }) {
   const isPass = status === 'passed';
   const banner = isPass
@@ -159,7 +160,10 @@ Self-review failed closed due to execution errors during specialist subagent ana
     }
 
     const lensList = lenses.length > 0
-      ? `\n### Evaluated Specialist Lenses:\n${lenses.map((l) => `- ✅ ${LENS_DEFINITIONS[l]?.name || l} (\`${l}\`)`).join('\n')}`
+      ? `\n### Evaluated Specialist Lenses:\n${lenses.map((l) => {
+          const name = customRoles?.[l]?.name || LENS_DEFINITIONS[l]?.name || l;
+          return `- ✅ ${name} (\`${l}\`)`;
+        }).join('\n')}`
       : '';
 
     const noDefectsMsg = findings.length === 0
@@ -291,7 +295,19 @@ export async function runSelfReview(options = {}) {
     }
 
     // 4. Resolve lens plan
-    const plan = resolveLensPlan(modeObj, resolvedConfig);
+    const allCustomRoles = {
+      ...(resolvedConfig.custom_roles || {}),
+      ...(options.customRoles || {}),
+    };
+
+    const plan = resolveLensPlan({
+      mode: modeObj,
+      config: resolvedConfig,
+      roles: options.roles || options.enabledRoles,
+      replaceStandardRoles: options.replaceStandardRoles,
+      customRoles: options.customRoles,
+    });
+    const executedLenses = plan.map((p) => p.lensId);
 
     // 5. Setup subagent runner
     const runner = runnerFn || (await createSubagentRunner({ cwd }));
@@ -318,8 +334,9 @@ export async function runSelfReview(options = {}) {
         counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
         mode: modeObj.name,
         diffStats: manifest,
-        lenses: modeObj.lenses,
+        lenses: executedLenses,
         executionErrors,
+        customRoles: allCustomRoles,
       });
 
       return {
@@ -330,7 +347,7 @@ export async function runSelfReview(options = {}) {
         blockingFindings: [],
         blockingCount: 0,
         counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
-        lenses: modeObj.lenses,
+        lenses: executedLenses,
         diffStats: manifest,
         remediation: [],
         executionErrors,
@@ -370,9 +387,10 @@ export async function runSelfReview(options = {}) {
       counts: verdict.counts,
       mode: modeObj.name,
       diffStats: manifest,
-      lenses: modeObj.lenses,
+      lenses: executedLenses,
       remediation: verdict.remediation,
       executionErrors,
+      customRoles: allCustomRoles,
     });
 
     return {
@@ -383,7 +401,7 @@ export async function runSelfReview(options = {}) {
       blockingFindings: verdict.blockingFindings,
       blockingCount: verdict.blockingCount,
       counts: verdict.counts,
-      lenses: modeObj.lenses,
+      lenses: executedLenses,
       diffStats: manifest,
       remediation: verdict.remediation,
       summary,

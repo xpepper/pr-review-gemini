@@ -21,7 +21,7 @@ import {
   normalizeFindingCandidate,
   isValidFindingCandidate,
 } from './publish.js';
-import { loadConfig, DEFAULT_CONFIG } from './config.js';
+import { loadConfig, DEFAULT_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -104,6 +104,8 @@ export {
   evaluateCiQualityGate,
   writeGitHubStepOutputs,
   formatCiSummary,
+  getCustomRoles,
+  formatDefaultRoleName,
 };
 
 export const REVIEW_MODES = {
@@ -399,6 +401,10 @@ export async function runReview({
   selection,
   cacheReview = true,
   cacheDir,
+  roles,
+  enabledRoles,
+  replaceStandardRoles,
+  customRoles,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -532,7 +538,13 @@ export async function runReview({
     }
 
     // 3. Execute review passes across lenses in parallel
-    const plan = resolveLensPlan({ mode: resolvedMode, config: resolvedConfig });
+    const plan = resolveLensPlan({
+      mode: resolvedMode,
+      config: resolvedConfig,
+      roles: roles || enabledRoles,
+      replaceStandardRoles,
+      customRoles,
+    });
     const executedLenses = plan.map((p) => p.lensId);
     let allFindings = [];
     let subagentErrors = [];
@@ -568,7 +580,13 @@ export async function runReview({
       }
     }
 
-    const lensesList = executedLenses.map((id) => LENS_DEFINITIONS[id]?.name || id).join(', ');
+    const allCustomRoles = {
+      ...(resolvedConfig.custom_roles || {}),
+      ...(customRoles || {}),
+    };
+    const lensesList = executedLenses
+      .map((id) => allCustomRoles[id]?.name || LENS_DEFINITIONS[id]?.name || id)
+      .join(', ');
     const countsSummary = Object.entries(severityCounts)
       .filter(([, count]) => count > 0)
       .map(([sev, count]) => `**${sev}**: ${count}`)
