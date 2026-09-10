@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/11-per-lens-overrides`
-* **Test Suite**: `npm test` runs and passes (164 tests across 47 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (165 tests across 47 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -23,7 +23,7 @@
 
 ## Status: ISSUE_11_COMPLETE / PHASE_7_PLANNED
 
-Issue #11 is fully implemented, verified test-first (164 passing tests across 47 suites), auto-reviewed via dogfood AI review, and documented in `README.md`.
+Issue #11 is fully implemented, verified test-first (165 passing tests across 47 suites), auto-reviewed via dogfood AI review, and documented in `README.md`.
 Phase 7 has been scoped and planned to capture next-generation features inspired by `pi-pr-review` (excluding artificial timeouts):
 - Increment 8: Large-diff file-backed transport (> 200 KB)
 - Increment 9: Interactive finding selection UI & cached publish-later
@@ -72,7 +72,7 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
   - `src/config.js`: Extended `DEFAULT_CONFIG` with `lenses: Object.freeze({})` and `resolveConfig` / `loadConfig` to validate, parse, and merge per-lens overrides (`model`, `reasoningEffort`, `tier`) with prototype pollution defense (`UNSAFE_OBJECT_KEYS`).
   - `src/subagents.js`: Updated `resolveLensPlan()` to apply precedence: `lens override -> tier configuration -> plugin defaults`.
   - `README.md`: Corrected `reasoningEfforts` example keys to `light`/`medium`/`heavy` and documented the `lenses` configuration schema and resolution precedence.
-  - Tests: Added 9 comprehensive test cases across `tests/config.test.mjs` and `tests/subagents.test.mjs`, bringing total test count to 164 passing tests across 47 suites.
+  - Tests: Added 10 comprehensive test cases across `tests/config.test.mjs` and `tests/subagents.test.mjs`, bringing total test count to 165 passing tests across 47 suites.
   - AI Dogfood Review: Triaged and addressed findings from dogfood code review on PR #12.
 
 ---

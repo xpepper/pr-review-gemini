@@ -229,6 +229,20 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       assert.equal(deepCorrectness.model, 'deep-custom-model');
       assert.equal(deepCorrectness.reasoningEffort, 'low');
     });
+
+    it('ignores invalid tier override on lens and keeps mode default tier', () => {
+      const config = {
+        lenses: {
+          correctness: {
+            tier: 'ultra-heavy',
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+      const correctness = plan.find((p) => p.lensId === 'correctness');
+      assert.equal(correctness.tier, 'heavy');
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {

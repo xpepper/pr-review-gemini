@@ -18,6 +18,7 @@ import {
   getModelForTier,
   getReasoningEffortForTier,
   DEFAULT_CONFIG,
+  VALID_TIERS,
 } from './config.js';
 import { parseMarkdownFindings } from './publish.js';
 
@@ -73,7 +74,7 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       }
     }
 
-    if (lensOverride?.tier) {
+    if (lensOverride?.tier && VALID_TIERS.includes(lensOverride.tier)) {
       tier = lensOverride.tier;
     }
 
