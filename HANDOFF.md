@@ -3,8 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (clean, up to date with `origin/main`)
-* **Test Suite**: `npm test` runs and passes (165 tests across 47 suites, 0 failures)
+* **Current Branch**: `feat/large-diff-transport` (clean, 4 commits ahead of `main`)
+* **Active PR**: [PR #13: feat: implement large-diff transport and file-backed paging (> 200 KB)](https://github.com/xpepper/pr-review-gemini/pull/13)
+* **Test Suite**: `npm test` runs and passes (191 tests across 50 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -18,18 +19,19 @@
   - PR #10: `feat: rename plugin, skill, and MCP tools to gem-pr-review`
   - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
+  - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
 
 ---
 
-## Status: ISSUE_11_COMPLETE / PHASE_7_PLANNED
+## Status: INCREMENT_8_COMPLETE / PHASE_7_IN_PROGRESS
 
-Issue #11 is fully implemented, verified test-first (165 passing tests across 47 suites), auto-reviewed via dogfood AI review, and documented in `README.md`.
-Phase 7 has been scoped and planned to capture next-generation features inspired by `pi-pr-review` (excluding artificial timeouts):
-- Increment 8: Large-diff file-backed transport (> 200 KB)
-- Increment 9: Interactive finding selection UI & cached publish-later
-- Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts)
-- Increment 11: One-shot coding-task self-review (`gem_self_review`)
-- Increment 12: Candidate finding recovery from degraded/malformed model outputs
+Increment 8 is fully implemented, verified test-first (191 passing tests across 50 suites), auto-reviewed via dogfood AI review published to GitHub PR #13, and documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+Phase 7 backlog:
+- [x] Increment 8: Large-diff file-backed transport (> 200 KB)
+- [ ] Increment 9: Interactive finding selection UI & cached publish-later
+- [ ] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts)
+- [ ] Increment 11: One-shot coding-task self-review (`gem_self_review`)
+- [ ] Increment 12: Candidate finding recovery from degraded/malformed model outputs
 
 ---
 
@@ -65,48 +67,69 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
 
 ---
 
-## Completed Work: Issue #11 — Per-Lens Model & Reasoning-Effort Overrides
+## Completed Work: Increment 8 — Large-Diff Transport & File-Backed Paging (> 200 KB)
 
-- **GitHub Issue**: [#11: feat: allow per-lens model and reasoning-effort overrides](https://github.com/xpepper/pr-review-gemini/issues/11)
+- **GitHub PR**: [#13: feat: implement large-diff transport and file-backed paging (> 200 KB)](https://github.com/xpepper/pr-review-gemini/pull/13)
+- **Branch**: `feat/large-diff-transport`
 - **Changes Delivered**:
-  - `src/config.js`: Extended `DEFAULT_CONFIG` with `lenses: Object.freeze({})` and `resolveConfig` / `loadConfig` to validate, parse, and merge per-lens overrides (`model`, `reasoningEffort`, `tier`) with prototype pollution defense (`UNSAFE_OBJECT_KEYS`).
-  - `src/subagents.js`: Updated `resolveLensPlan()` to apply precedence: `lens override -> tier configuration -> plugin defaults`.
-  - `README.md`: Corrected `reasoningEfforts` example keys to `light`/`medium`/`heavy` and documented the `lenses` configuration schema and resolution precedence.
-  - Tests: Added 10 comprehensive test cases across `tests/config.test.mjs` and `tests/subagents.test.mjs`, bringing total test count to 165 passing tests across 47 suites.
-  - AI Dogfood Review: Triaged and addressed findings from dogfood code review on PR #12.
+  - `src/diff.js`:
+    - Added constants `LARGE_DIFF_THRESHOLD_BYTES = 200 * 1024`, `MAX_SUPERVISED_READS = 16`, `DEFAULT_SUPERVISED_BUDGET_BYTES = 640 * 1024`, `MAX_SUPERVISED_BUDGET_BYTES = 1024 * 1024`.
+    - Added `isLargeDiff(diffText)` and `generateDiffManifest(diffText)` providing file counts, file paths, old/new paths, status (`modified`, `added`, `deleted`, `renamed`), added/deleted line counts, and approximate byte sizes.
+    - Added `formatDiffManifest(manifest, options)` generating formatted markdown tables for prompts.
+    - Added `createFileBackedDiff({ diffText, tempDirPrefix })` writing diff to isolated temporary directory (`gem-pr-diff-.../diff.patch`) with automatic `cleanup()` lifecycle.
+    - Added `createHostSupervisedDiffReader({ diffText, filePath, ... })` implementing host-enforced reading (`read`, `grep`, `find`) with byte budget tracking, read call counter, per-call byte limits, line-based slicing, regex/literal search, and directory traversal rejection.
+  - `src/reviewer.js`:
+    - Updated `buildReviewerPrompt` to substitute inlined diff with `Large Diff Transport Notice (> 200 KB)`, manifest summary table, and supervised tool instructions when diff > 200 KB.
+    - Updated `runReview` to auto-detect large diffs, create and cleanup file-backed transport in `try ... finally`, pass transport to subagents, and include diff transport statistics in the review summary.
+  - `src/subagents.js`:
+    - Added `buildSdkReaderTools(supervisedReader)` producing Copilot SDK-compliant tool declarations (`diff_read`, `diff_grep`, `diff_find`).
+    - Updated `createSubagentRunner` to register tools with `copilotClient.createSession({ tools })`.
+    - Updated `dispatchSubagentsParallel` to auto-detect large diffs, wrap diff in supervised transport, and manage cleanup.
+  - `server/index.js` (MCP Server):
+    - Extended `gem_pr_review_diff` to return `isLarge`, `thresholdBytes`, and `manifest`.
+    - Added MCP tool `gem_pr_review_diff_read` exposing supervised `read`, `grep`, and `find` operations with budget tracking.
+  - `skills/gem-pr-review/SKILL.md` & `README.md`:
+    - Documented large diff transport behavior, manifest tables, reader tools, and MCP tool reference.
+  - Tests:
+    - Added 26 unit tests across `tests/diff.test.mjs`, `tests/reviewer.test.mjs`, `tests/subagents.test.mjs`, `tests/mcp-server.test.mjs`, and `tests/skills.test.mjs`. Total 191 tests passing across 50 suites.
+  - Dogfood Review:
+    - Executed and posted dogfood review on PR #13 via `scripts/dogfood-review.mjs 13 --publish --mock`.
 
 ---
 
-## Next Session Mission: Increment 8 — Large-Diff Transport & File-Backed Paging (> 200 KB)
+## Next Session Mission: Increment 9 — Interactive Finding Selection & Cached Publish-Later
 
 ### Goal
-Implement large-diff detection and file-backed paging transport to prevent context overflow when reviewing pull requests with diffs exceeding 200 KB.
+Implement interactive finding selection before publishing reviews, allowing users to pick findings interactively or via `--all`, and support in-session cached retention so users can publish without re-evaluating model passes.
 
 ### Requirements & Architecture
-1. **Threshold Detection**: Detect when raw unified diff exceeds 200 KB.
-2. **File-Backed Transport**:
-   - Store diff in temporary file or structured manifest.
-   - Supply subagents with a bounded changed-file manifest and host-enforced read tools (`read`, `grep`, `find`).
-3. **Capped Host Access**: Cap subagent read calls (e.g. ~640 KB across 16 reads) up to 1 MB maximum.
-4. **Test-First Verification**: Unit test detection threshold, manifest generation, and supervised read tools in `tests/diff.test.mjs` and `tests/subagents.test.mjs`.
+1. **Interactive Finding Selection**:
+   - Provide an interactive prompt (or CLI flags like `--all`, `--findings <ids>`) before publishing review comments to GitHub.
+   - Display a clean menu showing finding severity, file:line location, and title.
+2. **In-Session Caching & Publish-Later**:
+   - Retain reviewed findings in session cache/temp artifact.
+   - Allow a subsequent publish command to target cached findings without triggering fresh model inference passes.
+3. **Host-Gating Preserved**:
+   - Ensure all published comments remain subject to host-enforced hunk validation and safety rules.
+4. **Test-First Verification**:
+   - Unit test finding filtering, selection logic, and cache serialization/retrieval.
 
 ---
 
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 8 on this repository: "Large-Diff Transport & File-Backed Paging (> 200 KB)".
+Please implement Increment 9 on this repository: "Interactive Finding Selection & Cached Publish-Later".
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/large-diff-transport.
+2. Confirm PR #13 is merged or merge feat/large-diff-transport into main, then checkout main and create a feature branch: feat/interactive-selection.
 
 Implementation requirements:
-- Threshold Detection: In the diff acquisition and reviewer pipeline, detect when the raw unified diff exceeds 200 KB (200 * 1024 bytes).
-- File-Backed Transport: Instead of inlining the entire massive diff into reviewer prompts, write the diff to a temporary file, generate a structured changed-file manifest with file statuses and byte sizes, and pass the manifest and diff file reference.
-- Host-Supervised File Reading: Provide subagent sessions with host-enforced tools/mechanisms (read, grep, find) capped at a maximum access budget (~640 KB across 16 reads, up to 1 MB maximum) to prevent context overflow while allowing deep inspection of critical files.
-- Backward Compatibility: Diffs <= 200 KB continue to use direct in-memory prompt inlining.
-- Test-First Verification: Follow test-first development in small verified steps (tests/diff.test.mjs, tests/subagents.test.mjs, tests/reviewer.test.mjs), keeping all 165+ tests passing.
+- Interactive Finding Selection: Provide interactive selection UI / CLI controls (--all vs choosing specific findings) before publishing reviews to GitHub.
+- In-Session Caching (Publish-Later): Store reviewed findings in a cache to allow publishing without rerunning subagent model inference.
+- Preservation of host-gated publishing guarantees: Selected findings must still be verified against diff hunks and pass all safety checks.
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 191+ tests passing.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 

@@ -81,7 +81,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Decouple specialist lens models and reasoning efforts above shared tiers.
   - Implement resolution precedence: `lens override -> tier configuration -> plugin defaults`.
   - Fix `README.md` reasoning efforts documentation (`light`, `medium`, `heavy`).
-- [ ] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
+- [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
   - Detect diffs exceeding 200 KB and switch to a file-backed transport instead of raw prompt inlining.
   - Provide reviewers with a bounded changed-file manifest and host-enforced read tools (`read`, `grep`, `find`) with capped access (~640 KB across 16 reads) up to 1 MB.
 - [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**

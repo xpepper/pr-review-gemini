@@ -6,17 +6,25 @@
 
 ---
 
-## Active Next Task: Increment 8 — Large-Diff Transport & File-Backed Paging (> 200 KB)
-- [ ] Create branch `feat/large-diff-transport`
-- [ ] Implement diff size threshold detection (> 200 KB) in diff/acquisition pipeline.
-- [ ] Implement file-backed diff transport and bounded changed-file manifest.
-- [ ] Provide host-supervised reading tools (`read`, `grep`, `find`) capped at ~640 KB across 16 reads.
-- [ ] Add comprehensive test suites in `tests/diff.test.mjs` and `tests/subagents.test.mjs`.
-- [ ] Run full test suite (`npm test`) and dogfood-review / open PR on GitHub.
+## Active Next Task: Increment 9 — Interactive Finding Selection & Cached Publish-Later
+- [ ] Design finding selection interface (`--all` vs interactive selection).
+- [ ] Implement in-session caching / publish-later retention mechanism to post reviews without re-evaluating model passes.
+- [ ] Add CLI flags and interactive prompts for finding triage.
+- [ ] Unit test finding selection and cached publish flows.
+- [ ] Dogfood-review and open PR on GitHub.
 
 ---
 
 ## Completed Increments
+- [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
+  - [x] Threshold detection (`LARGE_DIFF_THRESHOLD_BYTES = 200 * 1024`) in diff acquisition and reviewer pipeline.
+  - [x] File-backed diff transport (`createFileBackedDiff`) with secure temporary lifecycle and cleanup.
+  - [x] Structured changed-file manifest (`generateDiffManifest`, `formatDiffManifest`) with file statuses, line additions/deletions, and byte sizes.
+  - [x] Host-supervised reading tools (`diff_read`, `diff_grep`, `diff_find`) capped at ~640 KB across 16 reads (up to 1 MB maximum) with path traversal defenses.
+  - [x] MCP tools integration (`gem_pr_review_diff_read` and enhanced `gem_pr_review_diff`).
+  - [x] Agent skill update (`skills/gem-pr-review/SKILL.md`) and documentation in `README.md`.
+  - [x] 26 new unit tests across 5 test suites (191 tests passing).
+  - [x] PR #13 opened, dogfood review run against PR #13.
 - [x] **Increment 7b / Issue #11: Per-Lens Model & Reasoning-Effort Overrides**
   - [x] Configuration support in `src/config.js` (`resolveConfig`, `loadConfig`) for `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
   - [x] Resolution precedence in `src/subagents.js`: `lens override -> tier configuration -> plugin defaults`.
@@ -61,7 +69,7 @@
 - [x] Gated approval policies (`approveMaxPriorityLevel`).
 
 ### Phase 7: Advanced Resiliency, Large Diff Transport & Interaction
-- [ ] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
+- [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**: File-backed diff transport with bounded changed-file manifest and read tools (`read`, `grep`, `find`) to handle large PRs without context overflow.
 - [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
 - [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
 - [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
