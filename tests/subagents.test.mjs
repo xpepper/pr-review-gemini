@@ -101,6 +101,134 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       const correctness = plan.find((p) => p.lensId === 'correctness');
       assert.equal(correctness.model, 'custom-o3');
     });
+
+    it('applies per-lens model and reasoning effort overrides when configured', () => {
+      const customConfig = {
+        tiers: {
+          light: 'gpt-5-mini',
+          medium: 'claude-sonnet-5',
+          heavy: 'gpt-5.6-terra',
+        },
+        reasoningEfforts: {
+          light: 'off',
+          medium: 'off',
+          heavy: 'medium',
+        },
+        lenses: {
+          correctness: {
+            model: 'gpt-5.6-terra-custom',
+            reasoningEffort: 'high',
+          },
+          security: {
+            model: 'claude-opus-5',
+            reasoningEffort: 'high',
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config: customConfig });
+
+      const correctness = plan.find((p) => p.lensId === 'correctness');
+      assert.equal(correctness.model, 'gpt-5.6-terra-custom');
+      assert.equal(correctness.reasoningEffort, 'high');
+      assert.equal(correctness.tier, 'heavy');
+
+      const security = plan.find((p) => p.lensId === 'security');
+      assert.equal(security.model, 'claude-opus-5');
+      assert.equal(security.reasoningEffort, 'high');
+      assert.equal(security.tier, 'heavy');
+
+      // Un-overridden lens keeps tier and default configuration
+      const contracts = plan.find((p) => p.lensId === 'contracts');
+      assert.equal(contracts.model, 'claude-sonnet-5');
+      assert.equal(contracts.tier, 'medium');
+      assert.equal(contracts.reasoningEffort, 'off');
+    });
+
+    it('applies per-lens tier override and resolves model from that tier unless model is explicitly set', () => {
+      const customConfig = {
+        tiers: {
+          light: 'tier-light-model',
+          medium: 'tier-medium-model',
+          heavy: 'tier-heavy-model',
+        },
+        lenses: {
+          security: {
+            tier: 'medium',
+          },
+          conventions: {
+            tier: 'heavy',
+            model: 'explicit-conventions-model',
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config: customConfig });
+
+      const security = plan.find((p) => p.lensId === 'security');
+      assert.equal(security.tier, 'medium');
+      assert.equal(security.model, 'tier-medium-model');
+
+      const conventions = plan.find((p) => p.lensId === 'conventions');
+      assert.equal(conventions.tier, 'heavy');
+      assert.equal(conventions.model, 'explicit-conventions-model');
+    });
+
+    it('honors resolution precedence: lens override -> tier configuration -> plugin defaults', () => {
+      // 1. Lens override present: overrides tier config
+      const withLensOverride = {
+        tiers: { heavy: 'configured-heavy' },
+        lenses: { correctness: { model: 'overridden-heavy', reasoningEffort: 'high' } },
+      };
+      const plan1 = resolveLensPlan({ mode: 'balanced', config: withLensOverride });
+      const correctness1 = plan1.find((p) => p.lensId === 'correctness');
+      assert.equal(correctness1.model, 'overridden-heavy');
+      assert.equal(correctness1.reasoningEffort, 'high');
+
+      // 2. No lens override: falls back to tier config
+      const withoutLensOverride = {
+        tiers: { heavy: 'configured-heavy' },
+        reasoningEfforts: { heavy: 'medium' },
+      };
+      const plan2 = resolveLensPlan({ mode: 'balanced', config: withoutLensOverride });
+      const correctness2 = plan2.find((p) => p.lensId === 'correctness');
+      assert.equal(correctness2.model, 'configured-heavy');
+      assert.equal(correctness2.reasoningEffort, 'medium');
+
+      // 3. No tier config: falls back to DEFAULT_CONFIG tiers
+      const plan3 = resolveLensPlan({ mode: 'balanced' });
+      const correctness3 = plan3.find((p) => p.lensId === 'correctness');
+      assert.equal(correctness3.model, DEFAULT_CONFIG.tiers.heavy);
+      assert.equal(correctness3.reasoningEffort, DEFAULT_LENS_TIERS.correctness.reasoningEffort);
+    });
+
+    it('applies per-lens overrides in quick and deep modes', () => {
+      const config = {
+        lenses: {
+          correctness: {
+            model: 'custom-lens-model',
+            reasoningEffort: 'high',
+          },
+        },
+      };
+
+      const quickPlan = resolveLensPlan({ mode: 'quick', config });
+      const quickCorrectness = quickPlan.find((p) => p.lensId === 'correctness');
+      assert.equal(quickCorrectness.model, 'custom-lens-model');
+      assert.equal(quickCorrectness.reasoningEffort, 'high');
+
+      const deepPlan = resolveLensPlan({ mode: 'deep', config: {
+        lenses: {
+          correctness: {
+            model: 'deep-custom-model',
+            reasoningEffort: 'low',
+          },
+        },
+      } });
+      const deepCorrectness = deepPlan.find((p) => p.lensId === 'correctness');
+      assert.equal(deepCorrectness.model, 'deep-custom-model');
+      assert.equal(deepCorrectness.reasoningEffort, 'low');
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {

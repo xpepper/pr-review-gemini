@@ -56,6 +56,8 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
     let tier = resolvedMode.defaultTier || 'medium';
     let reasoningEffort = resolvedMode.reasoningEffort || 'off';
 
+    const lensOverride = resolvedConfig.lenses?.[lensId];
+
     if (resolvedMode.name === 'quick') {
       tier = 'light';
       reasoningEffort = 'off';
@@ -71,11 +73,17 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       }
     }
 
-    // Resolve model identifier from config tiers
-    const model = getModelForTier(resolvedConfig, tier);
+    if (lensOverride?.tier) {
+      tier = lensOverride.tier;
+    }
 
-    // If config has specific reasoningEffort override for the tier and lens didn't explicitly set high
-    if (resolvedMode.name !== 'deep' && resolvedConfig.reasoningEfforts?.[tier]) {
+    // Resolve model identifier: lens override -> config tiers -> default tiers
+    const model = lensOverride?.model || getModelForTier(resolvedConfig, tier);
+
+    // Resolve reasoning effort: lens override -> tier configuration -> default assignment
+    if (lensOverride?.reasoningEffort) {
+      reasoningEffort = lensOverride.reasoningEffort;
+    } else if (resolvedMode.name !== 'deep' && resolvedConfig.reasoningEfforts?.[tier]) {
       // When lens reasoning effort is 'off', respect config if set, otherwise keep lens recommendation
       if (reasoningEffort === 'off' && resolvedConfig.reasoningEfforts[tier] !== 'off') {
         reasoningEffort = resolvedConfig.reasoningEfforts[tier];
