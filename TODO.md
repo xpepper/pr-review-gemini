@@ -7,16 +7,27 @@
 ---
 
 ## Active Next Task: Increment 9 / Issue #14 — Interactive Finding Selection & Cached Publish-Later
-- [ ] Create branch `feat/interactive-selection` for Issue #14.
-- [ ] Design finding selection interface (`--all` vs interactive selection).
-- [ ] Implement in-session caching / publish-later retention mechanism (`publish-later` / `publish-cached`) to post reviews without re-evaluating model passes.
-- [ ] Add CLI flags and interactive prompts for finding triage.
-- [ ] Unit test finding selection, cache serialization, and stale-head invalidation.
-- [ ] Dogfood-review and open PR on GitHub.
+- [x] Create branch `feat/interactive-selection` for Issue #14.
+- [x] Implement finding selection, table formatting, and input parsing (`src/selection.js`) test-first (`tests/selection.test.mjs`).
+- [x] Implement in-session review caching & freshness/stale-head invalidation (`src/cache.js`) test-first (`tests/cache.test.mjs`).
+- [x] Integrate automatic caching and finding filtering into reviewer orchestrator (`src/reviewer.js`).
+- [x] Add `gem_pr_review_publish_cached` tool to MCP server (`server/index.js`) and tests (`tests/mcp-server.test.mjs`).
+- [x] Integrate interactive selection and `--publish-cached` into CLI runner (`scripts/dogfood-review.mjs`) and tests (`tests/dogfood.test.mjs`).
+- [x] Update documentation in `skills/gem-pr-review/SKILL.md` and `README.md`.
+- [x] Verify complete test suite (`npm test`).
+- [ ] Run dogfood review on PR and hand off.
 
 ---
 
 ## Completed Increments
+- [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later (Issue #14)**
+  - [x] Interactive console finding table (`formatFindingsTable`, `formatFindingRow`) showing index, severity, confidence, location, and title.
+  - [x] Flexible finding selection parser (`parseSelectionInput`) supporting indices (`1, 3`), ranges (`2-4`), exclusions (`-2`, `!3`), and severity filters (`p0, p1`, `min:p2`, `no-nits`).
+  - [x] In-session / workspace review caching (`saveReviewCache`, `getReviewCache`, `invalidateReviewCache`, `listReviewCaches`) keyed by PR number and head commit SHA.
+  - [x] Head freshness and stale cache rejection/invalidation preventing obsolete comment anchoring.
+  - [x] MCP tool `gem_pr_review_publish_cached` to publish without rerunning model inference passes.
+  - [x] CLI flags `--publish-cached`, `--all`, `--interactive`, and `--select` in `scripts/dogfood-review.mjs`.
+  - [x] 38 new unit tests across 4 test suites (229 tests passing across 61 suites).
 - [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
   - [x] Threshold detection (`LARGE_DIFF_THRESHOLD_BYTES = 200 * 1024`) in diff acquisition and reviewer pipeline.
   - [x] File-backed diff transport (`createFileBackedDiff`) with secure temporary lifecycle and cleanup.

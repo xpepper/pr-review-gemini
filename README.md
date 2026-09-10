@@ -57,6 +57,11 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | :--- | :--- |
 | `--dry-run`, `--no-comment` | Analyze the PR and print the markdown summary without publishing to GitHub |
 | `--publish`, `--comment` | Submit the host-gated review and diff-anchored inline comments to GitHub |
+| `--publish-cached` | Publish previously cached review findings without rerunning model inference |
+| `--all` | Publish all findings immediately without interactive triage prompt |
+| `--interactive` | Prompt for interactive finding selection table before publishing |
+| `--select <spec>` | Batch-select findings by index, range, or severity (e.g. `"1,3"`, `"p0,p1"`, `"min:p2"`) |
+| `--cache-dir <dir>` | Custom directory for session findings cache (defaults to `.gem-pr-cache`) |
 | `--quick` | Fast triage running 3 critical lenses (Correctness, Security, Conventions) |
 | `--balanced` | *(Default)* Standard multi-lens review running 5 specialist lenses |
 | `--full` | Exhaustive review running 6 lenses, including Test Quality & Coverage |
@@ -86,6 +91,17 @@ node scripts/dogfood-review.mjs 42 --incremental --dry-run
 **Publish host-gated review to GitHub:**
 ```bash
 node scripts/dogfood-review.mjs 42 --publish
+```
+
+**Inspect findings in dry-run and publish cached results later:**
+```bash
+node scripts/dogfood-review.mjs 42 --dry-run
+node scripts/dogfood-review.mjs 42 --publish-cached
+```
+
+**Interactive triage before publishing:**
+```bash
+node scripts/dogfood-review.mjs 42 --publish --interactive
 ```
 
 ---
@@ -132,6 +148,12 @@ Protects session context and prevents model degradation when reviewing large pul
 - **File-Backed Transport**: Diffs exceeding 200 KB are stored in temporary file storage while the model receives a structured changed-file manifest. Diffs $\le$ 200 KB continue to use direct in-memory inlining for backward compatibility.
 - **Host-Supervised Inspection**: Equips reviewer subagents with host-enforced inspection tools (`read`, `grep`, `find`) strictly capped at an access budget of ~640 KB across 16 read operations (up to 1 MB maximum).
 
+### 5. Interactive Finding Selection & Cached Publish-Later
+Provides human reviewers with granular triage control and eliminates redundant model re-evaluations:
+- **Interactive Triage**: Inspect findings in a formatted console table showing severity (`P0`–`P3`, `nit`), confidence, location, and title. Select individual indices (`1, 3`), ranges (`1-4`), exclusions (`all, -2`), or severity levels (`p0,p1`, `min:p2`, `no-nits`).
+- **Publish-Later Caching**: Every review pass retains evaluated findings in a session cache keyed by PR number and head commit SHA. Inspect findings in dry-run mode and publish later via `--publish-cached` or MCP tool `gem_pr_review_publish_cached` without rerunning expensive subagent inference.
+- **Head Freshness Verification**: Validates cached findings against the PR's current head SHA on GitHub, automatically rejecting and invalidating stale caches if new commits were pushed.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -153,6 +175,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 - **`gem_pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
 - **`gem_pr_review_diff_read`**: Host-supervised diff reading (`read`, `grep`, `find`) with access budget capping.
 - **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
+- **`gem_pr_review_publish_cached`**: Publishes previously cached review findings without rerunning model inference, after verifying PR head freshness.
 - **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
 - **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
 - **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
@@ -245,7 +268,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 165 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
+All 227+ unit tests across 52 suites verify parser accuracy, host-gated security, subagent orchestration, interactive selection, review caching, and worktree lifecycles.
 
 ---
 

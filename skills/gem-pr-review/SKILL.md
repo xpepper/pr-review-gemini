@@ -238,4 +238,60 @@ Pull requests with extensive changes can exceed LLM context windows or degrade r
    - Access budget capped at **~640 KB** across operations (with a hard ceiling of 1 MB maximum).
    - Attempts exceeding the budget or accessing paths outside the diff (e.g. path traversal) are rejected safely.
 
+---
+
+## Interactive Finding Selection & Cached Publish-Later
+
+`gem-pr-review` provides reviewer controls to triage findings interactively and publish cached findings later without rerunning expensive model subagents:
+
+### 1. Interactive Finding Selection
+- **Interactive Triage Prompt**:
+  When publishing reviews interactively, reviewers are presented with a clean findings table displaying:
+  - Finding index (`[1]`, `[2]`, ...)
+  - Severity (`[P0]`, `[P1]`, `[P2]`, `[P3]`, `[nit]`)
+  - Confidence rating (e.g. `95%`)
+  - Diff location (`file:line (side)`)
+  - Concise title
+- **Flexible Selection Syntax**:
+  - `all` or `*`: Select all findings.
+  - `none`: Deselect all findings.
+  - Comma-separated indices: `1, 3, 5`
+  - Ranges: `1-3`
+  - Exclusions: `all, -2` or `1-4, !2`
+  - Severity filters: `p0, p1`, `min:p2` / `>=p2`
+  - Stylistic filters: `no-nits`
+  - `q` or `cancel`: Abort review publishing cleanly without changes.
+- **Direct CLI Overrides**:
+  - `--all`: Publish all findings immediately without prompting.
+  - `--interactive`: Explicitly force interactive finding selection prompt.
+  - `--select="<spec>"`: Batch-select findings matching specification (e.g. `--select="p0,p1"`).
+
+### 2. In-Session Caching & Publish-Later (`--publish-cached`)
+- Every review pass automatically caches evaluated findings keyed by PR number and head commit SHA (defaults to `.gem-pr-cache/` in project root).
+- Reviewers can inspect findings locally during a dry-run and publish them later without rerunning subagent model inference:
+  ```bash
+  # Step 1: Run analysis and inspect findings
+  node scripts/dogfood-review.mjs 123 --dry-run
+
+  # Step 2: Publish cached findings later
+  node scripts/dogfood-review.mjs 123 --publish-cached
+  ```
+- **MCP Tool `gem_pr_review_publish_cached`**:
+  Agents can publish cached findings programmatically using the MCP server tool:
+  ```json
+  {
+    "prNumber": 123,
+    "expectedHeadSha": "abcdef1234567890",
+    "selectedIndices": [0, 2]
+  }
+  ```
+
+### 3. Head Freshness & Stale Check Invalidation
+- Cached findings are strictly verified against the current PR head SHA on GitHub before publication.
+- If the PR head commit has moved (new commits pushed), cached findings are flagged as stale and rejected/invalidated to prevent anchoring comments to obsolete code.
+
+### 4. Preservation of Host-Gated Safety Guarantees
+- All selected or cached findings remain subject to host-enforced diff hunk validation (`isLineCommentable`).
+- Unanchored findings are safely demoted to the review summary body; comments remain strictly capped at 50; and author safety checks are enforced.
+
 

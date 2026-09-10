@@ -84,9 +84,11 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 - [x] **Increment 8: Large-Diff Transport & File-Backed Paging (> 200 KB)**
   - Detect diffs exceeding 200 KB and switch to a file-backed transport instead of raw prompt inlining.
   - Provide reviewers with a bounded changed-file manifest and host-enforced read tools (`read`, `grep`, `find`) with capped access (~640 KB across 16 reads) up to 1 MB.
-- [ ] **Increment 9: Interactive Finding Selection & Cached Publish-Later**
-  - Implement interactive CLI/modal finding selection prior to publishing (`--all` to publish all, or interactive toggle).
-  - Add in-session caching (`publish-later`) to retain reviewed findings and publish without re-evaluating model passes.
+- [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later (#14)**
+  - Implement interactive CLI finding selection prior to publishing (`--all` to publish all, or interactive triage menu).
+  - Add in-session / file-backed caching (`publish-later` / `--publish-cached`) to retain reviewed findings and publish without re-evaluating model inference passes.
+  - Reject/invalidate stale cached findings if PR head commit has advanced.
+  - Expose MCP tool `gem_pr_review_publish_cached`.
 - [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**
   - On capacity or rate limit errors (HTTP 429), automatically dispatch the configured backup tier (e.g. `heavy_fallbacks`).
   - Keep execution timeout-free: do not impose artificial plugin-level deadlines or stuck-reviewer heuristics.

@@ -75,4 +75,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /diff_find|find/i, 'Should document find tool');
     assert.match(content, /640\s*KB/i, 'Should document 640 KB budget');
   });
+
+  it('documents interactive finding selection and cached publish-later', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /interactive/i, 'Should document interactive finding selection');
+    assert.match(content, /--all/i, 'Should document --all flag');
+    assert.match(content, /--publish-cached|publish_cached/i, 'Should document publish-cached');
+    assert.match(content, /gem_pr_review_publish_cached/i, 'Should document MCP tool gem_pr_review_publish_cached');
+    assert.match(content, /freshness|stale/i, 'Should document head freshness / stale check');
+  });
 });
