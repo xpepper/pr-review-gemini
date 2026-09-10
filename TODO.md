@@ -6,18 +6,13 @@
 
 ---
 
-## Active Next Task: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output (Issue #20)
-- [x] Step 1: Design and write unit tests in `tests/recovery.test.mjs` covering malformed envelopes, unclosed brackets, trailing commas, unescaped quotes/newlines, truncated arrays, and corrupted candidate recovery.
-- [x] Step 2: Implement core recovery utilities in `src/recovery.js`:
-  - [x] `extractJsonEnvelope`: Resiliently extracts JSON envelope from `<<<PR_REVIEW_JSON>>>` even when unclosed, surrounded by code blocks, or missing closing tags.
-  - [x] `repairJsonString`: Fixes trailing commas, unclosed brackets/braces, unescaped characters, and truncated endings.
-  - [x] `extractCandidateObjects`: Scans and recovers individual `{ ... }` candidate finding blocks using balanced brace scanning and heuristic repair/regex fallback.
-  - [x] `normalizeFindingCandidate` & `isValidFindingCandidate`: Validates and normalizes candidate findings against structured contract (`severity` P0-nit, `file`, `line`, `side`, `confidence`).
-  - [x] `recoverFindingsFromText`: Orchestrates recovery pipeline with multi-stage fallback.
-- [x] Step 3: Integrate `src/recovery.js` into `parseMarkdownFindings` in `src/publish.js` and re-export via `src/publish.js` and `src/reviewer.js`.
-- [x] Step 4: Add integration tests in `tests/publish.test.mjs`, `tests/subagents.test.mjs`, and `tests/self-review.test.mjs`.
-- [x] Step 5: Verify all existing and new tests (`npm test`), check documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
-- [ ] Step 6: Run dogfood auto-review, commit with conventional commits, update `TODO.md` and `HANDOFF.md`, and open PR.
+## Active Next Task: Increment 13 — Reusable GitHub Action & Automated CI Review Workflow (Issue #22)
+- [ ] Define composite GitHub Action manifest (`action.yml`) with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
+- [ ] Implement CI event payload resolution (auto-detecting PR number from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` on `synchronize`).
+- [ ] Implement CI quality gate (`fail_on`) exiting with code 1 when blocking findings exist.
+- [ ] Add starter workflow template `.github/workflows/gem-pr-review.yml`.
+- [ ] Unit tests for action schema, event payload parsing, and output formatting.
+- [ ] Dogfood auto-review and PR submission.
 
 ---
 

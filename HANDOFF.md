@@ -237,10 +237,67 @@ Every planned increment across the entire roadmap has been delivered, tested, do
 
 ## Future Opportunities / Phase 8 Ideas
 
-Possible future enhancements if further expansion is desired:
+Possible future enhancements:
 1. **GitHub Actions CI Runner**: A reusable GitHub Action workflow running `gem-pr-review` on `pull_request` triggers in CI with GitHub token authentication.
 2. **Additional Specialist Lenses**: Domain-specific lenses like Accessibility (a11y), Internationalization (i18n), or Database Migration safety.
 3. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
+
+---
+
+## Next Session Mission: Increment 13 — Reusable GitHub Action & Automated CI Review Workflow (Issue #22)
+
+- **GitHub Issue**: [#22: feat: reusable GitHub Action and automated CI PR review workflow (action.yml)](https://github.com/xpepper/pr-review-gemini/issues/22)
+- **Target Branch**: `feat/github-action-ci`
+
+### Goal
+Provide a reusable, zero-dependency composite GitHub Action (`action.yml`) and CI runner enabling teams to automate multi-lens code reviews, incremental re-reviews, and quality gates directly inside GitHub Actions workflows.
+
+### Requirements & Architecture
+1. **Action Definition (`action.yml`)**:
+   - Inputs:
+     - `github_token`: GitHub token (default: `${{ github.token }}`).
+     - `pr_number`: PR number (optional; auto-detected from `GITHUB_EVENT_PATH`).
+     - `mode`: Review mode (`quick`, `balanced`, `full`, `deep`, default: `balanced`).
+     - `incremental`: Auto-detect or force incremental review (`auto`, `true`, `false`, default: `auto`).
+     - `fail_on`: Quality gate severity threshold (`P0`, `P1`, `P2`, `none`, default: `none`).
+     - `action`: Review action (`publish`, `dry-run`, default: `publish`).
+     - `select`: Finding filter or interactive specification (optional).
+   - Outputs:
+     - `verdict`: `PASS` or `FAIL`.
+     - `findings_count`: Total findings detected.
+     - `blocking_count`: Number of blocking findings.
+     - `summary`: Markdown review summary.
+2. **Automated Event Detection**:
+   - Inspects `GITHUB_EVENT_PATH` to resolve PR number, repository, and action (`opened`, `synchronize`, `reopened`).
+   - On `synchronize` events, automatically enables `--incremental` re-review mode.
+3. **CI Quality Gate**:
+   - Exits with code 1 if findings meet or exceed `fail_on` threshold, allowing branch protection rules to block merging when defects are found.
+4. **Starter Workflow & Documentation**:
+   - Add template workflow `.github/workflows/gem-pr-review.yml`.
+   - Document GitHub Action usage and examples in `README.md` and `skills/gem-pr-review/SKILL.md`.
+5. **Test-First Verification**:
+   - Unit tests covering `action.yml` metadata, event payload parser, environment variable resolution, and step outputs.
+
+---
+
+## Ready-to-Use Prompt for the Next Session
+
+```text
+Please implement Increment 13 on this repository: "Reusable GitHub Action & Automated CI Review Workflow (action.yml)" (addressing Issue #22: https://github.com/xpepper/pr-review-gemini/issues/22).
+
+Before writing code:
+1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/github-action-ci.
+
+Implementation requirements:
+- Action Manifest (action.yml): Implement a standard composite GitHub Action at repo root with inputs (github_token, pr_number, mode, fail_on, incremental, action) and outputs (verdict, findings_count, blocking_count, summary).
+- Event Payload Detection: Automatically extract PR number and repo from GITHUB_EVENT_PATH, automatically selecting incremental mode on synchronize events.
+- CI Quality Gate: Fail the step (exit 1) if blocking defects meet or exceed the fail_on threshold.
+- Reusable Starter Workflow: Add .github/workflows/gem-pr-review.yml illustrating automated CI reviews.
+- Test-First Verification: Add unit tests verifying action.yml schema, event payload parsing, and output generation, keeping all 310+ existing tests passing.
+- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
+```
+
 
 
 
