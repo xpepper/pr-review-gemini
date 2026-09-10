@@ -1,0 +1,67 @@
+name: 'Gem PR Review'
+description: 'Automated multi-lens AI code review for GitHub pull requests with host-gated safety and quality gates'
+author: 'Pietro Di Bello'
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  github_token:
+    description: 'GitHub token for authenticating API requests and posting reviews'
+    required: false
+    default: '${{ github.token }}'
+  pr_number:
+    description: 'Pull request number to review (auto-detected from GITHUB_EVENT_PATH if omitted)'
+    required: false
+  mode:
+    description: 'Review mode: balanced (default), quick, full, or deep'
+    required: false
+    default: 'balanced'
+  fail_on:
+    description: 'Severity threshold that triggers job failure (P0, P1, P2, P3, or none)'
+    required: false
+    default: 'none'
+  incremental:
+    description: "Whether to run an incremental re-review (auto, true, or false). In 'auto' mode, synchronize events automatically trigger incremental reviews."
+    required: false
+    default: 'auto'
+  action:
+    description: 'Review action: publish (default, post review to PR) or dry-run (generate summary only)'
+    required: false
+    default: 'publish'
+  select:
+    description: "Finding filter or selection specification (e.g. 'p0,p1', 'min:p2', '1,3')"
+    required: false
+
+outputs:
+  verdict:
+    description: 'Overall review verdict (PASS or FAIL)'
+    value: ${{ steps.review.outputs.verdict }}
+  findings_count:
+    description: 'Total number of findings detected across all review lenses'
+    value: ${{ steps.review.outputs.findings_count }}
+  blocking_count:
+    description: 'Number of blocking findings that met or exceeded the fail_on threshold'
+    value: ${{ steps.review.outputs.blocking_count }}
+  summary:
+    description: 'Markdown review summary'
+    value: ${{ steps.review.outputs.summary }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run Gem PR Review
+      id: review
+      shell: bash
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_FAIL_ON: ${{ inputs.fail_on }}
+        INPUT_INCREMENTAL: ${{ inputs.incremental }}
+        INPUT_ACTION: ${{ inputs.action }}
+        INPUT_SELECT: ${{ inputs.select }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        node "${{ github.action_path }}/scripts/ci-action.mjs"

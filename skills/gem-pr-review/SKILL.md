@@ -407,6 +407,77 @@ Specialist subagent review passes and local self-review passes format findings i
   - Incremental re-reviews (`revalidatePriorFindings`)
   All workflows automatically benefit with zero configuration required.
 
+---
+
+## Reusable GitHub Action & Automated CI Review Workflow (`action.yml`)
+
+`gem-pr-review` provides an official composite GitHub Action (`action.yml`) enabling automated AI code reviews directly within GitHub Actions CI pipelines.
+
+### 1. Action Manifest Inputs & Outputs
+
+#### Inputs (`action.yml`)
+| Input | Description | Required | Default |
+| :--- | :--- | :---: | :--- |
+| `github_token` | GitHub token for authenticating API requests and posting reviews | No | `${{ github.token }}` |
+| `pr_number` | Pull request number to review (auto-detected from `GITHUB_EVENT_PATH` if omitted) | No | *auto-detected* |
+| `mode` | Review mode (`quick`, `balanced`, `full`, `deep`) | No | `balanced` |
+| `fail_on` | Severity threshold that triggers CI job failure (`P0`, `P1`, `P2`, `P3`, or `none`) | No | `none` |
+| `incremental` | Whether to run an incremental re-review (`auto`, `true`, `false`). In `auto` mode, `synchronize` events automatically trigger incremental reviews | No | `auto` |
+| `action` | Review action: `publish` (post review to PR) or `dry-run` (generate summary only) | No | `publish` |
+| `select` | Finding filter specification (e.g. `p0,p1`, `min:p2`, `1,3`) | No | *all findings* |
+
+#### Outputs (`action.yml`)
+| Output | Description | Example |
+| :--- | :--- | :--- |
+| `verdict` | Overall review verdict based on quality gate (`PASS` or `FAIL`) | `PASS` |
+| `findings_count` | Total number of findings detected across all specialist review lenses | `3` |
+| `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
+| `summary` | Complete markdown review summary | `## PR Review Summary...` |
+
+### 2. Event Payload & Synchronize Auto-Detection
+When running in GitHub Actions, `gem-pr-review` inspects `GITHUB_EVENT_PATH`:
+- Automatically extracts the pull request number, target repository, and webhook action (`opened`, `synchronize`, `reopened`).
+- When `incremental: auto` (default), **`synchronize` events** (when new commits are pushed to an open PR) automatically activate `--incremental` mode. This ensures only newly changed diffs are inspected and prior findings are revalidated without repeating redundant analysis.
+
+### 3. CI Quality Gate (`fail_on`)
+Teams can use `gem-pr-review` as an automated branch protection check:
+- Setting `fail_on: P1` configures the action to fail (exit code 1) if any `P0` or `P1` defect is detected.
+- Setting `fail_on: P0` blocks only on critical security flaws or severe data corruption issues.
+- Setting `fail_on: none` (default) allows reviews to publish findings as comments without failing the build.
+
+### 4. Reusable Starter Workflow
+A complete starter workflow template is provided at [`.github/workflows/gem-pr-review.yml`](.github/workflows/gem-pr-review.yml):
+
+```yaml
+name: 'Gem PR Review'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: AI PR Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Gem PR Review
+        uses: xpepper/pr-review-gemini@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: balanced
+          fail_on: P1
+          incremental: auto
+          action: publish
+```
+
+
 
 
 

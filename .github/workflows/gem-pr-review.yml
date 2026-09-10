@@ -1,0 +1,26 @@
+name: 'Gem PR Review'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: AI PR Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Gem PR Review
+        uses: xpepper/pr-review-gemini@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: balanced
+          fail_on: P1
+          incremental: auto
+          action: publish

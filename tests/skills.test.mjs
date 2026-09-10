@@ -114,4 +114,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /extractJsonEnvelope/i, 'Should mention extractJsonEnvelope');
     assert.match(content, /normalizeFindingCandidate/i, 'Should mention normalizeFindingCandidate');
   });
+
+  it('documents reusable GitHub Action and automated CI review workflow (action.yml)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /action\.yml|GitHub Action/i, 'Should document action.yml or GitHub Action');
+    assert.match(content, /fail_on/i, 'Should document fail_on input');
+    assert.match(content, /synchronize/i, 'Should document synchronize event auto-detection');
+    assert.match(content, /starter workflow|\.github\/workflows\/gem-pr-review\.yml/i, 'Should document starter workflow');
+  });
 });
+

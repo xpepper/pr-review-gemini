@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (310 tests across 74 suites, 0 failures)
+* **Current Branch**: `feat/github-action-ci`
+* **Test Suite**: `npm test` runs and passes (334 tests across 82 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -23,18 +23,19 @@
   - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
+  - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)`
 
 ---
 
-## Status: ALL_PHASE_7_INCREMENTS_COMPLETE / ROADMAP_DELIVERED
+## Status: INCREMENT_13_COMPLETE / PHASE_8_COMMENCED
 
-All 12 roadmap increments across Phases 1 through 7 are fully implemented, verified test-first (310 passing tests across 74 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
-Phase 7 backlog:
+All 13 roadmap increments across Phases 1 through 8 are fully implemented, verified test-first (334 passing tests across 82 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
 - [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
 - [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
+- [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
 
 ---
 
@@ -242,61 +243,54 @@ Possible future enhancements:
 2. **Additional Specialist Lenses**: Domain-specific lenses like Accessibility (a11y), Internationalization (i18n), or Database Migration safety.
 3. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
 
----
-
-## Next Session Mission: Increment 13 — Reusable GitHub Action & Automated CI Review Workflow (Issue #22)
+## Completed Work: Increment 13 — Reusable GitHub Action & Automated CI Review Workflow (Issue #22)
 
 - **GitHub Issue**: [#22: feat: reusable GitHub Action and automated CI PR review workflow (action.yml)](https://github.com/xpepper/pr-review-gemini/issues/22)
-- **Target Branch**: `feat/github-action-ci`
-
-### Goal
-Provide a reusable, zero-dependency composite GitHub Action (`action.yml`) and CI runner enabling teams to automate multi-lens code reviews, incremental re-reviews, and quality gates directly inside GitHub Actions workflows.
-
-### Requirements & Architecture
-1. **Action Definition (`action.yml`)**:
-   - Inputs:
-     - `github_token`: GitHub token (default: `${{ github.token }}`).
-     - `pr_number`: PR number (optional; auto-detected from `GITHUB_EVENT_PATH`).
-     - `mode`: Review mode (`quick`, `balanced`, `full`, `deep`, default: `balanced`).
-     - `incremental`: Auto-detect or force incremental review (`auto`, `true`, `false`, default: `auto`).
-     - `fail_on`: Quality gate severity threshold (`P0`, `P1`, `P2`, `none`, default: `none`).
-     - `action`: Review action (`publish`, `dry-run`, default: `publish`).
-     - `select`: Finding filter or interactive specification (optional).
-   - Outputs:
-     - `verdict`: `PASS` or `FAIL`.
-     - `findings_count`: Total findings detected.
-     - `blocking_count`: Number of blocking findings.
-     - `summary`: Markdown review summary.
-2. **Automated Event Detection**:
-   - Inspects `GITHUB_EVENT_PATH` to resolve PR number, repository, and action (`opened`, `synchronize`, `reopened`).
-   - On `synchronize` events, automatically enables `--incremental` re-review mode.
-3. **CI Quality Gate**:
-   - Exits with code 1 if findings meet or exceed `fail_on` threshold, allowing branch protection rules to block merging when defects are found.
-4. **Starter Workflow & Documentation**:
-   - Add template workflow `.github/workflows/gem-pr-review.yml`.
-   - Document GitHub Action usage and examples in `README.md` and `skills/gem-pr-review/SKILL.md`.
-5. **Test-First Verification**:
-   - Unit tests covering `action.yml` metadata, event payload parser, environment variable resolution, and step outputs.
+- **Branch**: `feat/github-action-ci`
+- **Changes Delivered**:
+  - `action.yml`:
+    - Defined composite GitHub Action at repository root (`using: "composite"`).
+    - Inputs: `github_token` (default: `${{ github.token }}`), `pr_number` (auto-detected), `mode` (`balanced`), `fail_on` (`none`), `incremental` (`auto`), `action` (`publish`), `select` (optional).
+    - Outputs: `verdict` (`PASS` or `FAIL`), `findings_count`, `blocking_count`, `summary`.
+    - Executed via `node "${{ github.action_path }}/scripts/ci-action.mjs"`.
+  - `src/ci.js`:
+    - `parseEventPayload(payloadOrPath)`: Extracts PR number, target repository, commit SHAs (`headSha`, `baseSha`), sender, and webhook action (`opened`, `synchronize`, `reopened`) from GitHub webhook JSON payload or file path (`GITHUB_EVENT_PATH`).
+    - `resolveCiEnvironment(options, env)`: Merges explicit CLI options, `INPUT_*` environment variables from GitHub Actions runners, event payload data, and standard GitHub environment variables (`GITHUB_REPOSITORY`, `GITHUB_TOKEN`, `GH_TOKEN`). Auto-selects `incremental = true` on `synchronize` events.
+    - `evaluateCiQualityGate(findings, options)`: Evaluates findings against configurable `fail_on` severity threshold (`P0`, `P1`, `P2`, `P3`, or `none`). Returns `passed` boolean, `verdict` (`PASS`/`FAIL`), `blockingCount`, and remediation details.
+    - `writeGitHubStepOutputs(outputs, options)`: Formats and appends key-value pairs and multiline outputs (using secure delimiter format) to `GITHUB_OUTPUT`.
+    - `formatCiSummary({ reviewResult, qualityGateResult, ciEnv })`: Generates clean markdown reports for job logs and `GITHUB_STEP_SUMMARY`.
+  - `scripts/ci-action.mjs`:
+    - Dedicated GitHub Actions runner script callable via node or composite step.
+    - Resolves CI environment, runs multi-lens review with diff anchoring, evaluates CI quality gate, writes step outputs, and exits with code 1 if blocking defects exist or code 0 on pass.
+  - `.github/workflows/gem-pr-review.yml`:
+    - Added starter workflow template configured for `pull_request: [opened, synchronize, reopened]` with `fail_on: P1`.
+  - `package.json`:
+    - Added npm script `"ci-review": "node scripts/ci-action.mjs"`.
+  - `src/reviewer.js`:
+    - Re-exported CI utilities (`parseEventPayload`, `resolveCiEnvironment`, `evaluateCiQualityGate`, `writeGitHubStepOutputs`, `formatCiSummary`).
+  - Documentation & Skill:
+    - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on composite GitHub Action inputs, outputs, automated event detection, quality gate enforcement, and starter workflow.
+  - Tests:
+    - Added 24 new unit and integration tests across `tests/ci.test.mjs` and `tests/skills.test.mjs`.
+    - Total **334 tests passing across 82 suites with 0 failures**.
 
 ---
 
-## Ready-to-Use Prompt for the Next Session
+## Future Opportunities / Phase 8 Ideas
 
-```text
-Please implement Increment 13 on this repository: "Reusable GitHub Action & Automated CI Review Workflow (action.yml)" (addressing Issue #22: https://github.com/xpepper/pr-review-gemini/issues/22).
+1. **Additional Specialist Lenses**: Domain-specific lenses like Accessibility (a11y), Internationalization (i18n), or Database Migration safety.
+2. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
+3. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
 
-Before writing code:
-1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/github-action-ci.
+---
 
-Implementation requirements:
-- Action Manifest (action.yml): Implement a standard composite GitHub Action at repo root with inputs (github_token, pr_number, mode, fail_on, incremental, action) and outputs (verdict, findings_count, blocking_count, summary).
-- Event Payload Detection: Automatically extract PR number and repo from GITHUB_EVENT_PATH, automatically selecting incremental mode on synchronize events.
-- CI Quality Gate: Fail the step (exit 1) if blocking defects meet or exceed the fail_on threshold.
-- Reusable Starter Workflow: Add .github/workflows/gem-pr-review.yml illustrating automated CI reviews.
-- Test-First Verification: Add unit tests verifying action.yml schema, event payload parsing, and output generation, keeping all 310+ existing tests passing.
-- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
-```
+## Next Session Mission: Increment 14 — Pre-Commit Hook Installer & Accessibility Specialist Lens
+
+- **Target Branch**: `feat/precommit-hook-a11y`
+- **Goal**:
+  1. Add `npm run setup-hook` / CLI installer to configure git pre-commit hooks running `npm run self-review`.
+  2. Implement an Accessibility & Inclusive Design specialist lens (`a11y`) evaluating WCAG / ARIA compliance in UI and web PRs.
+
 
 
 

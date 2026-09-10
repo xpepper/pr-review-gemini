@@ -101,5 +101,12 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses (truncated JSON, missing closing brackets, trailing commas, unescaped literal newlines in commentary, smart quotes).
   - Implement resilient envelope extraction (`extractJsonEnvelope`), deterministic JSON repair (`repairJsonString`), individual candidate object scanner (`extractCandidateObjects`), and structured contract normalization (`normalizeFindingCandidate`).
   - Seamlessly integrate into `parseMarkdownFindings` in `src/publish.js`, `src/subagents.js`, and `src/self-review.js` so PR reviews, cached reviews, and local self-reviews automatically preserve high-signal findings without dropping passes.
+- [x] **Increment 13: Reusable GitHub Action & Automated CI Review Workflow (#22)**
+  - Define composite GitHub Action manifest (`action.yml`) exposing inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`, `select`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
+  - Implement CI event payload resolution (`parseEventPayload`, `resolveCiEnvironment`) extracting PR number and repo from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` mode on `synchronize` events.
+  - Implement CI quality gate (`evaluateCiQualityGate`) and runner (`scripts/ci-action.mjs`) exiting with code 1 when blocking findings meet or exceed `fail_on` threshold (e.g. `fail_on: P1`).
+  - Add reusable starter workflow template `.github/workflows/gem-pr-review.yml`.
+  - Comprehensive unit and integration test suite (`tests/ci.test.mjs`, `tests/skills.test.mjs`) verifying action schema, event parsing, outputs, and quality gates.
+
 
 

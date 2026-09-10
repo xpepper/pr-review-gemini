@@ -58,6 +58,13 @@ import {
   getWorktreeDiff,
   generateSyntheticDiff,
 } from './self-review.js';
+import {
+  parseEventPayload,
+  resolveCiEnvironment,
+  evaluateCiQualityGate,
+  writeGitHubStepOutputs,
+  formatCiSummary,
+} from './ci.js';
 
 export {
   resolveLensPlan,
@@ -92,6 +99,11 @@ export {
   extractCandidateObjects,
   normalizeFindingCandidate,
   isValidFindingCandidate,
+  parseEventPayload,
+  resolveCiEnvironment,
+  evaluateCiQualityGate,
+  writeGitHubStepOutputs,
+  formatCiSummary,
 };
 
 export const REVIEW_MODES = {
