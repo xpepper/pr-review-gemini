@@ -23,8 +23,9 @@ Options:
   --staged            Review only staged changes (git diff --cached)
   --unstaged          Review only unstaged changes (git diff)
   --head              Review all changes against HEAD (git diff HEAD)
-  --no-untracked      Exclude untracked files from review
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
+  --role <id>         Run specific review role(s) (can be repeated or comma-separated)
+  --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --json              Output machine-readable JSON result
   --mock              Use synthetic runner for testing without LLM inference
   --help, -h          Display this help message
@@ -39,6 +40,8 @@ export function parseCliArgs(args) {
   let json = false;
   let mock = false;
   let showHelp = false;
+  const roles = [];
+  let replaceStandardRoles = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -64,6 +67,14 @@ export function parseCliArgs(args) {
       failOn = arg.slice('--fail-on='.length);
     } else if (arg === '--fail-on') {
       failOn = args[++i] || 'P1';
+    } else if (arg.startsWith('--role=')) {
+      const val = arg.slice('--role='.length);
+      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (arg === '--role') {
+      const val = args[++i] || '';
+      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (arg === '--replace-standard-roles') {
+      replaceStandardRoles = true;
     } else if (arg === '--json') {
       json = true;
     } else if (arg === '--mock') {
@@ -79,6 +90,8 @@ export function parseCliArgs(args) {
     json,
     mock,
     showHelp,
+    roles: roles.length > 0 ? roles : undefined,
+    replaceStandardRoles,
   };
 }
 
@@ -103,6 +116,8 @@ export async function main() {
       includeUntracked: parsed.includeUntracked,
       failOn: parsed.failOn,
       runnerFn,
+      roles: parsed.roles,
+      replaceStandardRoles: parsed.replaceStandardRoles,
     });
 
     if (parsed.json) {

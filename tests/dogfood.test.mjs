@@ -86,6 +86,30 @@ describe('Dogfood Review Script CLI', () => {
     assert.equal(parsed.repo, 'owner/repo');
   });
 
+  it('parses --role and --replace-standard-roles CLI flags in dogfood-review.mjs and self-review.mjs', async () => {
+    const { parseCliArgs: parseDogfoodArgs } = await import('../scripts/dogfood-review.mjs');
+    const parsedDogfood = parseDogfoodArgs([
+      '12',
+      '--role',
+      'accessibility',
+      '--role=migrations',
+      '--replace-standard-roles',
+    ]);
+
+    assert.equal(parsedDogfood.prNumber, 12);
+    assert.deepEqual(parsedDogfood.roles, ['accessibility', 'migrations']);
+    assert.equal(parsedDogfood.replaceStandardRoles, true);
+
+    const { parseCliArgs: parseSelfArgs } = await import('../scripts/self-review.mjs');
+    const parsedSelf = parseSelfArgs([
+      '--role=a11y,perf',
+      '--replace-standard-roles',
+    ]);
+
+    assert.deepEqual(parsedSelf.roles, ['a11y', 'perf']);
+    assert.equal(parsedSelf.replaceStandardRoles, true);
+  });
+
   it('publishes cached review findings when cache is present', async () => {
     const { saveReviewCache } = await import('../src/cache.js');
     const os = await import('node:os');

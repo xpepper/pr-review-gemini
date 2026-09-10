@@ -44,6 +44,8 @@ Options:
   --all             Publish all findings without interactive triage prompt
   --interactive     Prompt for interactive finding selection before publishing
   --select <spec>   Filter findings by indices, ranges, or severities (e.g. "1,3", "p0,p1")
+  --role <id>       Run specific review role(s) (can be repeated or comma-separated)
+  --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --cache-dir <dir> Custom directory for session cache (defaults to .gem-pr-cache)
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
@@ -69,6 +71,8 @@ export function parseCliArgs(args) {
   let self = false;
   let incremental = false;
   let showHelp = false;
+  const roles = [];
+  let replaceStandardRoles = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -98,6 +102,14 @@ export function parseCliArgs(args) {
       select = arg.slice('--select='.length);
     } else if (arg === '--select') {
       select = args[++i] || null;
+    } else if (arg.startsWith('--role=')) {
+      const val = arg.slice('--role='.length);
+      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (arg === '--role') {
+      const val = args[++i] || '';
+      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (arg === '--replace-standard-roles') {
+      replaceStandardRoles = true;
     } else if (arg.startsWith('--cache-dir=')) {
       cacheDir = arg.slice('--cache-dir='.length);
     } else if (arg === '--cache-dir') {
@@ -136,6 +148,8 @@ export function parseCliArgs(args) {
     mockGh,
     incremental,
     showHelp,
+    roles: roles.length > 0 ? roles : undefined,
+    replaceStandardRoles,
   };
 }
 
@@ -168,6 +182,8 @@ export async function main() {
     mockGh,
     incremental,
     showHelp,
+    roles,
+    replaceStandardRoles,
   } = parseCliArgs(process.argv.slice(2));
 
   if (showHelp) {
@@ -186,6 +202,8 @@ export async function main() {
         cwd,
         mode,
         runnerFn,
+        roles,
+        replaceStandardRoles,
       });
 
       console.log(result.summary);
@@ -335,6 +353,8 @@ export async function main() {
       publish: isInteractiveTriage ? false : shouldPublish,
       incremental,
       cacheDir,
+      roles,
+      replaceStandardRoles,
     });
 
     console.log('\n────────────────────────────────────────────────────────');
