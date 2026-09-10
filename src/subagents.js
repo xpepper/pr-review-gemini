@@ -204,6 +204,11 @@ export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
   // Determine role IDs to schedule
   let roleIdsToRun = [];
   if (enabledList && enabledList.length > 0) {
+    for (const requestedId of enabledList) {
+      if (!customRoles[requestedId] && !LENS_DEFINITIONS[requestedId]) {
+        throw new Error(`Unknown review role: "${requestedId}".`);
+      }
+    }
     roleIdsToRun = enabledList;
   } else if (replaceStandard) {
     roleIdsToRun = Object.keys(customRoles);
@@ -224,7 +229,7 @@ export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
     const standardDef = LENS_DEFINITIONS[lensId];
 
     if (!customRole && !standardDef) {
-      continue;
+      throw new Error(`Unknown review role: "${lensId}".`);
     }
 
     const lensOverride = resolvedConfig.lenses?.[lensId];
@@ -323,6 +328,10 @@ export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
         fallbacks,
       });
     }
+  }
+
+  if (plan.length === 0) {
+    throw new Error('No review roles scheduled. Cannot execute review with zero lenses.');
   }
 
   return plan;

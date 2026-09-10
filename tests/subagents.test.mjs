@@ -417,6 +417,30 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       assert.equal(plan.length, 3);
       assert.equal(plan[0].model, 'model-light');
     });
+
+    it('throws error when unknown role ID is explicitly requested', () => {
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', roles: ['nonexistent_role'] }),
+        /Unknown review role/i
+      );
+
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', config: { enabled_roles: ['missing_role'] } }),
+        /Unknown review role/i
+      );
+    });
+
+    it('throws error when execution plan schedules zero lenses', () => {
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', replaceStandardRoles: true, customRoles: {} }),
+        /No review roles scheduled|Cannot execute review with zero lenses/i
+      );
+
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', config: { replace_standard_roles: true, custom_roles: {} } }),
+        /No review roles scheduled|Cannot execute review with zero lenses/i
+      );
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {
