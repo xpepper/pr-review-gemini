@@ -22,7 +22,8 @@
   - [x] Orchestrator integration in `runReview` and `runSelfReview` passing role options and formatting summary reports with human-readable custom role names.
   - [x] MCP tools extended in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`) with `roles`, `replaceStandardRoles`, and `customRoles` parameters.
   - [x] CLI flags added to `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`: `--role <id>` and `--replace-standard-roles`.
-  - [x] 27 new unit and integration tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs` (361 total tests passing across 83 suites).
+  - [x] 37 new unit and integration tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs` (371 total tests passing across 83 suites).
+  - [x] Addressed all 7 review comments on PR #24 from @copilot-pull-request-reviewer; all review threads verified and resolved.
   - [x] Documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 13 / Issue #22: Reusable GitHub Action & Automated CI Review Workflow (action.yml)**
   - [x] Defined composite GitHub Action manifest (`action.yml`) at repository root with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`, `select`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).

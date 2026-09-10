@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/custom-review-roles`
-* **Test Suite**: `npm test` runs and passes (361 tests across 83 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (371 tests across 83 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -318,8 +318,9 @@ Possible future enhancements:
     - Added CLI flags `--role <id>` (repeatable or comma-separated: `--role=a11y,perf` or `--role a11y --role perf`) and `--replace-standard-roles`.
   - `skills/gem-pr-review/SKILL.md` & `README.md`:
     - Fully documented custom roles schema, role composition options, CLI flags, and MCP tool parameters with realistic configuration examples (accessibility, database migrations).
-  - Tests:
-    - Added 27 new tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs`. Total 361 tests passing across 83 suites.
+  - Tests & PR Review Loop:
+    - Added 37 new tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs`. Total 371 tests passing across 83 suites.
+    - Executed `/pr-review-loop` on PR #24 addressing all 7 review comments from `@copilot-pull-request-reviewer` with dedicated commits, verified replies, and resolved threads.
 
 ---
 
