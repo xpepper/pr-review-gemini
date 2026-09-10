@@ -18,6 +18,7 @@ import {
   promptFindingSelection,
   parseSelectionInput,
   filterFindings,
+  runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
@@ -29,6 +30,7 @@ export function printUsage(output = console.log) {
 Usage: node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 
 Options:
+  --self            Run one-shot self-review on local worktree changes instead of remote PR
   --quick           Fast triage (correctness, security, conventions)
   --balanced        Default review (5 specialist lenses)
   --full            Exhaustive review (6 lenses including tests)
@@ -64,6 +66,7 @@ export function parseCliArgs(args) {
   let model = null;
   let mock = false;
   let mockGh = process.env.MOCK_GH === '1';
+  let self = false;
   let incremental = false;
   let showHelp = false;
 
@@ -71,6 +74,8 @@ export function parseCliArgs(args) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') {
       showHelp = true;
+    } else if (arg === '--self') {
+      self = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
@@ -116,6 +121,7 @@ export function parseCliArgs(args) {
 
   return {
     prNumber,
+    self,
     mode,
     dryRun,
     publish,
@@ -140,13 +146,14 @@ index 1111111..2222222 100644
 @@ -1,3 +1,4 @@
  function main() {
 +  console.log("hello mock");
-   return 0;
+    return 0;
  }
 `;
 
 export async function main() {
   const {
     prNumber,
+    self,
     mode,
     dryRun,
     publish,
@@ -166,6 +173,27 @@ export async function main() {
   if (showHelp) {
     printUsage();
     process.exit(0);
+  }
+
+  if (self) {
+    const cwd = process.cwd();
+    const runnerFn = mock
+      ? async () => '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>'
+      : await createSubagentRunner({ cwd });
+
+    try {
+      const result = await runSelfReview({
+        cwd,
+        mode,
+        runnerFn,
+      });
+
+      console.log(result.summary);
+      process.exit(result.status === 'failed' ? 1 : 0);
+    } catch (err) {
+      console.error(`Self-review failed: ${err.message}`);
+      process.exit(1);
+    }
   }
 
   if (!prNumber) {

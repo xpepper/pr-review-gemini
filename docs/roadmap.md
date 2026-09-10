@@ -92,8 +92,11 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 - [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**
   - On capacity or rate limit errors (HTTP 429), automatically dispatch the configured backup tier (e.g. `heavy_fallbacks`).
   - Keep execution timeout-free: do not impose artificial plugin-level deadlines or stuck-reviewer heuristics.
-- [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**
-  - Expose a fail-closed tool for coding agents to review uncommitted local changes (staged, tracked, untracked) before finalizing tasks.
+- [x] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`) (#18)**
+  - Expose a fail-closed tool for coding agents to review uncommitted local changes (staged, tracked, untracked via synthetic diffs) before finalizing tasks or committing.
+  - Evaluate multi-lens review passes locally without remote PR numbers or network mutation dependencies.
+  - Return explicit pass/fail verdict (`passed` vs `failed`) blocking on P0/P1 issues with actionable remediation guidance.
+  - Expose MCP tools (`gem_self_review`, `gem_pr_review_self`) and CLI runners (`scripts/self-review.mjs`, `npm run self-review`, `dogfood-review.mjs --self`).
 - [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**
   - Recover contract-valid candidate finding blocks from partial or malformed lane history instead of dropping passes.
 

@@ -931,4 +931,216 @@ export async function createFileBackedDiff(diffText, options = {}) {
   };
 }
 
+/**
+ * Generates a unified git diff for an untracked (new) file.
+ *
+ * @param {string} filePath - Path to file (will be normalized)
+ * @param {string | Buffer} fileContent - File content
+ * @returns {string} Unified diff representation
+ */
+export function generateSyntheticDiff(filePath, fileContent) {
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return '';
+  }
+
+  // Normalize path: forward slashes, strip leading ./ or .\
+  let relPath = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (relPath.startsWith('"') && relPath.endsWith('"')) {
+    relPath = relPath.slice(1, -1);
+  }
+
+  // Check if binary (Buffer or string containing null byte)
+  const isBinary =
+    Buffer.isBuffer(fileContent) ||
+    (typeof fileContent === 'string' && fileContent.includes('\0'));
+
+  if (isBinary) {
+    return [
+      `diff --git a/${relPath} b/${relPath}`,
+      `new file mode 100644`,
+      `Binary files /dev/null and b/${relPath} differ`,
+      '',
+    ].join('\n');
+  }
+
+  const text = typeof fileContent === 'string' ? fileContent : fileContent.toString('utf8');
+
+  if (text.length === 0) {
+    return [
+      `diff --git a/${relPath} b/${relPath}`,
+      `new file mode 100644`,
+      `--- /dev/null`,
+      `+++ b/${relPath}`,
+      '',
+    ].join('\n');
+  }
+
+  const hasTrailingNewline = text.endsWith('\n') || text.endsWith('\r\n');
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let rawLines = normalized.split('\n');
+  if (hasTrailingNewline && rawLines[rawLines.length - 1] === '') {
+    rawLines.pop();
+  }
+
+  const lineCount = rawLines.length;
+  const hunkHeader = `@@ -0,0 +1,${lineCount} @@`;
+  const diffLines = rawLines.map((line) => `+${line}`);
+
+  const lines = [
+    `diff --git a/${relPath} b/${relPath}`,
+    `new file mode 100644`,
+    `--- /dev/null`,
+    `+++ b/${relPath}`,
+    hunkHeader,
+    ...diffLines,
+  ];
+
+  if (!hasTrailingNewline) {
+    lines.push('\\ No newline at end of file');
+  }
+
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * Acquires local worktree changes (staged, unstaged, and untracked) without remote PR dependencies.
+ *
+ * @param {object} [options]
+ * @param {string} [options.cwd=process.cwd()] - Working directory
+ * @param {'all' | 'staged' | 'unstaged' | 'head'} [options.scope='all'] - Scope of changes
+ * @param {boolean} [options.includeUntracked] - Whether to include untracked files (defaults to true for 'all' and 'unstaged', false for 'staged')
+ * @param {Function} [options.execGitFn] - Custom git executor for testing
+ * @param {Function} [options.execFileFn] - Custom execFile function for testing
+ * @param {object} [options.fsModule=fs] - Injected filesystem module
+ * @returns {Promise<string>} Unified diff string
+ */
+export async function getWorktreeDiff(options = {}) {
+  const {
+    cwd = process.cwd(),
+    scope = 'all',
+    includeUntracked,
+    execGitFn,
+    execFileFn,
+    fsModule = fs,
+  } = options;
+
+  const runGit = async (args) => {
+    if (execGitFn) {
+      return execGitFn(args, { cwd });
+    }
+    if (execFileFn) {
+      return new Promise((resolve, reject) => {
+        execFileFn('git', args, { cwd }, (err, stdout, stderr) => {
+          if (err) {
+            const detail = (stderr && stderr.trim()) || err.message;
+            reject(new Error(detail));
+            return;
+          }
+          resolve(typeof stdout === 'string' ? stdout : stdout?.toString?.() ?? '');
+        });
+      });
+    }
+    try {
+      const { stdout } = await execFileAsync('git', args, { cwd });
+      return stdout;
+    } catch (err) {
+      const detail = (err.stderr && err.stderr.trim()) || err.message;
+      throw new Error(detail);
+    }
+  };
+
+  const shouldIncludeUntracked =
+    includeUntracked !== undefined
+      ? Boolean(includeUntracked)
+      : scope !== 'staged';
+
+  let trackedDiff = '';
+
+  try {
+    if (scope === 'staged') {
+      trackedDiff = await runGit(['diff', '--cached']);
+    } else if (scope === 'unstaged') {
+      trackedDiff = await runGit(['diff']);
+    } else {
+      // scope === 'all' or 'head'
+      try {
+        trackedDiff = await runGit(['diff', 'HEAD']);
+      } catch (err) {
+        // If HEAD does not exist (e.g. unborn branch), fall back to --cached + unstaged
+        if (
+          err.message?.includes('unknown revision') ||
+          err.message?.includes('HEAD') ||
+          err.message?.includes('ambiguous argument')
+        ) {
+          const staged = await runGit(['diff', '--cached']);
+          const unstaged = await runGit(['diff']);
+          trackedDiff = [staged, unstaged].filter(Boolean).join('\n');
+        } else {
+          throw err;
+        }
+      }
+    }
+  } catch (err) {
+    throw new Error(`Failed to acquire worktree diff: ${err.message}`);
+  }
+
+  let untrackedDiff = '';
+  if (shouldIncludeUntracked) {
+    try {
+      const statusOutput = await runGit(['status', '--porcelain', '-uall']);
+      const lines = statusOutput.split(/\r?\n/);
+      const untrackedFiles = [];
+
+      for (const line of lines) {
+        if (line.startsWith('?? ')) {
+          let rawPath = line.slice(3).trim();
+          if (rawPath.startsWith('"') && rawPath.endsWith('"')) {
+            rawPath = rawPath.slice(1, -1).replace(/\\"/g, '"');
+          }
+          if (rawPath) {
+            untrackedFiles.push(rawPath);
+          }
+        }
+      }
+
+      const diffParts = [];
+      for (const relPath of untrackedFiles) {
+        const fullPath = path.resolve(cwd, relPath);
+        if (fsModule.existsSync(fullPath)) {
+          const stat = fsModule.statSync(fullPath);
+          if (stat.isFile()) {
+            let content;
+            try {
+              const buf = fsModule.readFileSync(fullPath);
+              const isBinary = buf.includes(0);
+              content = isBinary ? buf : buf.toString('utf8');
+            } catch {
+              continue;
+            }
+            const synth = generateSyntheticDiff(relPath, content);
+            if (synth) {
+              diffParts.push(synth);
+            }
+          }
+        }
+      }
+
+      if (diffParts.length > 0) {
+        untrackedDiff = diffParts.join('');
+      }
+    } catch (err) {
+      if (err.message?.includes('not a git repository')) {
+        throw new Error(`Failed to acquire worktree diff: ${err.message}`);
+      }
+    }
+  }
+
+  const combined = [trackedDiff.trim(), untrackedDiff.trim()]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return combined ? combined + '\n' : '';
+}
+
+
 

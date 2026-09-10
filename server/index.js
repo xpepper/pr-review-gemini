@@ -35,6 +35,7 @@ import {
   listVerificationProfiles,
   formatVerificationSummary,
 } from '../src/verify.js';
+import { runSelfReview } from '../src/self-review.js';
 
 export const MCP_TOOLS = [
   {
@@ -282,6 +283,88 @@ export const MCP_TOOLS = [
       required: ['prNumber'],
     },
   },
+  {
+    name: 'gem_self_review',
+    description:
+      'Executes a one-shot coding-task self-review on uncommitted local working tree changes (staged, unstaged, untracked). Returns fail-closed status ("passed" vs "failed") based on blocking P0/P1 issues.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scope: {
+          type: 'string',
+          enum: ['all', 'staged', 'unstaged', 'head'],
+          description: 'Working tree changes scope to inspect (default: "all")',
+          default: 'all',
+        },
+        mode: {
+          type: 'string',
+          enum: ['balanced', 'quick', 'full', 'deep'],
+          description: 'Review mode (balanced: 5 lenses, quick: 3 lenses, full: 6 lenses, deep: 1 lens)',
+          default: 'balanced',
+        },
+        includeUntracked: {
+          type: 'boolean',
+          description: 'Whether to include untracked new files via synthetic diffs (default: true)',
+          default: true,
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional diff text override to review instead of querying git worktree',
+        },
+        failOn: {
+          type: 'string',
+          enum: ['P0', 'P1', 'P2', 'P3'],
+          description: 'Minimum severity threshold that triggers failure (default: "P1")',
+          default: 'P1',
+        },
+        customInstructions: {
+          type: 'string',
+          description: 'Optional additional instructions for review lenses',
+        },
+      },
+    },
+  },
+  {
+    name: 'gem_pr_review_self',
+    description:
+      'Alias for gem_self_review. Executes a one-shot coding-task self-review on uncommitted local working tree changes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        scope: {
+          type: 'string',
+          enum: ['all', 'staged', 'unstaged', 'head'],
+          description: 'Working tree changes scope to inspect (default: "all")',
+          default: 'all',
+        },
+        mode: {
+          type: 'string',
+          enum: ['balanced', 'quick', 'full', 'deep'],
+          description: 'Review mode (balanced: 5 lenses, quick: 3 lenses, full: 6 lenses, deep: 1 lens)',
+          default: 'balanced',
+        },
+        includeUntracked: {
+          type: 'boolean',
+          description: 'Whether to include untracked new files via synthetic diffs (default: true)',
+          default: true,
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional diff text override to review instead of querying git worktree',
+        },
+        failOn: {
+          type: 'string',
+          enum: ['P0', 'P1', 'P2', 'P3'],
+          description: 'Minimum severity threshold that triggers failure (default: "P1")',
+          default: 'P1',
+        },
+        customInstructions: {
+          type: 'string',
+          description: 'Optional additional instructions for review lenses',
+        },
+      },
+    },
+  },
 ];
 
 /**
@@ -293,6 +376,7 @@ export function createMcpHandler(options = {}) {
     publishReviewFn = publishReview,
     publishCachedReviewFn = publishCachedReview,
     runReviewFn = runReview,
+    runSelfReviewFn = runSelfReview,
     fetchPriorReviewsFn = fetchPriorReviews,
     classifyCommitRelationshipFn = classifyCommitRelationship,
     getIncrementalDiffFn = getIncrementalDiff,
@@ -687,6 +771,37 @@ export function createMcpHandler(options = {}) {
                         null,
                         2
                       ),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_self_review' ||
+              toolName === 'gem_pr_review_self' ||
+              toolName === 'pr_review_self'
+            ) {
+              const runner = runnerFn || (await createSubagentRunner({ cwd }));
+              const selfReviewResult = await runSelfReviewFn({
+                cwd,
+                scope: args.scope || 'all',
+                mode: args.mode || 'balanced',
+                includeUntracked: args.includeUntracked !== false,
+                diffText: args.diffText,
+                failOn: args.failOn || 'P1',
+                customInstructions: args.customInstructions,
+                runnerFn: runner,
+              });
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(selfReviewResult, null, 2),
                     },
                   ],
                 },

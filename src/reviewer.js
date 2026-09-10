@@ -45,6 +45,13 @@ import {
   filterFindings,
   promptFindingSelection,
 } from './selection.js';
+import {
+  runSelfReview,
+  evaluateSelfReviewVerdict,
+  formatSelfReviewSummary,
+  getWorktreeDiff,
+  generateSyntheticDiff,
+} from './self-review.js';
 
 export {
   resolveLensPlan,
@@ -68,6 +75,11 @@ export {
   promptFindingSelection,
   isQuotaOrCapacityError,
   isQuotaError,
+  runSelfReview,
+  evaluateSelfReviewVerdict,
+  formatSelfReviewSummary,
+  getWorktreeDiff,
+  generateSyntheticDiff,
 };
 
 export const REVIEW_MODES = {

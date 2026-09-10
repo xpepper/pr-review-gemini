@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test 'tests/**/*.test.mjs' 'tests/**/*.test.js'",
-    "review": "node scripts/dogfood-review.mjs"
+    "review": "node scripts/dogfood-review.mjs",
+    "self-review": "node scripts/self-review.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

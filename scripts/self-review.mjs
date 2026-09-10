@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+/**
+ * scripts/self-review.mjs — One-Shot Coding-Task Self-Review CLI Runner
+ *
+ * Evaluates uncommitted git worktree changes through specialist review lenses
+ * and enforces a fail-closed safety gate before finishing tasks or committing.
+ */
+import { runSelfReview } from '../src/self-review.js';
+import { createSubagentRunner } from '../src/subagents.js';
+import { loadConfig } from '../src/config.js';
+
+export function printUsage(output = console.log) {
+  output(`
+Usage: node scripts/self-review.mjs [options]
+
+Options:
+  --quick             Fast triage (correctness, security, conventions)
+  --balanced          Default review (5 specialist lenses)
+  --full              Exhaustive review (6 lenses including tests)
+  --deep              Deep-focus review on correctness
+  --mode <mode>       Review mode name (quick, balanced, full, deep)
+  --all               Review all uncommitted changes (staged + unstaged + untracked) [default]
+  --staged            Review only staged changes (git diff --cached)
+  --unstaged          Review only unstaged changes (git diff)
+  --head              Review all changes against HEAD (git diff HEAD)
+  --no-untracked      Exclude untracked files from review
+  --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
+  --json              Output machine-readable JSON result
+  --mock              Use synthetic runner for testing without LLM inference
+  --help, -h          Display this help message
+`);
+}
+
+export function parseCliArgs(args) {
+  let mode = 'balanced';
+  let scope = 'all';
+  let includeUntracked = true;
+  let failOn = 'P1';
+  let json = false;
+  let mock = false;
+  let showHelp = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--help' || arg === '-h') {
+      showHelp = true;
+    } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
+      mode = arg.slice(2);
+    } else if (arg.startsWith('--mode=')) {
+      mode = arg.slice('--mode='.length);
+    } else if (arg === '--mode') {
+      mode = args[++i] || 'balanced';
+    } else if (arg === '--staged') {
+      scope = 'staged';
+    } else if (arg === '--unstaged') {
+      scope = 'unstaged';
+    } else if (arg === '--all') {
+      scope = 'all';
+    } else if (arg === '--head') {
+      scope = 'head';
+    } else if (arg === '--no-untracked') {
+      includeUntracked = false;
+    } else if (arg.startsWith('--fail-on=')) {
+      failOn = arg.slice('--fail-on='.length);
+    } else if (arg === '--fail-on') {
+      failOn = args[++i] || 'P1';
+    } else if (arg === '--json') {
+      json = true;
+    } else if (arg === '--mock') {
+      mock = true;
+    }
+  }
+
+  return {
+    mode,
+    scope,
+    includeUntracked,
+    failOn,
+    json,
+    mock,
+    showHelp,
+  };
+}
+
+export async function main() {
+  const parsed = parseCliArgs(process.argv.slice(2));
+
+  if (parsed.showHelp) {
+    printUsage();
+    process.exit(0);
+  }
+
+  const cwd = process.cwd();
+  const runnerFn = parsed.mock
+    ? async () => '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>'
+    : await createSubagentRunner({ cwd });
+
+  try {
+    const result = await runSelfReview({
+      cwd,
+      scope: parsed.scope,
+      mode: parsed.mode,
+      includeUntracked: parsed.includeUntracked,
+      failOn: parsed.failOn,
+      runnerFn,
+    });
+
+    if (parsed.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(result.summary);
+    }
+
+    if (result.status === 'failed') {
+      process.exit(1);
+    } else {
+      process.exit(0);
+    }
+  } catch (err) {
+    console.error(`Self-review execution error: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+// Only run automatically when executed directly from CLI
+const isDirectExecution =
+  process.argv[1] &&
+  (process.argv[1].endsWith('self-review.mjs') || process.argv[1].endsWith('self-review'));
+
+if (isDirectExecution) {
+  main();
+}

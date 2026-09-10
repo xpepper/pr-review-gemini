@@ -313,5 +313,61 @@ When executing review passes across specialist subagents, errors are classified 
 ### 3. Zero Timeouts
 - Review subagents execute without artificial plugin-imposed execution deadlines, timers, or stuck-reviewer heuristics.
 
+---
+
+## One-Shot Coding-Task Self-Review (`gem_self_review`)
+
+`gem-pr-review` provides a fail-closed self-review tool for coding agents to inspect local uncommitted working tree changes before finalizing tasks or creating commits, ensuring defects are caught and corrected early without requiring a published GitHub pull request.
+
+### 1. Local Git Worktree Diff Acquisition
+- Inspects uncommitted changes across the local repository without remote PR or GitHub API dependencies:
+  - **Staged changes**: `git diff --cached`
+  - **Unstaged changes**: `git diff`
+  - **Untracked files**: Automatically discovered via `git status --porcelain` and converted into synthetic unified diffs with valid hunk headers.
+  - **Combined scope**: `git diff HEAD` combined with untracked synthetic diffs (default `scope: "all"`).
+- Handles clean working trees gracefully: returns immediate `status: "passed"` with zero defects when no uncommitted changes exist.
+
+### 2. Local Multi-Lens Analysis
+- Dispatches specialist review lenses (e.g. Correctness, Contracts, Security, Performance, Conventions) locally using Copilot SDK or configured model tiers.
+- Supports all standard modes: `--quick` (3 lenses), `--balanced` (5 lenses), `--full` (6 lenses), and `--deep` (focused correctness).
+- Reuses existing prompt builders, structured Markdown findings envelopes, and deduplication logic without network mutations.
+
+### 3. Fail-Closed Safety Gate
+- Returns an explicit status and verdict:
+  - `status: "passed"` (`verdict: "PASS"`) when zero blocking issues are found.
+  - `status: "failed"` (`verdict: "FAIL"`) when blocking issues (`P0` or `P1`) are detected.
+- **Configurable Threshold (`failOn`)**: Defaults to `P1`, blocking on any `P0` or `P1` defect. Can be configured to `P0`, `P2`, etc.
+- **Actionable Remediation**: Formats concrete remediation steps for each blocking defect so coding agents can immediately self-correct before committing.
+
+### 4. MCP Tool Reference (`gem_self_review`)
+Agents can invoke self-review via MCP:
+- **Tool**: `gem_self_review` (or alias `gem_pr_review_self`)
+- **Arguments**:
+  - `scope` *(string)*: `"all"` (default), `"staged"`, `"unstaged"`, or `"head"`.
+  - `mode` *(string)*: `"balanced"` (default), `"quick"`, `"full"`, or `"deep"`.
+  - `includeUntracked` *(boolean)*: Include new untracked files (default: `true`).
+  - `failOn` *(string)*: Severity threshold to trigger failure (`"P0"`, `"P1"`, `"P2"`, default: `"P1"`).
+  - `diffText` *(string, optional)*: Direct unified diff text override.
+  - `customInstructions` *(string, optional)*: Additional review guidance.
+
+### 5. CLI Execution
+- **Dedicated Self-Review Runner**:
+  ```bash
+  # Review all uncommitted changes
+  npm run self-review
+
+  # Fast triage on staged changes only
+  node scripts/self-review.mjs --staged --quick
+
+  # Machine-readable JSON output
+  node scripts/self-review.mjs --json
+  ```
+- **Dogfood Review Runner Integration**:
+  ```bash
+  node scripts/dogfood-review.mjs --self --quick
+  ```
+- **Exit Code**: Returns `0` on `status: "passed"` and `1` on `status: "failed"`, suitable for pre-commit git hooks and agent loop guardrails.
+
+
 
 
