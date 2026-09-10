@@ -458,5 +458,46 @@ Expensive computation inside hot path.
       // Summary includes notice of file-backed transport
       assert.match(result.summary, /file-backed transport/i);
     });
+
+    it('automatically retries failing subagent lenses on configured fallback models on quota/capacity errors', async () => {
+      const customConfig = {
+        heavy_fallbacks: ['claude-3.5-sonnet'],
+      };
+
+      const triedModels = [];
+      const mockRunner = async ({ lens, model }) => {
+        triedModels.push({ lens: lens.id, model });
+        if (lens.id === 'correctness' && model !== 'claude-3.5-sonnet') {
+          const err = new Error('HTTP 429: Too Many Requests');
+          err.status = 429;
+          throw err;
+        }
+        return `
+### [P0] Critical concurrency defect
+- **File**: \`src/app.js:10\`
+- **Side**: RIGHT
+- **Confidence**: 0.95
+
+Race condition on state initialization.
+`;
+      };
+
+      const result = await runReview({
+        prNumber: 88,
+        mode: 'deep',
+        diffText: sampleDiff,
+        config: customConfig,
+        runnerFn: mockRunner,
+        dryRun: true,
+      });
+
+      assert.equal(result.errors.length, 0);
+      assert.equal(result.findings.length, 1);
+      assert.equal(result.findings[0].severity, 'P0');
+      assert.deepEqual(
+        triedModels.map((m) => m.model),
+        ['claude-3.7-sonnet', 'claude-3.5-sonnet']
+      );
+    });
   });
 });

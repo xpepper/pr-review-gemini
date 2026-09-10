@@ -17,6 +17,8 @@ import {
   loadConfig,
   getModelForTier,
   getReasoningEffortForTier,
+  getFallbackModels,
+  getFallbackModelsForTier,
   DEFAULT_CONFIG,
   VALID_TIERS,
 } from './config.js';
@@ -24,6 +26,113 @@ import { parseMarkdownFindings } from './publish.js';
 import { isLargeDiff, createFileBackedDiff } from './diff.js';
 
 const execFileAsync = promisify(execFile);
+
+const QUOTA_ERROR_CODES = new Set([
+  'RESOURCE_EXHAUSTED',
+  'RATE_LIMIT_EXCEEDED',
+  'INSUFFICIENT_QUOTA',
+  'QUOTA_EXCEEDED',
+  'MODEL_CAPACITY_EXCEEDED',
+  'ERR_RATE_LIMITED',
+]);
+
+const NON_QUOTA_ERROR_NAMES = new Set([
+  'TypeError',
+  'SyntaxError',
+  'ReferenceError',
+  'RangeError',
+  'URIError',
+]);
+
+const NON_QUOTA_NETWORK_CODES = new Set([
+  'ETIMEDOUT',
+  'ESOCKETTIMEDOUT',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+]);
+
+/**
+ * Checks whether an error represents an API quota exhaustion, rate limit (HTTP 429),
+ * or model/server capacity constraint.
+ *
+ * @param {any} error - Error object, string, or response
+ * @returns {boolean}
+ */
+export function isQuotaOrCapacityError(error) {
+  if (!error) return false;
+
+  // Reject pure programming syntax/type/reference errors
+  if (
+    error instanceof TypeError ||
+    error instanceof SyntaxError ||
+    error instanceof ReferenceError ||
+    error instanceof RangeError
+  ) {
+    return false;
+  }
+  if (typeof error === 'object' && NON_QUOTA_ERROR_NAMES.has(error.name)) {
+    return false;
+  }
+
+  // Check HTTP status code (429 Too Many Requests)
+  const status = error.status || error.statusCode || error.response?.status || error.response?.statusCode;
+  if (status === 429 || error.code === 429 || error.code === '429') {
+    return true;
+  }
+
+  // Check explicit error codes
+  const rawCode = error.code || error.error?.code || error.response?.data?.error?.code;
+  if (typeof rawCode === 'string') {
+    const upperCode = rawCode.toUpperCase();
+    if (QUOTA_ERROR_CODES.has(upperCode)) {
+      return true;
+    }
+    if (NON_QUOTA_NETWORK_CODES.has(upperCode)) {
+      return false;
+    }
+  }
+
+  // Inspect textual message and response details
+  const messageCandidates = [
+    typeof error === 'string' ? error : '',
+    error.message,
+    error.details,
+    error.response?.data?.message,
+    error.response?.data?.error?.message,
+    error.error?.message,
+    error.statusText,
+  ].filter(Boolean);
+
+  const fullText = messageCandidates.join(' ');
+  if (!fullText) return false;
+
+  const hasQuotaOrRateLimit = /quota|rate[\s_-]*limit|too many requests|resource[\s_-]*exhausted|\b(tpm|rpm)\b/i.test(fullText);
+  const hasCapacityOrOverload = /\bcapacity\b|\boverloaded\b/i.test(fullText);
+
+  // If text does not mention quota, rate-limit, capacity or overload, reject
+  if (!hasQuotaOrRateLimit && !hasCapacityOrOverload) {
+    return false;
+  }
+
+  // If status is 503 and mentions capacity/overloaded, it's a capacity error
+  if (status === 503 && hasCapacityOrOverload) {
+    return true;
+  }
+
+  if (
+    /\b429\b/.test(fullText) ||
+    hasQuotaOrRateLimit ||
+    hasCapacityOrOverload
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export const isQuotaError = isQuotaOrCapacityError;
 
 /**
  * Default tier and reasoning effort assignments per specialist lens.
@@ -92,6 +201,14 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       }
     }
 
+    // Resolve fallback models: lens override -> tier fallbacks (excluding primary model)
+    const rawFallbacks = lensOverride?.fallbacks
+      ? lensOverride.fallbacks
+      : getFallbackModels(resolvedConfig, { tier, lensId });
+    const fallbacks = (Array.isArray(rawFallbacks) ? rawFallbacks : []).filter(
+      (fb) => fb && fb !== model
+    );
+
     plan.push({
       lensId,
       lensDef,
@@ -99,6 +216,7 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       tier,
       model,
       reasoningEffort,
+      fallbacks,
     });
   }
 
@@ -192,6 +310,7 @@ export async function dispatchSubagentsParallel({
   customInstructions,
   runnerFn,
   diffTransport,
+  config,
 }) {
   if (!Array.isArray(plan) || plan.length === 0) {
     return { results: [], findings: [], errors: [] };
@@ -223,44 +342,94 @@ export async function dispatchSubagentsParallel({
         ? buildSdkReaderTools(activeTransport.reader)
         : [];
 
-      try {
-        const rawOutput = await runnerFn({
-          lens: item.lensDef,
-          prompt,
-          mode: item.mode,
-          tier: item.tier,
-          model: item.model,
-          reasoningEffort: item.reasoningEffort,
-          diffTransport: activeTransport,
-          tools: sdkTools,
-        });
+      const primaryModel = item.model;
+      const configuredFallbacks = Array.isArray(item.fallbacks)
+        ? item.fallbacks
+        : config
+          ? getFallbackModels(config, { tier: item.tier, lensId: item.lensId })
+          : [];
+      const fallbackModels = (configuredFallbacks || []).filter((m) => m && m !== primaryModel);
+      const modelCandidates = [primaryModel, ...fallbackModels];
 
-        const parsed = parseMarkdownFindings(rawOutput || '');
-        const lensFindings = parsed.map((f) => ({
-          ...f,
-          file: f.filePath || f.file,
-          filePath: f.filePath || f.file,
-          lens: item.lensId,
-        }));
+      let lastError = null;
+      const attempts = [];
 
-        return {
-          lensId: item.lensId,
-          tier: item.tier,
-          model: item.model,
-          findings: lensFindings,
-          rawOutput,
-          error: null,
-        };
-      } catch (err) {
-        return {
-          lensId: item.lensId,
-          tier: item.tier,
-          model: item.model,
-          findings: [],
-          rawOutput: '',
-          error: err,
-        };
+      for (let i = 0; i < modelCandidates.length; i++) {
+        const candidateModel = modelCandidates[i];
+        const isFallback = i > 0;
+
+        try {
+          const rawOutput = await runnerFn({
+            lens: item.lensDef,
+            prompt,
+            mode: item.mode,
+            tier: item.tier,
+            model: candidateModel,
+            reasoningEffort: item.reasoningEffort,
+            diffTransport: activeTransport,
+            tools: sdkTools,
+            isFallback,
+            attemptIndex: i,
+          });
+
+          const parsed = parseMarkdownFindings(rawOutput || '');
+          const lensFindings = parsed.map((f) => ({
+            ...f,
+            file: f.filePath || f.file,
+            filePath: f.filePath || f.file,
+            lens: item.lensId,
+          }));
+
+          attempts.push({
+            model: candidateModel,
+            isFallback,
+            success: true,
+          });
+
+          return {
+            lensId: item.lensId,
+            tier: item.tier,
+            model: candidateModel,
+            primaryModel,
+            fallbackUsed: isFallback,
+            fallbackModelsTried: attempts.filter((a) => a.isFallback).map((a) => a.model),
+            attemptsCount: attempts.length,
+            findings: lensFindings,
+            rawOutput,
+            error: null,
+          };
+        } catch (err) {
+          lastError = err;
+          attempts.push({
+            model: candidateModel,
+            isFallback,
+            success: false,
+            error: err,
+          });
+
+          const isQuota = isQuotaOrCapacityError(err);
+          const hasMoreFallbacks = i < modelCandidates.length - 1;
+
+          if (isQuota && hasMoreFallbacks) {
+            continue;
+          }
+
+          break;
+        }
       }
+
+      return {
+        lensId: item.lensId,
+        tier: item.tier,
+        model: primaryModel,
+        primaryModel,
+        fallbackUsed: attempts.some((a) => a.isFallback),
+        fallbackModelsTried: attempts.filter((a) => a.isFallback).map((a) => a.model),
+        attemptsCount: attempts.length,
+        findings: [],
+        rawOutput: '',
+        error: lastError,
+      };
     });
 
     const results = await Promise.all(tasks);

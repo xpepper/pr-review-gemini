@@ -21,6 +21,8 @@ import {
   dispatchSubagentsParallel,
   createSubagentRunner,
   DEFAULT_LENS_TIERS,
+  isQuotaOrCapacityError,
+  isQuotaError,
 } from './subagents.js';
 import {
   fetchPriorReviews,
@@ -64,6 +66,8 @@ export {
   parseSelectionInput,
   filterFindings,
   promptFindingSelection,
+  isQuotaOrCapacityError,
+  isQuotaError,
 };
 
 export const REVIEW_MODES = {
@@ -505,6 +509,7 @@ export async function runReview({
         customInstructions,
         runnerFn,
         diffTransport,
+        config: resolvedConfig,
       });
       allFindings = subagentResult.findings;
       subagentErrors = subagentResult.errors;

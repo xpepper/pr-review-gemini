@@ -89,7 +89,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Add in-session / file-backed caching (`publish-later` / `--publish-cached`) to retain reviewed findings and publish without re-evaluating model inference passes.
   - Reject/invalidate stale cached findings if PR head commit has advanced.
   - Expose MCP tool `gem_pr_review_publish_cached`.
-- [ ] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**
+- [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**
   - On capacity or rate limit errors (HTTP 429), automatically dispatch the configured backup tier (e.g. `heavy_fallbacks`).
   - Keep execution timeout-free: do not impose artificial plugin-level deadlines or stuck-reviewer heuristics.
 - [ ] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**

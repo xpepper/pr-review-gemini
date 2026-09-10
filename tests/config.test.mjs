@@ -12,6 +12,8 @@ import {
   loadConfig,
   getModelForTier,
   getReasoningEffortForTier,
+  getFallbackModelsForTier,
+  getFallbackModels,
 } from '../src/config.js';
 
 describe('Configuration & Model Tier Management', () => {
@@ -44,6 +46,14 @@ describe('Configuration & Model Tier Management', () => {
         medium: 'off',
         heavy: 'medium',
       });
+      assert.deepEqual(DEFAULT_CONFIG.fallbacks, {
+        light: [],
+        medium: [],
+        heavy: [],
+      });
+      assert.deepEqual(DEFAULT_CONFIG.heavy_fallbacks, []);
+      assert.deepEqual(DEFAULT_CONFIG.medium_fallbacks, []);
+      assert.deepEqual(DEFAULT_CONFIG.light_fallbacks, []);
       assert.deepEqual(DEFAULT_CONFIG.lenses, {});
     });
 
@@ -288,6 +298,79 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(Object.prototype.polluted, undefined);
     });
 
+    it('resolves top-level tier fallback arrays (heavy_fallbacks, medium_fallbacks, light_fallbacks)', () => {
+      const userConfig = {
+        heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'],
+        medium_fallbacks: ['gpt-4o-mini'],
+      };
+
+      const resolved = resolveConfig({ userConfig });
+      assert.deepEqual(resolved.heavy_fallbacks, ['claude-3.5-sonnet', 'gpt-4o']);
+      assert.deepEqual(resolved.medium_fallbacks, ['gpt-4o-mini']);
+      assert.deepEqual(resolved.light_fallbacks, []);
+      assert.deepEqual(resolved.fallbacks, {
+        heavy: ['claude-3.5-sonnet', 'gpt-4o'],
+        medium: ['gpt-4o-mini'],
+        light: [],
+      });
+    });
+
+    it('resolves nested fallbacks object and merges with project configuration', () => {
+      const userConfig = {
+        fallbacks: {
+          heavy: ['claude-3.5-sonnet', 'gpt-4o'],
+          light: ['claude-3.5-haiku'],
+        },
+      };
+
+      const projectConfig = {
+        fallbacks: {
+          heavy: ['gpt-4o', 'o3-mini'],
+        },
+        medium_fallbacks: ['custom-medium-fallback'],
+      };
+
+      const resolved = resolveConfig({ userConfig, projectConfig });
+      assert.deepEqual(resolved.fallbacks.heavy, ['gpt-4o', 'o3-mini']);
+      assert.deepEqual(resolved.heavy_fallbacks, ['gpt-4o', 'o3-mini']);
+      assert.deepEqual(resolved.fallbacks.medium, ['custom-medium-fallback']);
+      assert.deepEqual(resolved.medium_fallbacks, ['custom-medium-fallback']);
+      assert.deepEqual(resolved.fallbacks.light, ['claude-3.5-haiku']);
+      assert.deepEqual(resolved.light_fallbacks, ['claude-3.5-haiku']);
+    });
+
+    it('sanitizes fallback arrays by trimming and removing empty or invalid elements', () => {
+      const userConfig = {
+        heavy_fallbacks: ['  claude-3.5-sonnet  ', '', null, 42, 'gpt-4o', '   '],
+        fallbacks: {
+          medium: [' gpt-4o-mini ', undefined, false],
+        },
+      };
+
+      const resolved = resolveConfig({ userConfig });
+      assert.deepEqual(resolved.heavy_fallbacks, ['claude-3.5-sonnet', 'gpt-4o']);
+      assert.deepEqual(resolved.fallbacks.heavy, ['claude-3.5-sonnet', 'gpt-4o']);
+      assert.deepEqual(resolved.fallbacks.medium, ['gpt-4o-mini']);
+    });
+
+    it('parses and preserves per-lens fallbacks in lenses configuration', () => {
+      const userConfig = {
+        lenses: {
+          correctness: {
+            model: 'o3',
+            fallbacks: ['claude-3.7-sonnet', 'gpt-4o'],
+          },
+          security: {
+            fallbacks: ['claude-3.5-sonnet'],
+          },
+        },
+      };
+
+      const resolved = resolveConfig({ userConfig });
+      assert.deepEqual(resolved.lenses.correctness.fallbacks, ['claude-3.7-sonnet', 'gpt-4o']);
+      assert.deepEqual(resolved.lenses.security.fallbacks, ['claude-3.5-sonnet']);
+    });
+
     it('ignores non-object configurations gracefully', () => {
       assert.deepEqual(resolveConfig({ userConfig: 'invalid-string' }), DEFAULT_CONFIG);
       assert.deepEqual(resolveConfig({ userConfig: [1, 2, 3] }), DEFAULT_CONFIG);
@@ -509,6 +592,57 @@ describe('Configuration & Model Tier Management', () => {
         name: 'Error',
         message: /Unknown tier: invalidTier/,
       });
+    });
+
+    it('getFallbackModelsForTier returns fallback models or throws on invalid tier', () => {
+      const config = resolveConfig({
+        userConfig: {
+          heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'],
+          fallbacks: {
+            medium: ['gpt-4o-mini'],
+          },
+        },
+      });
+
+      assert.deepEqual(getFallbackModelsForTier(config, 'heavy'), ['claude-3.5-sonnet', 'gpt-4o']);
+      assert.deepEqual(getFallbackModelsForTier(config, 'medium'), ['gpt-4o-mini']);
+      assert.deepEqual(getFallbackModelsForTier(config, 'light'), []);
+
+      assert.throws(() => getFallbackModelsForTier(config, 'unknownTier'), {
+        name: 'Error',
+        message: /Unknown tier: unknownTier/,
+      });
+    });
+
+    it('getFallbackModels resolves per-lens fallbacks with fallback to tier fallbacks', () => {
+      const config = resolveConfig({
+        userConfig: {
+          heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'],
+          lenses: {
+            correctness: {
+              fallbacks: ['custom-correctness-fallback'],
+            },
+          },
+        },
+      });
+
+      // Lens override takes precedence
+      assert.deepEqual(
+        getFallbackModels(config, { tier: 'heavy', lensId: 'correctness' }),
+        ['custom-correctness-fallback']
+      );
+
+      // Other lens falls back to tier fallbacks
+      assert.deepEqual(
+        getFallbackModels(config, { tier: 'heavy', lensId: 'security' }),
+        ['claude-3.5-sonnet', 'gpt-4o']
+      );
+
+      // Missing tier defaults to empty array
+      assert.deepEqual(
+        getFallbackModels(config, { tier: 'light' }),
+        []
+      );
     });
   });
 });

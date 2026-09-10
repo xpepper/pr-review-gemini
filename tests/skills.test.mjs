@@ -85,4 +85,12 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /gem_pr_review_publish_cached/i, 'Should document MCP tool gem_pr_review_publish_cached');
     assert.match(content, /freshness|stale/i, 'Should document head freshness / stale check');
   });
+
+  it('documents automatic fallback model retry on quota errors and zero timeouts', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /fallback/i, 'Should document fallback model retry');
+    assert.match(content, /quota|429|capacity/i, 'Should document quota/capacity error detection');
+    assert.match(content, /timeout/i, 'Should document zero timeout execution');
+  });
 });

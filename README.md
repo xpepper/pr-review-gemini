@@ -154,6 +154,12 @@ Provides human reviewers with granular triage control and eliminates redundant m
 - **Publish-Later Caching**: Every review pass retains evaluated findings in a session cache keyed by PR number and head commit SHA. Inspect findings in dry-run mode and publish later via `--publish-cached` or MCP tool `gem_pr_review_publish_cached` without rerunning expensive subagent inference.
 - **Head Freshness Verification**: Validates cached findings against the PR's current head SHA on GitHub, automatically rejecting and invalidating stale caches if new commits were pushed.
 
+### 6. Automatic Fallback Model Retry on Quota/Capacity Errors (Zero Timeouts)
+Guarantees uninterrupted review runs even during API rate limits and model capacity constraints:
+- **Intelligent Error Classification**: Accurately detects HTTP 429, resource exhaustion (`RESOURCE_EXHAUSTED`, `INSUFFICIENT_QUOTA`), and model overload/capacity limits while failing fast on unrelated bugs.
+- **Automatic Failover**: Automatically retries the failing review lens against secondary models in the configured fallback chain (e.g. `heavy_fallbacks: ["claude-3.5-sonnet", "gpt-4o"]`) without losing or repeating already-completed sibling lens evaluations.
+- **Zero Plugin-Imposed Timeouts**: Strict timeout-free execution avoids artificial review deadlines or stuck-reviewer heuristics.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -210,10 +216,13 @@ Configuration is optional and works out of the box with sensible defaults. You c
     "medium": "off",
     "heavy": "medium"
   },
+  "heavy_fallbacks": ["claude-3.5-sonnet", "gpt-4o"],
+  "medium_fallbacks": ["gpt-4o-mini"],
   "lenses": {
     "correctness": {
       "model": "claude-3.7-sonnet",
-      "reasoningEffort": "high"
+      "reasoningEffort": "high",
+      "fallbacks": ["gpt-4o"]
     },
     "security": {
       "model": "gpt-4o",
@@ -237,7 +246,8 @@ Configuration is optional and works out of the box with sensible defaults. You c
 
 - **`tiers`**: Base model mappings for `light`, `medium`, and `heavy` tiers.
 - **`reasoningEfforts`**: Reasoning effort levels (`off`, `low`, `medium`, `high`) configured per tier (`light`, `medium`, `heavy`).
-- **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models and reasoning profiles.
+- **`heavy_fallbacks` / `medium_fallbacks` / `light_fallbacks`**: Configurable chains of backup models automatically tried on quota exhaustion or capacity limits (also configurable via `fallbacks: { heavy: [...], medium: [...] }`).
+- **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`, `fallbacks`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models, reasoning profiles, and failover chains.
 - **Resolution Precedence**:
   $$\text{lens override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
 
@@ -268,7 +278,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 227+ unit tests across 52 suites verify parser accuracy, host-gated security, subagent orchestration, interactive selection, review caching, and worktree lifecycles.
+All 248+ unit tests across 62 suites verify parser accuracy, host-gated security, subagent orchestration, fallback retry resilience, interactive selection, review caching, and worktree lifecycles.
 
 ---
 

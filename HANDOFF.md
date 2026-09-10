@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (229 tests across 61 suites, 0 failures)
-* **All Roadmap Increments Delivered & Merged**:
+* **Current Branch**: `feat/quota-fallback-retry`
+* **Test Suite**: `npm test` runs and passes (249 tests across 62 suites, 0 failures)
+* **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
   - PR #3: `feat(publish): implement host-gated review publishing with diff anchoring`
@@ -20,16 +20,17 @@
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
   - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
   - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
+  - Increment 10 (Issue #16): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)`
 
 ---
 
-## Status: INCREMENT_9_COMPLETE / PHASE_7_IN_PROGRESS
+## Status: INCREMENT_10_COMPLETE / PHASE_7_IN_PROGRESS
 
-Increment 9 is fully implemented, verified test-first (229 passing tests across 61 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+Increment 10 is fully implemented, verified test-first (249 passing tests across 62 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 Phase 7 backlog:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
-- [ ] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts)
+- [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
 - [ ] Increment 11: One-shot coding-task self-review (`gem_self_review`)
 - [ ] Increment 12: Candidate finding recovery from degraded/malformed model outputs
 
@@ -131,45 +132,49 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 10 — Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)
+## Completed Work: Increment 10 — Automatic Fallback Model Retry on Quota/Capacity Errors (Issue #16)
 
 - **GitHub Issue**: [#16: feat: automatic fallback model retry on quota/capacity errors (without timeouts)](https://github.com/xpepper/pr-review-gemini/issues/16)
-- **Target Branch**: `feat/quota-fallback-retry`
-
-### Goal
-Implement automatic failover retry when encountering API quota exhaustion, capacity, or rate-limit errors (e.g. HTTP 429 / resource exhausted), falling back to configured secondary models (e.g. `heavy_fallbacks`) while strictly avoiding artificial timeouts or stuck-reviewer heuristics.
-
-### Requirements & Architecture
-1. **Fallback Tier Configuration (`src/config.js`)**:
-   - Support fallback model chains in configuration (e.g. `heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o']`, `medium_fallbacks`, `light_fallbacks`).
-   - Validate schema in `resolveConfig` and preserve backward compatibility with existing tier configs.
-2. **Quota & Rate-Limit Error Detection (`src/subagents.js`)**:
-   - Detect quota exhaustion, rate limits (HTTP 429), and capacity errors from Copilot SDK / LLM execution without catching unrelated syntax, network timeout, or runtime bugs.
-3. **Automatic Failover Retry (`src/subagents.js`)**:
-   - When a primary subagent lens fails due to quota or capacity limits, automatically retry the review pass using the next available model in the fallback tier.
-   - Do not discard or rerun already-completed sibling lens results.
-4. **Zero Plugin-Imposed Timeouts**:
-   - Do not impose arbitrary plugin-level execution deadlines or stuck heuristics.
-5. **Test-First Verification**:
-   - Unit test retry loop, error classification, and configuration fallback resolution.
+- **Branch**: `feat/quota-fallback-retry`
+- **Changes Delivered**:
+  - `src/config.js`:
+    - Added fallback model chains support: `heavy_fallbacks`, `medium_fallbacks`, `light_fallbacks` (and `fallbacks: { light, medium, heavy }`).
+    - Added per-lens fallback overrides: `lenses: { [lensId]: { fallbacks: [...] } }`.
+    - Added helper functions `getFallbackModelsForTier(config, tier)` and `getFallbackModels(config, { tier, lensId })`.
+    - Sanitized and validated fallback array inputs in `resolveConfig`.
+  - `src/subagents.js`:
+    - Added `isQuotaOrCapacityError(error)` (and alias `isQuotaError`) detecting status 429, error codes (`RESOURCE_EXHAUSTED`, `RATE_LIMIT_EXCEEDED`, `INSUFFICIENT_QUOTA`, `MODEL_CAPACITY_EXCEEDED`, `ERR_RATE_LIMITED`), and text patterns (`quota`, `rate-limit`, `overloaded`, `capacity`, `too many requests`) while strictly rejecting unrelated syntax, type, network disconnect, or timeout bugs.
+    - Updated `resolveLensPlan` to attach resolved `fallbacks` to each lens plan item, filtering out the primary model to avoid redundant retries.
+    - Updated `dispatchSubagentsParallel` to automatically retry failing lenses across configured fallback models when quota/capacity errors occur.
+    - Guaranteed zero loss of completed sibling passes: sibling lenses running in parallel continue uninterrupted and their findings are preserved.
+    - Zero timeouts: preserved strict timeout-free execution without artificial deadlines or stuck-reviewer heuristics.
+  - `src/reviewer.js`:
+    - Passed `config` to `dispatchSubagentsParallel` in `runReview`.
+    - Re-exported `isQuotaOrCapacityError` and `isQuotaError`.
+  - `skills/gem-pr-review/SKILL.md` & `README.md`:
+    - Documented fallback model retry on quota/capacity errors, zero timeouts, and configuration options.
+  - Tests:
+    - Added 20 unit tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, and `tests/skills.test.mjs`. Total 249 tests passing across 62 suites.
 
 ---
 
-## Ready-to-Use Prompt for the Next Session
+## Next Session Mission: Increment 11 — One-Shot Coding-Task Self-Review (`gem_self_review`)
+
+- **Goal**: Expose a fail-closed tool for coding agents to review uncommitted local changes (staged, tracked, untracked) before concluding a task.
+
+### Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 10 on this repository: "Automatic Fallback Model Retry on Quota/Capacity Errors (without timeouts)" (addressing Issue #16: https://github.com/xpepper/pr-review-gemini/issues/16).
+Please implement Increment 11 on this repository: "One-Shot Coding-Task Self-Review (gem_self_review)".
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/quota-fallback-retry.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/self-review.
 
 Implementation requirements:
-- Fallback Tier Configuration: Support fallback model tier mappings in src/config.js (e.g. heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'], medium_fallbacks: [...]).
-- Quota & Capacity Error Detection: Reliably detect 429 / quota exhaustion / capacity errors from Copilot SDK or client execution in src/subagents.js without swallowing unrelated bugs.
-- Automatic Failover Retry: When a primary lens fails due to quota/capacity limits, automatically retry that lens using the configured fallback models without dropping completed sibling lens passes.
-- Zero Timeouts: Preserve timeout-free execution without artificial stuck-reviewer timers or plugin-imposed deadlines.
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 229+ tests passing and adding unit tests for fallback tier resolution, error detection, and retry dispatch.
+- Tool Implementation: Implement gem_self_review inspecting working tree git status and diffs.
+- Fail-Closed Gate: Prevent agents from finishing coding tasks when P0/P1 issues are detected in uncommitted work.
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 249+ tests passing.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 

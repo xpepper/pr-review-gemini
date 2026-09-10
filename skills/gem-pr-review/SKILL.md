@@ -294,4 +294,24 @@ Pull requests with extensive changes can exceed LLM context windows or degrade r
 - All selected or cached findings remain subject to host-enforced diff hunk validation (`isLineCommentable`).
 - Unanchored findings are safely demoted to the review summary body; comments remain strictly capped at 50; and author safety checks are enforced.
 
+---
+
+## Automatic Fallback Model Retry on Quota/Capacity Errors (Zero Timeouts)
+
+`gem-pr-review` provides automated failover resilience against API rate limits and model capacity constraints:
+
+### 1. Quota & Capacity Error Classification
+When executing review passes across specialist subagents, errors are classified in real time:
+- **HTTP 429 & Rate Limits**: Status 429, `RATE_LIMIT_EXCEEDED`, TPM/RPM limits.
+- **Capacity & Quota Exhaustion**: `RESOURCE_EXHAUSTED`, `INSUFFICIENT_QUOTA`, server capacity limits, model overload errors.
+- **Fail-Fast on Bugs**: Unrelated errors (syntax errors, type errors, invalid credentials) fail immediately without retrying to preserve debugging clarity.
+
+### 2. Automatic Failover Retry
+- When a specialist lens fails due to quota or capacity limits, the orchestrator automatically retries that lens against the next model configured in the fallback tier (e.g. `heavy_fallbacks`, `medium_fallbacks`, or per-lens fallbacks).
+- **Zero Loss of Sibling Passes**: Completed passes by sibling subagents running in parallel are fully preserved and never dropped or re-evaluated.
+
+### 3. Zero Timeouts
+- Review subagents execute without artificial plugin-imposed execution deadlines, timers, or stuck-reviewer heuristics.
+
+
 
