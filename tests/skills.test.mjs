@@ -63,4 +63,16 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(content, /\/Users\//, 'Must not expose /Users/ machine paths');
     assert.doesNotMatch(content, /\/home\//, 'Must not expose /home/ machine paths');
   });
+
+  it('documents large-diff transport and host-supervised reader tools', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /200\s*KB/i, 'Should document 200 KB threshold');
+    assert.match(content, /file-backed/i, 'Should document file-backed transport');
+    assert.match(content, /manifest/i, 'Should document changed-file manifest');
+    assert.match(content, /diff_read|read/i, 'Should document read tool');
+    assert.match(content, /diff_grep|grep/i, 'Should document grep tool');
+    assert.match(content, /diff_find|find/i, 'Should document find tool');
+    assert.match(content, /640\s*KB/i, 'Should document 640 KB budget');
+  });
 });

@@ -67,6 +67,52 @@ describe('Reviewer Core & Orchestration', () => {
 
       assert.match(prompt, /Strictly inspect for TypeScript-safe patterns/);
     });
+
+    it('inlines full unified diff when diff is <= 200 KB (backward compatibility)', () => {
+      const normalDiff = 'diff --git a/file.js b/file.js\n+console.log("hello");';
+      const prompt = buildReviewerPrompt({
+        lens: 'correctness',
+        diffText: normalDiff,
+      });
+
+      assert.match(prompt, /## Unified Diff to Inspect:/);
+      assert.match(prompt, /console\.log\("hello"\);/);
+      assert.doesNotMatch(prompt, /Large Diff Transport Notice/i);
+    });
+
+    it('uses file-backed manifest notice when diffTransport is large (> 200 KB)', () => {
+      const fakeTransport = {
+        isLarge: true,
+        byteSize: 350 * 1024,
+        diffFilePath: '/tmp/pr-review-diff-12345/diff.patch',
+        formattedManifest: '| modified | `src/big.js` | +500 / -200 | 350 KB | 5 |',
+      };
+
+      const prompt = buildReviewerPrompt({
+        lens: 'correctness',
+        diffText: '',
+        diffTransport: fakeTransport,
+      });
+
+      assert.match(prompt, /Large Diff Transport Notice/i);
+      assert.match(prompt, /350\.0 KB/);
+      assert.match(prompt, /diff\.patch/);
+      assert.match(prompt, /src\/big\.js/);
+      assert.match(prompt, /read.*grep.*find/i);
+      assert.doesNotMatch(prompt, /## Unified Diff to Inspect:/);
+    });
+
+    it('automatically activates file-backed manifest notice when raw diff exceeds 200 KB', () => {
+      const largeDiff = 'diff --git a/huge.js b/huge.js\n' + '+line\n'.repeat(40000);
+      const prompt = buildReviewerPrompt({
+        lens: 'correctness',
+        diffText: largeDiff,
+      });
+
+      assert.match(prompt, /Large Diff Transport Notice/i);
+      assert.match(prompt, /huge\.js/);
+      assert.doesNotMatch(prompt, /## Unified Diff to Inspect:/);
+    });
   });
 
   describe('deduplicateFindings', () => {
@@ -308,6 +354,52 @@ index 1111111..2222222 100644
       assert.ok(result.revalidation);
       assert.equal(result.revalidation.counts.resolved, 1);
       assert.ok(result.summary.includes('Prior Findings Revalidation'));
+    });
+
+    it('detects diff > 200 KB in runReview, activates file-backed transport and cleans up', async () => {
+      const largeDiff = 'diff --git a/big.js b/big.js\n' + '+line\n'.repeat(40000);
+      let capturedPrompt = '';
+      let capturedTransport = null;
+
+      const mockRunner = async ({ prompt, diffTransport }) => {
+        capturedPrompt = prompt;
+        capturedTransport = diffTransport;
+        return `
+### [P1] Performance bottleneck in big loop
+- **File**: \`big.js:100\`
+- **Side**: RIGHT
+- **Confidence**: 0.9
+
+Expensive computation inside hot path.
+`;
+      };
+
+      const result = await runReview({
+        prNumber: 42,
+        diffText: largeDiff,
+        runnerFn: mockRunner,
+        dryRun: true,
+      });
+
+      assert.equal(result.prNumber, 42);
+      assert.ok(result.diffTransport);
+      assert.equal(result.diffTransport.isLarge, true);
+      assert.ok(result.diffTransport.byteSize > 200 * 1024);
+
+      // Verify runner received file-backed transport and formatted manifest prompt
+      assert.ok(capturedTransport);
+      assert.equal(capturedTransport.isLarge, true);
+      assert.match(capturedPrompt, /Large Diff Transport Notice/i);
+      assert.match(capturedPrompt, /big\.js/);
+      assert.doesNotMatch(capturedPrompt, /## Unified Diff to Inspect:\n```diff/);
+
+      // Verify findings were extracted properly
+      assert.equal(result.findings.length, 1);
+      assert.equal(result.findings[0].file, 'big.js');
+      assert.equal(result.findings[0].severity, 'P1');
+
+      // Summary includes notice of file-backed transport
+      assert.match(result.summary, /file-backed transport/i);
     });
   });
 });

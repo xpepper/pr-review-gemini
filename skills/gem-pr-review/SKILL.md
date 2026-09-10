@@ -211,3 +211,31 @@ If posting manually via `gh api` in bash/zsh:
   EOF
   ```
 
+---
+
+## Large-Diff Transport & Host-Supervised Reading (> 200 KB)
+
+Pull requests with extensive changes can exceed LLM context windows or degrade review precision if completely inlined into prompts.
+`gem-pr-review` includes an automated file-backed transport for diffs exceeding **200 KB** (`200 * 1024` bytes):
+
+1. **Threshold Detection**:
+   - Diffs $\le$ **200 KB** maintain direct backward compatibility via standard in-memory prompt inlining.
+   - Diffs $>$ **200 KB** automatically activate file-backed paging transport.
+
+2. **File-Backed Transport & Changed-File Manifest**:
+   - The unified diff is persisted to temporary file storage during review execution and cleaned up immediately upon completion.
+   - Reviewer prompts receive a structured changed-file manifest table detailing file status (`modified`, `added`, `deleted`, `renamed`, `binary`), additions, deletions, hunk counts, and byte sizes.
+
+3. **Host-Supervised Inspection Tools**:
+   Specialist review passes are equipped with host-supervised tools to inspect critical diff sections on demand:
+   - **`diff_read`** (or `read`): Slices unified diff sections by file path, character offset, limit, or line range.
+   - **`diff_grep`** (or `grep`): Searches diff content for literal or regex patterns with line numbers and file context.
+   - **`diff_find`** (or `find`): Filters files in the changed manifest by filename pattern or status without consuming read operations.
+
+4. **Access Budget Safeguards**:
+   To prevent context saturation and runaway tool recursion, host-supervised reading is strictly capped:
+   - Maximum **16 reads** per review pass.
+   - Access budget capped at **~640 KB** across operations (with a hard ceiling of 1 MB maximum).
+   - Attempts exceeding the budget or accessing paths outside the diff (e.g. path traversal) are rejected safely.
+
+
