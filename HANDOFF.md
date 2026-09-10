@@ -62,8 +62,85 @@ Phase 7 has been scoped and planned to capture next-generation features inspired
 
 ---
 
-## Next Steps & Maintenance
+---
 
-Since all core roadmap items are delivered:
-- The package is fully functional and ready for usage within GitHub Copilot CLI or compliant Agent Plugins runtimes.
-- Any future work will consist of maintenance, additional specialist lenses, or extending verification profiles.
+## Next Session Mission: Issue #11 — Per-Lens Model & Reasoning-Effort Overrides
+
+### Issue Reference
+- **GitHub Issue**: [#11: feat: allow per-lens model and reasoning-effort overrides](https://github.com/xpepper/pr-review-gemini/issues/11)
+- **Goal**: Decouple model selection across specialist lenses by supporting an optional `lenses` configuration layer above model tiers.
+
+### Problem Statement
+Currently, models and reasoning efforts are configured only at the shared tier level (`light`, `medium`, `heavy`). Lenses mapped to the same tier (e.g. `correctness` and `security` both using `heavy`) cannot be given distinct models or reasoning efforts without changing implementation code.
+
+### Proposed Solution & Schema
+Extend configuration (`~/.copilot/gem-pr-review.json` and `.github/gem-pr-review.json`) with an optional `lenses` object:
+```json
+{
+  "tiers": {
+    "light": "gpt-5-mini",
+    "medium": "claude-sonnet-5",
+    "heavy": "gpt-5.6-terra"
+  },
+  "reasoningEfforts": {
+    "light": "off",
+    "medium": "off",
+    "heavy": "medium"
+  },
+  "lenses": {
+    "correctness": {
+      "model": "gpt-5.6-terra",
+      "reasoningEffort": "high"
+    },
+    "security": {
+      "model": "claude-opus-5",
+      "reasoningEffort": "high"
+    }
+  }
+}
+```
+
+### Resolution Precedence
+$$\text{lens override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
+
+1. **Model**: `config.lenses?.[lensId]?.model` $\to$ `getModelForTier(config, tier)` $\to$ `DEFAULT_CONFIG.tiers[tier]`
+2. **Reasoning Effort**: `config.lenses?.[lensId]?.reasoningEffort` $\to$ `config.reasoningEfforts?.[tier]` $\to$ default lens assignment
+3. **Tier (optional override)**: `config.lenses?.[lensId]?.tier` $\to$ mode default tier
+
+### User-Facing & Agent-Facing Documentation to Update
+1. **`README.md`**:
+   - Fix the `reasoningEfforts` example (lines 178–182), which previously used mode names (`deep`, `balanced`, `quick`) instead of valid tier names (`light`, `medium`, `heavy`).
+   - Add documentation and JSON snippet for the new `lenses` configuration section.
+2. **`TODO.md`**:
+   - Mark Issue #11 checklist items as in-progress / completed.
+3. **`docs/roadmap.md`**:
+   - Record Increment 7b or Issue #11 resolution.
+
+### Step-by-Step Implementation Instructions for the Next Agent
+1. **Branch**: Create `feat/11-per-lens-overrides` from `main`.
+2. **Test-First Configuration**:
+   - In `tests/config.test.mjs`, add tests for:
+     - `resolveConfig()` parsing valid `lenses` overrides (`model`, `reasoningEffort`, `tier`).
+     - Ignoring invalid/malformed lens entries.
+     - Merging project-level and user-level `lenses` overrides.
+   - Update `src/config.js` to implement `lenses` parsing in `resolveConfig` and default `lenses: Object.freeze({})` in `DEFAULT_CONFIG`.
+3. **Test-First Plan Resolution**:
+   - In `tests/subagents.test.mjs`, add tests verifying that `resolveLensPlan()` applies per-lens model and reasoning effort overrides when configured.
+   - Update `src/subagents.js`: In `resolveLensPlan()`, check `resolvedConfig.lenses?.[lensId]` to override `model`, `reasoningEffort`, or `tier`.
+4. **Documentation**:
+   - Update `README.md` with correct `reasoningEfforts` keys and `lenses` examples.
+5. **Verification**:
+   - Run `npm test` (must remain 100% passing).
+   - Commit with conventional commit: `feat(config): support per-lens model and reasoning effort overrides (#11)`.
+   - Push and open a GitHub PR for Issue #11, running a dogfood review before merge.
+
+---
+
+## Ready-to-Use Prompt for the Next Session
+
+```text
+Please address GitHub Issue #11 on this repository: "feat: allow per-lens model and reasoning-effort overrides".
+Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md before starting.
+Work in a feature branch (feat/11-per-lens-overrides), follow test-first development in small verified steps, update both user-facing documentation (README.md reasoningEfforts fix & lenses schema) and agent-facing docs (TODO.md, HANDOFF.md), run the full test suite (npm test), and submit a pull request for review.
+```
+
