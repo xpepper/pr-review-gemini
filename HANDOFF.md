@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/self-review`
+* **Current Branch**: `main`
 * **Test Suite**: `npm test` runs and passes (280 tests across 68 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -21,7 +21,7 @@
   - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
   - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
   - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
-  - PR (Issue #18 / Increment 11): `feat: one-shot coding-task self-review (gem_self_review)`
+  - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
 
 ---
 
@@ -188,12 +188,13 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output
+## Next Session Mission: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output (Issue #20)
 
+- **GitHub Issue**: [#20: feat: candidate finding recovery from degraded or malformed model output](https://github.com/xpepper/pr-review-gemini/issues/20)
 - **Target Branch**: `feat/candidate-finding-recovery`
 
 ### Goal
-Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses rather than dropping entire review passes or failing silently when LLMs produce JSON syntax flaws or unescaped characters.
+Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses rather than dropping entire review passes or failing silently when LLMs produce JSON syntax flaws, unescaped characters, or truncated output.
 
 ### Requirements & Architecture
 1. **Partial / Malformed JSON Recovery**:
@@ -202,24 +203,27 @@ Deterministically recover contract-valid candidate finding blocks from partial, 
    - Validate and normalize candidate findings against the structured findings contract (severity `P0`–`nit`, valid side `LEFT`/`RIGHT`, file path, line numbers).
 3. **Loss Prevention**:
    - Ensure high-signal findings are preserved even when the primary parser encounters syntax anomalies.
-4. **Test-First Verification**:
-   - Add unit tests covering malformed envelopes, unclosed arrays, and corrupt candidate recovery.
+4. **Pipeline Integration**:
+   - Integrate into `parseMarkdownFindings` in `src/publish.js`, `src/subagents.js`, and `src/self-review.js` so PR reviews, cached reviews, and local self-reviews all benefit.
+5. **Test-First Verification**:
+   - Add unit tests covering malformed envelopes, unclosed arrays, unescaped quotes, and corrupt candidate recovery.
 
 ---
 
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 12 on this repository: "Candidate Finding Recovery from Degraded/Malformed Model Output".
+Please implement Increment 12 on this repository: "Candidate Finding Recovery from Degraded/Malformed Model Output" (addressing Issue #20: https://github.com/xpepper/pr-review-gemini/issues/20).
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
 2. Confirm git working tree is clean on main, then create a feature branch: feat/candidate-finding-recovery.
 
 Implementation requirements:
-- Resilient Finding Extraction: Deterministically extract and recover contract-valid candidate findings from degraded or malformed model outputs (truncated JSON, missing brackets, trailing commas).
-- Contract Normalization: Validate extracted candidates against structured finding schemas (severity, file, line, side, confidence).
-- Test-First Verification: Follow test-first development, keeping all 280+ tests passing and adding unit tests for recovery heuristics.
+- Resilient Envelope & Candidate Extraction: Deterministically extract and recover contract-valid candidate findings from degraded or malformed model outputs (truncated JSON, missing brackets, trailing commas, unclosed objects).
+- Contract Normalization: Validate extracted candidates against structured finding schemas (severity P0-nit, file path, line number, side LEFT/RIGHT, confidence score).
+- Seamless Pipeline Integration: Ensure parseMarkdownFindings, subagent collection, and self-review automatically benefit from recovery without dropping valid findings.
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 280+ tests passing and adding unit tests for recovery heuristics and corrupted envelope fixtures.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 
