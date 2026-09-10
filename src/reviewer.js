@@ -580,12 +580,11 @@ export async function runReview({
       }
     }
 
-    const allCustomRoles = {
-      ...(resolvedConfig.custom_roles || {}),
-      ...(customRoles || {}),
-    };
+    const roleNameById = new Map(
+      plan.map((p) => [p.lensId, p.lensDef?.name || formatDefaultRoleName(p.lensId)])
+    );
     const lensesList = executedLenses
-      .map((id) => allCustomRoles[id]?.name || LENS_DEFINITIONS[id]?.name || id)
+      .map((id) => roleNameById.get(id) || LENS_DEFINITIONS[id]?.name || formatDefaultRoleName(id))
       .join(', ');
     const countsSummary = Object.entries(severityCounts)
       .filter(([, count]) => count > 0)

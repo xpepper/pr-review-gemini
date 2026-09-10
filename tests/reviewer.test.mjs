@@ -583,5 +583,27 @@ Race condition on state initialization.
       assert.deepEqual(result.lensesExecuted, ['a11y']);
       assert.match(result.summary, /Accessibility Only/);
     });
+
+    it('uses resolved plan lens display names in review summary for nameless custom roles', async () => {
+      const mockRunner = async () => '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+
+      const result = await runReview({
+        prNumber: 101,
+        diffText: sampleDiff,
+        roles: ['database_migrations'],
+        customRoles: {
+          database_migrations: {
+            prompt: 'Check zero downtime migration rules.',
+          },
+        },
+        replaceStandardRoles: true,
+        runnerFn: mockRunner,
+        dryRun: true,
+      });
+
+      assert.deepEqual(result.lensesExecuted, ['database_migrations']);
+      assert.match(result.summary, /Database Migrations/);
+      assert.doesNotMatch(result.summary, /database_migrations/);
+    });
   });
 });
