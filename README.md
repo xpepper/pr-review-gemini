@@ -24,10 +24,18 @@ node scripts/dogfood-review.mjs <PR_NUMBER> --mock --dry-run
 ```
 
 ### 2. Run via GitHub Copilot CLI (Agent Skill)
-In GitHub Copilot CLI or any Agent Plugins compatible runtime:
+Install the plugin directly from GitHub into Copilot CLI:
 ```bash
+copilot plugin install xpepper/pr-review-gemini
+```
+*(Or during local development, load without installing: `copilot --plugin-dir .`)*
+
+Then start Copilot CLI and trigger the skill:
+```bash
+copilot
 /pr-review <PR_NUMBER>
 ```
+
 
 ### 3. Run via MCP Inspector (Web UI)
 Launch the interactive Model Context Protocol inspector to test all tools visually:
@@ -191,6 +199,14 @@ This repository strictly complies with the [Agent Plugins 1.0 specification](htt
 - **`plugin.json`**: Plugin manifest declaring metadata and keywords.
 - **`skills/pr-review/SKILL.md`**: Skill prompt instructions, lens contracts, and severity schemas.
 - **`mcp.json`**: Model Context Protocol configuration for host tool execution.
+
+### Handling Plugin or Skill Name Collisions
+If you already have other plugins or skills named `pr-review` installed in Copilot CLI:
+- **Local Session Priority**: Run `copilot --plugin-dir .` to explicitly scope and prioritize this repository's skill and MCP server for the session.
+- **Direct CLI Execution**: Use `node scripts/dogfood-review.mjs <PR_NUMBER>` to run the review pipeline directly without relying on Copilot CLI's global plugin registry.
+- **Explicit MCP Tool Prompting**: In Copilot CLI chat, prompt directly: *"Use the copilot-pr-review MCP server to review PR 123"*. The model will invoke `pr_review_subagents` from this specific MCP server.
+- **Manage Installed Plugins**: Inspect registered plugins via `copilot plugin list` or remove colliding plugins via `copilot plugin uninstall <name>`.
+
 
 ---
 
