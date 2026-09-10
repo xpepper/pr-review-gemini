@@ -251,6 +251,63 @@ Direct execution of user input with eval.
       assert.equal(publishedPayload.comments[0].line, 12);
     });
 
+    it('honors selectedIndices during publish in runReview and caches findings', async () => {
+      const mockRunner = async () => {
+        return `
+### [P1] First bug
+- **File**: \`src/app.js:12\`
+- **Side**: RIGHT
+- **Confidence**: 0.95
+
+First bug body.
+
+### [P2] Second issue
+- **File**: \`src/app.js:13\`
+- **Side**: RIGHT
+- **Confidence**: 0.85
+
+Second bug body.
+`;
+      };
+
+      let publishedPayload = null;
+      const mockExecGh = async (args, options) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({
+            headRefOid: 'head-selected-12345',
+            author: { login: 'other-author' },
+            title: 'Selection test PR',
+          });
+        }
+        if (args[0] === 'api' && args[1] === 'user') {
+          return JSON.stringify({ login: 'reviewer-bot' });
+        }
+        if (args[0] === 'api' && args.includes('POST')) {
+          publishedPayload = JSON.parse(options?.input || '{}');
+          return JSON.stringify({ id: 1001, state: 'COMMENTED' });
+        }
+        return '';
+      };
+
+      const result = await runReview({
+        prNumber: 25,
+        mode: 'deep',
+        diffText: sampleDiff,
+        runnerFn: mockRunner,
+        execGhFn: mockExecGh,
+        dryRun: false,
+        publish: true,
+        selectedIndices: [0], // Only publish first finding
+      });
+
+      assert.equal(result.published, true);
+      assert.equal(result.findings.length, 2, 'Total findings should be 2');
+      assert.ok(publishedPayload);
+      assert.equal(publishedPayload.comments.length, 1, 'Only selected finding should be published as inline comment');
+      assert.match(publishedPayload.comments[0].body, /First bug/);
+      assert.doesNotMatch(publishedPayload.comments[0].body, /Second issue/);
+    });
+
     it('rejects with error when diff is empty', async () => {
       await assert.rejects(
         async () => {
