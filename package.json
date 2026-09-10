@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test 'tests/**/*.test.mjs' 'tests/**/*.test.js'",
     "review": "node scripts/dogfood-review.mjs",
-    "self-review": "node scripts/self-review.mjs"
+    "self-review": "node scripts/self-review.mjs",
+    "ci-review": "node scripts/ci-action.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

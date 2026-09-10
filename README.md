@@ -43,6 +43,17 @@ Launch the interactive Model Context Protocol inspector to test all tools visual
 npx @modelcontextprotocol/inspector node server/index.js
 ```
 
+### 4. Run via GitHub Actions (Automated CI Review)
+Automate multi-lens AI code review on every pull request using the official GitHub Action:
+```yaml
+- name: AI PR Code Review
+  uses: xpepper/pr-review-gemini@main
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    mode: balanced
+    fail_on: P1
+```
+
 ---
 
 ## Core Usage & CLI Options
@@ -268,6 +279,78 @@ Configuration is optional and works out of the box with sensible defaults. You c
 
 ---
 
+## Automated CI Code Review (GitHub Action)
+
+`gem-pr-review` includes a first-class, zero-dependency composite GitHub Action (`action.yml`) enabling automated AI code review on pull requests in GitHub Actions CI.
+
+### Action Inputs (`action.yml`)
+
+| Input | Description | Required | Default |
+| :--- | :--- | :---: | :--- |
+| `github_token` | GitHub token for authenticating API requests and posting reviews | No | `${{ github.token }}` |
+| `pr_number` | Pull request number to review (auto-detected from `GITHUB_EVENT_PATH` if omitted) | No | *auto-detected* |
+| `mode` | Review mode (`quick`, `balanced`, `full`, `deep`) | No | `balanced` |
+| `fail_on` | Severity threshold that triggers job failure (`P0`, `P1`, `P2`, `P3`, or `none`) | No | `none` |
+| `incremental` | Whether to run an incremental re-review (`auto`, `true`, `false`). In `auto` mode, `synchronize` events automatically trigger incremental reviews | No | `auto` |
+| `action` | Review action: `publish` (post review to PR) or `dry-run` (generate summary only) | No | `publish` |
+| `select` | Finding filter specification (e.g. `p0,p1`, `min:p2`, `1,3`) | No | *all findings* |
+
+### Action Outputs (`action.yml`)
+
+| Output | Description | Example |
+| :--- | :--- | :--- |
+| `verdict` | Overall review verdict (`PASS` or `FAIL`) | `PASS` |
+| `findings_count` | Total number of findings detected across all lenses | `3` |
+| `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
+| `summary` | Markdown review summary | `## PR Review Summary...` |
+
+### Automated Event Detection & Incremental Re-reviews
+
+When running in GitHub Actions:
+- **Zero-configuration PR resolution**: `pr_number` and repository are automatically parsed from the `GITHUB_EVENT_PATH` webhook payload.
+- **Smart Incremental Reviews**: When `incremental: auto` (the default) is set, new pushes to an open PR (`synchronize` event) automatically trigger `--incremental` mode. The action evaluates only newly introduced diff hunks and revalidates prior findings as `resolved`, `still open`, or `obsolete`.
+
+### CI Quality Gate (`fail_on`)
+
+Enforce AI review standards as mandatory GitHub branch protection checks:
+- Set `fail_on: P1` to fail CI (exit code 1) when any critical (`P0`) or major (`P1`) defects are detected.
+- Combine with GitHub branch protection rules to require passing AI reviews before merging.
+
+### Starter Workflow Template
+
+Add `.github/workflows/gem-pr-review.yml` to your repository:
+
+```yaml
+name: 'Gem PR Review'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: AI PR Code Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Gem PR Review
+        uses: xpepper/pr-review-gemini@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: balanced
+          fail_on: P1
+          incremental: auto
+          action: publish
+```
+
+---
+
 ## Agent Plugins Standard
 
 This repository strictly complies with the [Agent Plugins 1.0 specification](https://agent-plugins.org/):
@@ -293,7 +376,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 309+ unit tests across 74 suites verify parser accuracy, host-gated security, candidate finding recovery from degraded/malformed model output, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, and worktree lifecycles.
+All 333+ unit tests across 82 suites verify parser accuracy, host-gated security, candidate finding recovery from degraded/malformed model output, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, and quality gate enforcement.
 
 ---
 

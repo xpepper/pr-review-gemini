@@ -455,7 +455,7 @@ export async function getPrDiff(prNumberOrOptions, maybeOptions = {}) {
   const isObject = typeof prNumberOrOptions === 'object' && prNumberOrOptions !== null;
   const rawPrNumber = isObject ? prNumberOrOptions.prNumber : prNumberOrOptions;
   const options = isObject ? prNumberOrOptions : maybeOptions;
-  const { cwd = process.cwd(), execFileFn = null, repo = null } = options;
+  const { cwd = process.cwd(), execFileFn = null, execGhFn = null, repo = null } = options;
 
   const prNum = Number(rawPrNumber);
   if (!Number.isInteger(prNum) || prNum <= 0) {
@@ -465,6 +465,10 @@ export async function getPrDiff(prNumberOrOptions, maybeOptions = {}) {
   const args = ['pr', 'diff', String(prNum)];
   if (repo) {
     args.push('--repo', repo);
+  }
+
+  if (execGhFn) {
+    return execGhFn(args, { cwd });
   }
 
   if (execFileFn) {

@@ -6,17 +6,21 @@
 
 ---
 
-## Active Next Task: Increment 13 — Reusable GitHub Action & Automated CI Review Workflow (Issue #22)
-- [ ] Define composite GitHub Action manifest (`action.yml`) with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
-- [ ] Implement CI event payload resolution (auto-detecting PR number from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` on `synchronize`).
-- [ ] Implement CI quality gate (`fail_on`) exiting with code 1 when blocking findings exist.
-- [ ] Add starter workflow template `.github/workflows/gem-pr-review.yml`.
-- [ ] Unit tests for action schema, event payload parsing, and output formatting.
-- [ ] Dogfood auto-review and PR submission.
+## Active Next Task: Increment 14 / Phase 8 Ideas
+- [ ] Additional Specialist Lenses (e.g. Accessibility / a11y, Database Migration safety).
+- [ ] Streamlined Pre-Commit Hook Installer (`--install-hook` setting up pre-commit self-review).
 
 ---
 
 ## Completed Increments
+- [x] **Increment 13 / Issue #22: Reusable GitHub Action & Automated CI Review Workflow (action.yml)**
+  - [x] Defined composite GitHub Action manifest (`action.yml`) at repository root with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`, `select`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
+  - [x] Implemented CI event payload resolution (`parseEventPayload`, `resolveCiEnvironment`) in `src/ci.js` (auto-extracting PR number, repository, and commit SHAs from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` on `synchronize` events).
+  - [x] Implemented CI quality gate (`evaluateCiQualityGate`) and runner (`scripts/ci-action.mjs`) exiting with code 1 when blocking defects meet or exceed `fail_on` threshold (e.g. `fail_on: P1`).
+  - [x] Implemented GitHub Actions multiline step outputs and summary formatting (`writeGitHubStepOutputs`, `formatCiSummary`).
+  - [x] Added starter workflow template `.github/workflows/gem-pr-review.yml`.
+  - [x] 24 new unit and integration tests across `tests/ci.test.mjs` and `tests/skills.test.mjs` (334 tests passing across 82 suites).
+  - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 12 / Issue #20: Candidate Finding Recovery from Degraded/Malformed Model Output**
   - [x] Resilient envelope extraction (`extractJsonEnvelope`) handling unclosed or truncated `<<<PR_REVIEW_JSON>>>` markers and markdown code fences.
   - [x] Deterministic JSON repair (`repairJsonString`) resolving trailing commas, missing closing brackets/braces, unescaped literal newlines in commentary, comments, and smart quotes.
