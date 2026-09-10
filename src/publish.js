@@ -499,14 +499,20 @@ export async function checkHeadFreshness({
   execGhFn = null,
   execFileFn = null,
   cwd = process.cwd(),
+  repo = null,
 } = {}) {
   const prNum = Number(prNumber);
   if (!Number.isInteger(prNum) || prNum <= 0) {
     throw new TypeError(`Invalid PR number: "${prNumber}". Expected a positive integer.`);
   }
 
+  const args = ['pr', 'view', String(prNum), '--json', 'headRefOid,author,state'];
+  if (repo) {
+    args.push('--repo', repo);
+  }
+
   const stdout = await runGh(
-    ['pr', 'view', String(prNum), '--json', 'headRefOid,author,state'],
+    args,
     { cwd, execGhFn, execFileFn }
   );
 
@@ -586,6 +592,7 @@ export async function publishReview({
     execGhFn,
     execFileFn,
     cwd,
+    repo,
   });
 
   // 2. Obtain current authenticated GitHub user

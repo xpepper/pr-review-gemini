@@ -468,7 +468,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /types:\s*\[.*opened.*synchronize.*\]/);
       assert.match(content, /pull-requests:\s*write/);
       assert.match(content, /uses:\s*actions\/checkout@v4/);
-      assert.match(content, /uses:\s*xpepper\/pr-review-gemini@main/);
+      assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
   });

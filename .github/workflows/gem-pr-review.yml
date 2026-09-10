@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@main
+        uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
