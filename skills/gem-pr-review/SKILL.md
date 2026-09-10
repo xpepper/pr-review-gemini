@@ -1,5 +1,5 @@
 ---
-name: pr-review
+name: gem-pr-review
 description: Comprehensive parallel AI code review for GitHub pull requests using specialized lenses and host-gated publishing.
 license: MIT
 compatibility: Node.js >= 20.0.0, GitHub CLI (gh), Agent Plugins 1.0
@@ -8,11 +8,11 @@ metadata:
 allowed-tools: Bash, gh, git
 ---
 
-# PR Review: Parallel Multi-Lens AI Code Review
+# Gem PR Review: Parallel Multi-Lens AI Code Review
 
 ## Purpose
 
-`pr-review` provides automated, multi-lens code review for GitHub pull requests following the Agent Plugins 1.0 standard.
+`gem-pr-review` provides automated, multi-lens code review for GitHub pull requests following the Agent Plugins 1.0 standard.
 It distributes review analysis across specialized lenses, captures high-signal findings with confidence ratings, grounds all inline comments in verified diff hunks, and safely submits host-gated GitHub reviews.
 
 ---

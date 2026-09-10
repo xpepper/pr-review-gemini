@@ -132,8 +132,17 @@ export function loadConfig(options = {}) {
   const homeDir = options.homeDir || os.homedir();
   const cwd = options.cwd || process.cwd();
 
-  const userConfigPath = options.userConfigPath || path.join(homeDir, '.copilot', 'pr-review.json');
-  const projectConfigPath = options.projectConfigPath || path.join(cwd, '.github', 'pr-review.json');
+  const userGemConfigPath = path.join(homeDir, '.copilot', 'gem-pr-review.json');
+  const userFallbackConfigPath = path.join(homeDir, '.copilot', 'pr-review.json');
+  const userConfigPath = options.userConfigPath || (
+    fs.existsSync(userGemConfigPath) ? userGemConfigPath : userFallbackConfigPath
+  );
+
+  const projectGemConfigPath = path.join(cwd, '.github', 'gem-pr-review.json');
+  const projectFallbackConfigPath = path.join(cwd, '.github', 'pr-review.json');
+  const projectConfigPath = options.projectConfigPath || (
+    fs.existsSync(projectGemConfigPath) ? projectGemConfigPath : projectFallbackConfigPath
+  );
 
   const userConfig = readJsonSafely(userConfigPath);
   const projectConfig = readJsonSafely(projectConfigPath);

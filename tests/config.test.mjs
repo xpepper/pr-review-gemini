@@ -240,6 +240,40 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(config.reasoningEfforts.heavy, 'high');
     });
 
+    it('loads configuration from gem-pr-review.json with priority over pr-review.json', () => {
+      const homeDir = path.join(tmpDir, 'home');
+      const userCopilotDir = path.join(homeDir, '.copilot');
+      fs.mkdirSync(userCopilotDir, { recursive: true });
+
+      // Write fallback
+      fs.writeFileSync(
+        path.join(userCopilotDir, 'pr-review.json'),
+        JSON.stringify({ defaultReviewMode: 'quick' })
+      );
+      // Write prioritized gem-pr-review.json
+      fs.writeFileSync(
+        path.join(userCopilotDir, 'gem-pr-review.json'),
+        JSON.stringify({ defaultReviewMode: 'deep' })
+      );
+
+      const cwd = path.join(tmpDir, 'project');
+      const projectGithubDir = path.join(cwd, '.github');
+      fs.mkdirSync(projectGithubDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(projectGithubDir, 'pr-review.json'),
+        JSON.stringify({ tiers: { light: 'fallback-light' } })
+      );
+      fs.writeFileSync(
+        path.join(projectGithubDir, 'gem-pr-review.json'),
+        JSON.stringify({ tiers: { light: 'gem-light' } })
+      );
+
+      const config = loadConfig({ homeDir, cwd });
+      assert.equal(config.defaultReviewMode, 'deep');
+      assert.equal(config.tiers.light, 'gem-light');
+    });
+
     it('handles explicit userConfigPath and projectConfigPath options', () => {
       const userPath = path.join(tmpDir, 'custom-user.json');
       const projectPath = path.join(tmpDir, 'custom-project.json');

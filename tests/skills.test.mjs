@@ -3,26 +3,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-describe('Agent Skill: pr-review (Agent Plugins 1.0)', () => {
-  const skillPath = path.resolve('skills/pr-review/SKILL.md');
+describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
+  const skillPath = path.resolve('skills/gem-pr-review/SKILL.md');
 
-  it('skill file exists at skills/pr-review/SKILL.md', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md should exist');
+  it('skill file exists at skills/gem-pr-review/SKILL.md', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md should exist');
   });
 
   it('contains valid YAML frontmatter with name and description', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
     const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
     assert.ok(frontmatterMatch, 'SKILL.md must start with YAML frontmatter delimited by ---');
 
     const frontmatter = frontmatterMatch[1];
-    assert.match(frontmatter, /^name:\s*pr-review\b/m, 'Frontmatter must have name: pr-review');
+    assert.match(frontmatter, /^name:\s*gem-pr-review\b/m, 'Frontmatter must have name: gem-pr-review');
     assert.match(frontmatter, /^description:\s*.+/m, 'Frontmatter must have a description');
   });
 
   it('documents all review modes: balanced, quick, full, deep', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
 
     assert.ok(content.includes('--balanced') || content.includes('balanced'), 'Should document balanced mode');
@@ -32,7 +32,7 @@ describe('Agent Skill: pr-review (Agent Plugins 1.0)', () => {
   });
 
   it('documents specialist lenses and structured findings contract', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
 
     // Specialist lenses
@@ -49,7 +49,7 @@ describe('Agent Skill: pr-review (Agent Plugins 1.0)', () => {
   });
 
   it('documents incremental re-reviews and prior findings revalidation', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
     assert.ok(content.includes('--incremental') || content.includes('incremental'), 'Should document incremental mode');
     assert.match(content, /revalidation|revalidate/i, 'Should document finding revalidation');
@@ -58,7 +58,7 @@ describe('Agent Skill: pr-review (Agent Plugins 1.0)', () => {
   });
 
   it('does not contain local machine absolute paths (security rule)', () => {
-    assert.ok(fs.existsSync(skillPath), 'skills/pr-review/SKILL.md must exist');
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
     assert.doesNotMatch(content, /\/Users\//, 'Must not expose /Users/ machine paths');
     assert.doesNotMatch(content, /\/home\//, 'Must not expose /home/ machine paths');
