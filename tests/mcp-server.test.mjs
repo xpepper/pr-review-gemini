@@ -129,6 +129,10 @@ index 1111111..2222222 100644
       assert.equal(parsed.prNumber, 42);
       assert.equal(parsed.filesCount, 1);
       assert.equal(parsed.files[0].path, 'a.js');
+      assert.equal(parsed.isLarge, false);
+      assert.ok(parsed.manifest);
+      assert.equal(parsed.manifest.totalFiles, 1);
+      assert.equal(parsed.thresholdBytes, 200 * 1024);
     });
 
     it('handles tools/call for legacy pr_review_diff for backwards compatibility', async () => {
@@ -158,6 +162,71 @@ index 1111111..2222222 100644
       assert.ok(response.result.content);
       const parsed = JSON.parse(response.result.content[0].text);
       assert.equal(parsed.prNumber, 42);
+    });
+
+    it('handles tools/call for gem_pr_review_diff_read with read, grep, and find operations', async () => {
+      const mockDiff = `diff --git a/service.js b/service.js
+index 1111111..2222222 100644
+--- a/service.js
++++ b/service.js
+@@ -1,3 +1,4 @@
+ function execute() {
++  const token = "secret";
+   return token;
+ }
+`;
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => mockDiff,
+      });
+
+      // 1. read operation
+      const readRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 51,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diff_read',
+          arguments: { prNumber: 7, operation: 'read', file: 'service.js' },
+        },
+      });
+      assert.equal(readRes.id, 51);
+      const readParsed = JSON.parse(readRes.result.content[0].text);
+      assert.equal(readParsed.prNumber, 7);
+      assert.equal(readParsed.operation, 'read');
+      assert.ok(readParsed.result.content.includes('const token = "secret"'));
+      assert.equal(readParsed.budgetState.readsCount, 1);
+
+      // 2. grep operation
+      const grepRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 52,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diff_read',
+          arguments: { prNumber: 7, operation: 'grep', query: 'secret' },
+        },
+      });
+      assert.equal(grepRes.id, 52);
+      const grepParsed = JSON.parse(grepRes.result.content[0].text);
+      assert.equal(grepParsed.operation, 'grep');
+      assert.equal(grepParsed.result.matches.length, 1);
+      assert.equal(grepParsed.result.matches[0].file, 'service.js');
+
+      // 3. find operation
+      const findRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 53,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diff_read',
+          arguments: { prNumber: 7, operation: 'find', query: 'service' },
+        },
+      });
+      assert.equal(findRes.id, 53);
+      const findParsed = JSON.parse(findRes.result.content[0].text);
+      assert.equal(findParsed.operation, 'find');
+      assert.equal(findParsed.result.files.length, 1);
+      assert.equal(findParsed.result.files[0].path, 'service.js');
     });
 
     it('handles tools/call for gem_pr_review_subagents in mock dry-run', async () => {

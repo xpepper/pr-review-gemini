@@ -126,6 +126,12 @@ Safely executes test suites against the PR head in an isolated, detached git wor
 - Automatically handles worktree creation, timeout supervision, and clean disposal.
 - Supports pre-configured profiles (`node-test`, `npm-test`, `pytest`, `cargo-test`, `go-test`, etc.) or custom commands.
 
+### 4. Large-Diff Transport & File-Backed Paging (> 200 KB)
+Protects session context and prevents model degradation when reviewing large pull requests:
+- **Threshold Detection**: Automatically detects when raw unified diffs exceed 200 KB (`200 * 1024` bytes).
+- **File-Backed Transport**: Diffs exceeding 200 KB are stored in temporary file storage while the model receives a structured changed-file manifest. Diffs $\le$ 200 KB continue to use direct in-memory inlining for backward compatibility.
+- **Host-Supervised Inspection**: Equips reviewer subagents with host-enforced inspection tools (`read`, `grep`, `find`) strictly capped at an access budget of ~640 KB across 16 read operations (up to 1 MB maximum).
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -145,6 +151,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 
 ### Exposed Tools
 - **`gem_pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
+- **`gem_pr_review_diff_read`**: Host-supervised diff reading (`read`, `grep`, `find`) with access budget capping.
 - **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
 - **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
 - **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.

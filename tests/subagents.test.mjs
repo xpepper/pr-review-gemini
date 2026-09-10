@@ -5,6 +5,7 @@ import {
   resolveLensPlan,
   dispatchSubagentsParallel,
   createSubagentRunner,
+  buildSdkReaderTools,
 } from '../src/subagents.js';
 import { loadConfig, DEFAULT_CONFIG } from '../src/config.js';
 import { REVIEW_MODES, LENS_DEFINITIONS } from '../src/reviewer.js';
@@ -383,6 +384,102 @@ Explanation.
       assert.equal(sentPrompt, 'Security review prompt');
       assert.equal(closed, true);
       assert.match(output, /<<<PR_REVIEW_JSON>>>/);
+    });
+
+    it('passes tools to copilotClient.createSession when provided', async () => {
+      let createdSessionOptions = null;
+      const mockClient = {
+        createSession: async (options) => {
+          createdSessionOptions = options;
+          return {
+            send: async () => ({ text: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' }),
+            close: async () => {},
+          };
+        },
+      };
+
+      const runner = await createSubagentRunner({ copilotClient: mockClient });
+      const dummyTools = [{ name: 'diff_read', description: 'test tool' }];
+
+      await runner({
+        lens: { id: 'correctness', name: 'Correctness' },
+        prompt: 'test',
+        tools: dummyTools,
+      });
+
+      assert.ok(createdSessionOptions);
+      assert.deepEqual(createdSessionOptions.tools, dummyTools);
+    });
+  });
+
+  describe('buildSdkReaderTools & Host-Supervised Tools', () => {
+    const sampleDiff = `diff --git a/app.js b/app.js
+index 1111111..2222222 100644
+--- a/app.js
++++ b/app.js
+@@ -1,3 +1,4 @@
+ function run() {
++  console.log("hello");
+   return 1;
+ }
+`;
+
+    it('builds Copilot SDK compliant tool declarations from supervised reader', async () => {
+      const { createHostSupervisedDiffReader } = await import('../src/diff.js');
+      const reader = createHostSupervisedDiffReader({ diffText: sampleDiff });
+      const tools = buildSdkReaderTools(reader);
+
+      assert.equal(tools.length, 3);
+      const names = tools.map((t) => t.name);
+      assert.deepEqual(names, ['diff_read', 'diff_grep', 'diff_find']);
+
+      // Execute diff_read handler
+      const readTool = tools.find((t) => t.name === 'diff_read');
+      const readResult = await readTool.handler({ offset: 0, limit: 50 });
+      assert.ok(readResult.content);
+      assert.equal(readResult.readsCount, 1);
+
+      // Execute diff_grep handler
+      const grepTool = tools.find((t) => t.name === 'diff_grep');
+      const grepResult = await grepTool.handler({ query: 'console.log' });
+      assert.ok(grepResult.matches);
+      assert.equal(grepResult.matches.length, 1);
+
+      // Execute diff_find handler
+      const findTool = tools.find((t) => t.name === 'diff_find');
+      const findResult = await findTool.handler({ query: 'app.js' });
+      assert.ok(findResult.files);
+      assert.equal(findResult.files.length, 1);
+    });
+
+    it('returns empty array when reader is null or undefined', () => {
+      assert.deepEqual(buildSdkReaderTools(null), []);
+      assert.deepEqual(buildSdkReaderTools(undefined), []);
+    });
+
+    it('dispatchSubagentsParallel auto-detects diff > 200 KB and passes supervised tools', async () => {
+      const largeDiff = 'diff --git a/main.js b/main.js\n' + '+line\n'.repeat(40000);
+      let passedTools = null;
+      let passedTransport = null;
+
+      const mockRunner = async ({ tools, diffTransport }) => {
+        passedTools = tools;
+        passedTransport = diffTransport;
+        return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+      };
+
+      const plan = resolveLensPlan({ mode: 'quick' });
+      const result = await dispatchSubagentsParallel({
+        plan,
+        diffText: largeDiff,
+        runnerFn: mockRunner,
+      });
+
+      assert.ok(passedTransport);
+      assert.equal(passedTransport.isLarge, true);
+      assert.ok(Array.isArray(passedTools));
+      assert.equal(passedTools.length, 3);
+      assert.equal(result.errors.length, 0);
     });
   });
 });

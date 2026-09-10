@@ -9,7 +9,15 @@
  */
 import readline from 'node:readline';
 import path from 'node:path';
-import { getPrDiff, parseUnifiedDiff } from '../src/diff.js';
+import {
+  getPrDiff,
+  parseUnifiedDiff,
+  isLargeDiff,
+  generateDiffManifest,
+  formatDiffManifest,
+  createHostSupervisedDiffReader,
+  LARGE_DIFF_THRESHOLD_BYTES,
+} from '../src/diff.js';
 import { publishReview } from '../src/publish.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
@@ -81,6 +89,60 @@ export const MCP_TOOLS = [
         prNumber: {
           type: 'integer',
           description: 'GitHub pull request number',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
+  {
+    name: 'gem_pr_review_diff_read',
+    description:
+      'Performs host-supervised inspection (read, grep, find) on a PR diff with strict budget caps (max 16 reads, ~640 KB total).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        operation: {
+          type: 'string',
+          enum: ['read', 'grep', 'find'],
+          description:
+            'Supervised reader operation (read: slice diff or file, grep: pattern search, find: list changed files)',
+          default: 'read',
+        },
+        file: {
+          type: 'string',
+          description: 'Optional file path within the diff',
+        },
+        offset: {
+          type: 'integer',
+          description: 'Character offset for read operation',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Max characters to read',
+        },
+        startLine: {
+          type: 'integer',
+          description: '1-based starting line number for read operation',
+        },
+        lineCount: {
+          type: 'integer',
+          description: 'Number of lines to read',
+        },
+        query: {
+          type: 'string',
+          description: 'Search query for grep or find',
+        },
+        isRegex: {
+          type: 'boolean',
+          description: 'Treat query as regex for grep operation',
         },
         repo: {
           type: 'string',
@@ -198,6 +260,7 @@ export function createMcpHandler(options = {}) {
     revalidatePriorFindingsFn = revalidatePriorFindings,
     runVerificationFn = runVerification,
     listVerificationProfilesFn = listVerificationProfiles,
+    createHostSupervisedDiffReaderFn = createHostSupervisedDiffReader,
     runnerFn,
     cwd = process.cwd(),
   } = options;
@@ -267,6 +330,11 @@ export function createMcpHandler(options = {}) {
                 cwd,
               });
               const parsedDiffs = parseUnifiedDiff(diffText);
+              const isLarge = isLargeDiff(diffText);
+              const manifest = generateDiffManifest(parsedDiffs, {
+                threshold: LARGE_DIFF_THRESHOLD_BYTES,
+              });
+
               const summary = {
                 prNumber: args.prNumber,
                 filesCount: parsedDiffs.length,
@@ -279,6 +347,15 @@ export function createMcpHandler(options = {}) {
                   hunksCount: f.hunks.length,
                 })),
                 rawDiffLength: diffText.length,
+                isLarge,
+                thresholdBytes: LARGE_DIFF_THRESHOLD_BYTES,
+                manifest: {
+                  totalFiles: manifest.totalFiles,
+                  totalAdditions: manifest.totalAdditions,
+                  totalDeletions: manifest.totalDeletions,
+                  totalBytes: manifest.totalBytes,
+                  isLarge: manifest.isLarge,
+                },
               };
 
               return {
@@ -289,6 +366,62 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(summary, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (toolName === 'gem_pr_review_diff_read' || toolName === 'pr_review_diff_read') {
+              const diffText = await getPrDiffFn({
+                prNumber: args.prNumber,
+                repo: args.repo,
+                cwd,
+              });
+              const reader = createHostSupervisedDiffReaderFn({ diffText });
+              const op = args.operation || 'read';
+              let opResult = null;
+
+              if (op === 'read') {
+                opResult = await reader.read({
+                  file: args.file,
+                  offset: args.offset,
+                  limit: args.limit,
+                  startLine: args.startLine,
+                  lineCount: args.lineCount,
+                });
+              } else if (op === 'grep') {
+                opResult = await reader.grep({
+                  query: args.query,
+                  file: args.file,
+                  isRegex: args.isRegex,
+                });
+              } else if (op === 'find') {
+                opResult = reader.find({
+                  query: args.query,
+                  status: args.status,
+                });
+              } else {
+                opResult = { error: `Unsupported operation: ${op}` };
+              }
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(
+                        {
+                          prNumber: args.prNumber,
+                          operation: op,
+                          result: opResult,
+                          budgetState: reader.getBudgetState(),
+                        },
+                        null,
+                        2
+                      ),
                     },
                   ],
                 },

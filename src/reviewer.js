@@ -1,4 +1,13 @@
-import { getPrDiff, parseUnifiedDiff } from './diff.js';
+import path from 'node:path';
+import {
+  getPrDiff,
+  parseUnifiedDiff,
+  isLargeDiff,
+  createFileBackedDiff,
+  generateDiffManifest,
+  formatDiffManifest,
+  LARGE_DIFF_THRESHOLD_BYTES,
+} from './diff.js';
 import {
   parseMarkdownFindings,
   classifyFindings,
@@ -151,7 +160,13 @@ export function resolveReviewMode(modeInput) {
 /**
  * Builds the prompt for a single specialist lens review pass.
  */
-export function buildReviewerPrompt({ lens, diffText, prMetadata, customInstructions }) {
+export function buildReviewerPrompt({
+  lens,
+  diffText,
+  prMetadata,
+  customInstructions,
+  diffTransport,
+}) {
   const lensDef = typeof lens === 'string' ? LENS_DEFINITIONS[lens] : lens;
   const lensName = lensDef?.name || 'Code Review';
   const instructions = lensDef?.instructions || '';
@@ -163,6 +178,51 @@ export function buildReviewerPrompt({ lens, diffText, prMetadata, customInstruct
   const customBlock = customInstructions
     ? `Additional Review Instructions:\n${customInstructions}\n\n`
     : '';
+
+  let diffSection = '';
+
+  const isLarge =
+    diffTransport?.isLarge ?? (typeof diffText === 'string' && isLargeDiff(diffText));
+
+  if (isLarge) {
+    const transport = diffTransport || {
+      isLarge: true,
+      byteSize: Buffer.byteLength(diffText || '', 'utf8'),
+      diffFilePath: null,
+      formattedManifest: formatDiffManifest(generateDiffManifest(diffText || '')),
+    };
+
+    const formatBytes = (bytes) => {
+      if (!bytes || bytes <= 0) return '0 B';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    };
+
+    const diffRef = transport.diffFilePath
+      ? path.basename(transport.diffFilePath)
+      : 'diff.patch';
+
+    diffSection = `## Large Diff Transport Notice (> 200 KB)
+
+The unified diff for this pull request is ${formatBytes(transport.byteSize)} (exceeds inline threshold of 200 KB).
+To protect session context and enable thorough investigation of critical changes, file-backed transport is active.
+Diff Reference: \`${diffRef}\`
+
+### Changed Files Manifest:
+${transport.formattedManifest}
+
+### Host-Supervised Inspection Tools:
+You have access to host-supervised tools (\`read\`, \`grep\`, \`find\`) capped at an access budget of ~640 KB across 16 read operations.
+Use these tools to inspect specific files, hunks, or search for patterns relevant to your specialist lens.
+`;
+  } else {
+    diffSection = `## Unified Diff to Inspect:
+\`\`\`diff
+${diffText}
+\`\`\`
+`;
+  }
 
   return `# Specialist Code Review: ${lensName}
 
@@ -196,11 +256,7 @@ Notes:
 - Only report findings that are grounded in the diff lines below.
 - If no defects meet the threshold, return an empty array: <<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>.
 
-## Unified Diff to Inspect:
-\`\`\`diff
-${diffText}
-\`\`\`
-`;
+${diffSection}`;
 }
 
 /**
@@ -300,161 +356,220 @@ export async function runReview({
     throw new Error(`PR diff is empty or could not be retrieved for PR #${num}`);
   }
 
-  // 2. Retrieve PR metadata if gh is available
-  let prMetadata = { number: num, title: `PR #${num}` };
-  let currentHeadSha = expectedHeadSha || null;
+  // Detect if diff exceeds 200 KB threshold
+  const isLarge = isLargeDiff(unifiedDiffText);
+  let diffTransport = null;
+  let autoCreatedTransport = false;
 
-  if (execGhFn) {
-    try {
-      const ghArgs = ['pr', 'view', String(num), '--json', 'headRefOid,author,title'];
-      if (repo) ghArgs.push('--repo', repo);
-      const rawMeta = await execGhFn(ghArgs, { cwd });
-      if (rawMeta && rawMeta.trim()) {
-        const meta = JSON.parse(rawMeta);
-        currentHeadSha = meta.headRefOid || currentHeadSha;
-        prMetadata = {
-          number: num,
-          title: meta.title || `PR #${num}`,
-          author: meta.author?.login || null,
-          headSha: meta.headRefOid,
-        };
-      }
-    } catch {
-      // Fallback if metadata query fails
-    }
+  if (isLarge) {
+    diffTransport = await createFileBackedDiff(unifiedDiffText);
+    autoCreatedTransport = true;
   }
 
-  // 2b. Incremental re-review discovery & relationship classification
-  let priorData = null;
-  let commitRel = null;
-  let revalidation = null;
+  try {
+    // 2. Retrieve PR metadata if gh is available
+    let prMetadata = { number: num, title: `PR #${num}` };
+    let currentHeadSha = expectedHeadSha || null;
 
-  if (incremental) {
-    priorData = await fetchPriorReviews({ prNumber: num, repo, execGhFn, cwd });
-    commitRel = await classifyCommitRelationship({
-      priorHeadSha: priorData?.latestReview?.commitId || null,
-      currentHeadSha,
-      execGitFn,
-      cwd,
-    });
+    if (execGhFn) {
+      try {
+        const ghArgs = ['pr', 'view', String(num), '--json', 'headRefOid,author,title'];
+        if (repo) ghArgs.push('--repo', repo);
+        const rawMeta = await execGhFn(ghArgs, { cwd });
+        if (rawMeta && rawMeta.trim()) {
+          const meta = JSON.parse(rawMeta);
+          currentHeadSha = meta.headRefOid || currentHeadSha;
+          prMetadata = {
+            number: num,
+            title: meta.title || `PR #${num}`,
+            author: meta.author?.login || null,
+            headSha: meta.headRefOid,
+          };
+        }
+      } catch {
+        // Fallback if metadata query fails
+      }
+    }
 
-    if (commitRel.relationship === 'same_head') {
-      const summary = `## PR Review Summary (Mode: \`${resolvedMode.name}\` [Incremental])
+    // 2b. Incremental re-review discovery & relationship classification
+    let priorData = null;
+    let commitRel = null;
+    let revalidation = null;
+
+    if (incremental) {
+      priorData = await fetchPriorReviews({ prNumber: num, repo, execGhFn, cwd });
+      commitRel = await classifyCommitRelationship({
+        priorHeadSha: priorData?.latestReview?.commitId || null,
+        currentHeadSha,
+        execGitFn,
+        cwd,
+      });
+
+      if (commitRel.relationship === 'same_head') {
+        const summary = `## PR Review Summary (Mode: \`${resolvedMode.name}\` [Incremental])
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Status**: ℹ️ PR head commit (${currentHeadSha || 'unknown'}) has not changed since the last review. No new commits to evaluate.`;
+
+        return {
+          prNumber: num,
+          repo: repo || null,
+          headSha: currentHeadSha,
+          mode: resolvedMode.name,
+          relationship: 'same_head',
+          canIncremental: false,
+          priorReview: priorData?.latestReview || null,
+          lensesExecuted: [],
+          subagentPlan: [],
+          errors: [],
+          findings: priorData?.findings || [],
+          rawFindingsCount: priorData?.findings?.length || 0,
+          summary,
+          revalidation: null,
+          classification: null,
+          publication: null,
+          published: false,
+          diffTransport: diffTransport
+            ? {
+                isLarge: true,
+                byteSize: diffTransport.byteSize,
+                totalFiles: diffTransport.manifest.totalFiles,
+              }
+            : {
+                isLarge: false,
+                byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
+              },
+        };
+      }
+
+      if (commitRel.relationship === 'incremental') {
+        const incDiff = await getIncrementalDiff({
+          priorHeadSha: commitRel.priorHeadSha,
+          currentHeadSha,
+          repo,
+          execGitFn,
+          execGhFn,
+          cwd,
+        });
+
+        if (incDiff && incDiff.trim()) {
+          unifiedDiffText = incDiff;
+        }
+
+        revalidation = revalidatePriorFindings({
+          priorFindings: priorData?.findings || [],
+          incrementalDiffText: incDiff || '',
+        });
+      }
+    }
+
+    // 3. Execute review passes across lenses in parallel
+    const plan = resolveLensPlan({ mode: resolvedMode, config: resolvedConfig });
+    const executedLenses = plan.map((p) => p.lensId);
+    let allFindings = [];
+    let subagentErrors = [];
+
+    if (typeof runnerFn === 'function') {
+      const subagentResult = await dispatchSubagentsParallel({
+        plan,
+        diffText: unifiedDiffText,
+        prMetadata,
+        customInstructions,
+        runnerFn,
+        diffTransport,
+      });
+      allFindings = subagentResult.findings;
+      subagentErrors = subagentResult.errors;
+    }
+
+    // 4. Deduplicate findings (merging still-open prior findings in incremental mode)
+    let combinedFindings = allFindings;
+    if (incremental && revalidation?.findings) {
+      const stillOpen = revalidation.findings.filter((f) => f.status === 'still open');
+      combinedFindings = [...allFindings, ...stillOpen];
+    }
+    const deduplicated = deduplicateFindings(combinedFindings);
+
+    // 5. Generate Review Summary
+    const severityCounts = { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 };
+    for (const f of deduplicated) {
+      const sev = f.severity || 'P2';
+      if (severityCounts[sev] !== undefined) {
+        severityCounts[sev]++;
+      }
+    }
+
+    const lensesList = executedLenses.map((id) => LENS_DEFINITIONS[id]?.name || id).join(', ');
+    const countsSummary = Object.entries(severityCounts)
+      .filter(([, count]) => count > 0)
+      .map(([sev, count]) => `**${sev}**: ${count}`)
+      .join(' | ') || 'None';
+
+    const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
+    let summary = `## PR Review Summary (Mode: \`${modeLabel}\`)
+
+- **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
+- **Specialist Lenses Inspected**: ${lensesList}
+- **Total Findings**: ${deduplicated.length} (${countsSummary})
+${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
+${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
+
+    if (revalidation) {
+      summary += '\n\n' + formatRevalidationSummary(revalidation);
+    }
+
+    const transportInfo = diffTransport
+      ? {
+          isLarge: true,
+          byteSize: diffTransport.byteSize,
+          totalFiles: diffTransport.manifest.totalFiles,
+        }
+      : {
+          isLarge: false,
+          byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
+        };
+
+    // 6. Publish or Dry Run
+    const diffs = parseUnifiedDiff(unifiedDiffText);
+
+    if (publish && !dryRun) {
+      const pubResult = await publishReview({
+        prNumber: num,
+        reviewBody: summary,
+        findings: deduplicated,
+        diffText: unifiedDiffText,
+        expectedHeadSha: currentHeadSha,
+        config: resolvedConfig,
+        execGhFn,
+        execFileFn,
+        cwd,
+        repo,
+      });
 
       return {
         prNumber: num,
         repo: repo || null,
         headSha: currentHeadSha,
         mode: resolvedMode.name,
-        relationship: 'same_head',
-        canIncremental: false,
+        relationship: commitRel?.relationship || null,
+        canIncremental: commitRel?.canIncremental ?? false,
         priorReview: priorData?.latestReview || null,
-        lensesExecuted: [],
-        subagentPlan: [],
-        errors: [],
-        findings: priorData?.findings || [],
-        rawFindingsCount: priorData?.findings?.length || 0,
-        summary,
-        revalidation: null,
-        classification: null,
-        publication: null,
-        published: false,
+        revalidation: revalidation || null,
+        lensesExecuted: executedLenses,
+        subagentPlan: plan,
+        errors: subagentErrors,
+        findings: deduplicated,
+        rawFindingsCount: allFindings.length,
+        summary: pubResult.reviewBody,
+        classification: pubResult.classification,
+        publication: pubResult,
+        published: true,
+        diffTransport: transportInfo,
       };
     }
 
-    if (commitRel.relationship === 'incremental') {
-      const incDiff = await getIncrementalDiff({
-        priorHeadSha: commitRel.priorHeadSha,
-        currentHeadSha,
-        repo,
-        execGitFn,
-        execGhFn,
-        cwd,
-      });
-
-      if (incDiff && incDiff.trim()) {
-        unifiedDiffText = incDiff;
-      }
-
-      revalidation = revalidatePriorFindings({
-        priorFindings: priorData?.findings || [],
-        incrementalDiffText: incDiff || '',
-      });
-    }
-  }
-
-  // 3. Execute review passes across lenses in parallel
-  const plan = resolveLensPlan({ mode: resolvedMode, config: resolvedConfig });
-  const executedLenses = plan.map((p) => p.lensId);
-  let allFindings = [];
-  let subagentErrors = [];
-
-  if (typeof runnerFn === 'function') {
-    const subagentResult = await dispatchSubagentsParallel({
-      plan,
-      diffText: unifiedDiffText,
-      prMetadata,
-      customInstructions,
-      runnerFn,
-    });
-    allFindings = subagentResult.findings;
-    subagentErrors = subagentResult.errors;
-  }
-
-  // 4. Deduplicate findings (merging still-open prior findings in incremental mode)
-  let combinedFindings = allFindings;
-  if (incremental && revalidation?.findings) {
-    const stillOpen = revalidation.findings.filter((f) => f.status === 'still open');
-    combinedFindings = [...allFindings, ...stillOpen];
-  }
-  const deduplicated = deduplicateFindings(combinedFindings);
-
-  // 5. Generate Review Summary
-  const severityCounts = { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 };
-  for (const f of deduplicated) {
-    const sev = f.severity || 'P2';
-    if (severityCounts[sev] !== undefined) {
-      severityCounts[sev]++;
-    }
-  }
-
-  const lensesList = executedLenses.map((id) => LENS_DEFINITIONS[id]?.name || id).join(', ');
-  const countsSummary = Object.entries(severityCounts)
-    .filter(([, count]) => count > 0)
-    .map(([sev, count]) => `**${sev}**: ${count}`)
-    .join(' | ') || 'None';
-
-  const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
-  let summary = `## PR Review Summary (Mode: \`${modeLabel}\`)
-
-- **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
-- **Specialist Lenses Inspected**: ${lensesList}
-- **Total Findings**: ${deduplicated.length} (${countsSummary})
-
-${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
-
-  if (revalidation) {
-    summary += '\n\n' + formatRevalidationSummary(revalidation);
-  }
-
-  // 6. Publish or Dry Run
-  const diffs = parseUnifiedDiff(unifiedDiffText);
-
-  if (publish && !dryRun) {
-    const pubResult = await publishReview({
-      prNumber: num,
-      reviewBody: summary,
-      findings: deduplicated,
-      diffText: unifiedDiffText,
-      expectedHeadSha: currentHeadSha,
-      config: resolvedConfig,
-      execGhFn,
-      execFileFn,
-      cwd,
-      repo,
+    const classification = classifyFindings(deduplicated, diffs, {
+      maxInlineComments: resolvedConfig.publishing?.maxInlineComments ?? 50,
     });
 
     return {
@@ -471,34 +586,15 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       errors: subagentErrors,
       findings: deduplicated,
       rawFindingsCount: allFindings.length,
-      summary: pubResult.reviewBody,
-      classification: pubResult.classification,
-      publication: pubResult,
-      published: true,
+      summary,
+      classification,
+      publication: null,
+      published: false,
+      diffTransport: transportInfo,
     };
+  } finally {
+    if (autoCreatedTransport && diffTransport) {
+      await diffTransport.cleanup();
+    }
   }
-
-  const classification = classifyFindings(deduplicated, diffs, {
-    maxInlineComments: resolvedConfig.publishing?.maxInlineComments ?? 50,
-  });
-
-  return {
-    prNumber: num,
-    repo: repo || null,
-    headSha: currentHeadSha,
-    mode: resolvedMode.name,
-    relationship: commitRel?.relationship || null,
-    canIncremental: commitRel?.canIncremental ?? false,
-    priorReview: priorData?.latestReview || null,
-    revalidation: revalidation || null,
-    lensesExecuted: executedLenses,
-    subagentPlan: plan,
-    errors: subagentErrors,
-    findings: deduplicated,
-    rawFindingsCount: allFindings.length,
-    summary,
-    classification,
-    publication: null,
-    published: false,
-  };
 }

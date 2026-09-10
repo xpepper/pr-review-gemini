@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +85,11 @@ function finalizeFile(file) {
     }
   }
 
+  if (file.rawLines) {
+    file.diffText = file.rawLines.join('\n');
+    file.byteSize = Buffer.byteLength(file.diffText, 'utf8');
+  }
+
   return file;
 }
 
@@ -126,6 +134,7 @@ export function parseUnifiedDiff(diffText) {
         status: null,
         isBinary: false,
         hunks: [],
+        rawLines: [line],
       };
       continue;
     }
@@ -139,12 +148,16 @@ export function parseUnifiedDiff(diffText) {
         status: null,
         isBinary: false,
         hunks: [],
+        rawLines: [line],
       };
+      continue;
     }
 
     if (!currentFile) {
       continue;
     }
+
+    currentFile.rawLines.push(line);
 
     // Metadata lines
     if (line.startsWith('old mode ')) {
@@ -475,3 +488,447 @@ export async function getPrDiff(prNumberOrOptions, maybeOptions = {}) {
     throw new Error(`Failed to fetch diff for PR #${prNum}: ${detail}`);
   }
 }
+
+/**
+ * Standard thresholds and budget constraints for large diff transport.
+ */
+export const LARGE_DIFF_THRESHOLD_BYTES = 200 * 1024; // 204,800 bytes (200 KB)
+export const MAX_SUPERVISED_READS = 16;
+export const DEFAULT_SUPERVISED_BUDGET_BYTES = 640 * 1024; // 655,360 bytes (640 KB)
+export const MAX_SUPERVISED_BUDGET_BYTES = 1024 * 1024; // 1,048,576 bytes (1 MB)
+
+/**
+ * Detects whether a raw unified diff exceeds the inline transport threshold (> 200 KB).
+ *
+ * @param {string | null | undefined} diffText
+ * @param {number} [threshold=LARGE_DIFF_THRESHOLD_BYTES]
+ * @returns {boolean}
+ */
+export function isLargeDiff(diffText, threshold = LARGE_DIFF_THRESHOLD_BYTES) {
+  if (typeof diffText !== 'string' || !diffText.trim()) {
+    return false;
+  }
+  return Buffer.byteLength(diffText, 'utf8') > threshold;
+}
+
+/**
+ * Generates a structured changed-file manifest from raw diff text or parsed files.
+ *
+ * @param {string | Array<object>} diffTextOrFiles
+ * @param {object} [options]
+ * @param {number} [options.threshold=LARGE_DIFF_THRESHOLD_BYTES]
+ * @returns {object}
+ */
+export function generateDiffManifest(diffTextOrFiles, options = {}) {
+  const threshold = options.threshold ?? LARGE_DIFF_THRESHOLD_BYTES;
+  const isString = typeof diffTextOrFiles === 'string';
+  const diffText = isString ? diffTextOrFiles : '';
+  const parsedFiles = isString
+    ? parseUnifiedDiff(diffText)
+    : (Array.isArray(diffTextOrFiles) ? diffTextOrFiles : []);
+
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  let totalBytes = isString ? Buffer.byteLength(diffText, 'utf8') : 0;
+
+  const files = parsedFiles.map((file) => {
+    let additions = 0;
+    let deletions = 0;
+    for (const hunk of file.hunks || []) {
+      for (const dl of hunk.diffLines || []) {
+        if (dl.type === 'add') additions++;
+        if (dl.type === 'delete') deletions++;
+      }
+    }
+    totalAdditions += additions;
+    totalDeletions += deletions;
+
+    const fileBytes = file.byteSize || (file.diffText ? Buffer.byteLength(file.diffText, 'utf8') : 0);
+    if (!isString) {
+      totalBytes += fileBytes;
+    }
+
+    return {
+      path: file.path,
+      oldPath: file.oldPath,
+      newPath: file.newPath,
+      status: file.status || 'modified',
+      hunksCount: file.hunks?.length || 0,
+      additions,
+      deletions,
+      byteSize: fileBytes,
+      isBinary: Boolean(file.isBinary),
+    };
+  });
+
+  return {
+    totalFiles: files.length,
+    totalAdditions,
+    totalDeletions,
+    totalBytes,
+    isLarge: totalBytes > threshold,
+    files,
+  };
+}
+
+/**
+ * Formats a structured diff manifest into a readable markdown summary table.
+ *
+ * @param {object} manifest
+ * @returns {string}
+ */
+export function formatDiffManifest(manifest) {
+  if (!manifest || !Array.isArray(manifest.files) || manifest.files.length === 0) {
+    return 'No changed files in manifest.';
+  }
+
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const rows = [
+    '| Status | File | +/- Lines | Diff Size | Hunks |',
+    '| :--- | :--- | :--- | :--- | :--- |',
+  ];
+
+  for (const f of manifest.files) {
+    const linesCol = `+${f.additions} / -${f.deletions}`;
+    const sizeCol = formatBytes(f.byteSize);
+    const hunksCol = f.isBinary ? '-' : String(f.hunksCount);
+    rows.push(`| ${f.status} | \`${f.path}\` | ${linesCol} | ${sizeCol} | ${hunksCol} |`);
+  }
+
+  const summaryLine = `\n**Total Files**: ${manifest.totalFiles} | **Total Additions**: +${manifest.totalAdditions} | **Total Deletions**: -${manifest.totalDeletions} | **Total Diff Size**: ${formatBytes(manifest.totalBytes)}`;
+
+  return rows.join('\n') + '\n' + summaryLine;
+}
+
+/**
+ * Creates a host-enforced supervised diff reader capped by read operations and byte budget.
+ *
+ * @param {object} options
+ * @param {string} [options.diffFilePath] - Path to diff file on disk
+ * @param {string} [options.diffText] - In-memory unified diff text
+ * @param {object} [options.manifest] - Precomputed manifest
+ * @param {number} [options.maxReads=MAX_SUPERVISED_READS] - Maximum allowed read calls (default: 16)
+ * @param {number} [options.maxBudgetBytes=DEFAULT_SUPERVISED_BUDGET_BYTES] - Default budget (~640 KB)
+ * @param {number} [options.maxBudgetCap=MAX_SUPERVISED_BUDGET_BYTES] - Hard budget ceiling (1 MB)
+ * @returns {object}
+ */
+export function createHostSupervisedDiffReader(options = {}) {
+  const {
+    diffFilePath = null,
+    diffText = '',
+    manifest: providedManifest = null,
+    maxReads = MAX_SUPERVISED_READS,
+    maxBudgetBytes = DEFAULT_SUPERVISED_BUDGET_BYTES,
+    maxBudgetCap = MAX_SUPERVISED_BUDGET_BYTES,
+  } = options;
+
+  const rawDiff = diffText || (diffFilePath ? fs.readFileSync(diffFilePath, 'utf8') : '');
+  const parsedFiles = parseUnifiedDiff(rawDiff);
+  const manifest = providedManifest || generateDiffManifest(parsedFiles, { threshold: LARGE_DIFF_THRESHOLD_BYTES });
+
+  const effectiveBudget = Math.min(
+    typeof maxBudgetBytes === 'number' && maxBudgetBytes > 0 ? maxBudgetBytes : DEFAULT_SUPERVISED_BUDGET_BYTES,
+    maxBudgetCap
+  );
+  const effectiveMaxReads = typeof maxReads === 'number' && maxReads > 0 ? maxReads : MAX_SUPERVISED_READS;
+
+  let readsCount = 0;
+  let bytesRead = 0;
+
+  function getBudgetState() {
+    return {
+      readsCount,
+      maxReads: effectiveMaxReads,
+      bytesRead,
+      maxBudgetBytes: effectiveBudget,
+      remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+      remainingBytes: Math.max(0, effectiveBudget - bytesRead),
+    };
+  }
+
+  async function read(params = {}) {
+    const { file, offset = 0, limit, startLine, lineCount } = params;
+
+    if (readsCount >= effectiveMaxReads) {
+      return {
+        error: `ACCESS_BUDGET_EXCEEDED: Maximum read operations (${effectiveMaxReads}) reached.`,
+        content: '',
+        bytesRead: 0,
+        truncated: true,
+        readsCount,
+        remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+        remainingReads: 0,
+      };
+    }
+
+    if (bytesRead >= effectiveBudget) {
+      return {
+        error: `ACCESS_BUDGET_EXCEEDED: Maximum byte access budget (${effectiveBudget} bytes) reached.`,
+        content: '',
+        bytesRead: 0,
+        truncated: true,
+        readsCount,
+        remainingBudget: 0,
+        remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+      };
+    }
+
+    // If a file is specified, extract that file
+    let targetText = rawDiff;
+    if (file) {
+      // Path traversal check
+      if (file.includes('..') || path.isAbsolute(file)) {
+        return {
+          error: `INVALID_FILE_PATH: Path traversal or absolute paths are not permitted: "${file}"`,
+          content: '',
+          bytesRead: 0,
+          truncated: false,
+          readsCount,
+          remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+          remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+        };
+      }
+
+      const fileDiff = getFileDiff(parsedFiles, file);
+      if (!fileDiff) {
+        return {
+          error: `FILE_NOT_FOUND: File "${file}" was not found in the PR diff.`,
+          content: '',
+          bytesRead: 0,
+          truncated: false,
+          readsCount,
+          remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+          remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+        };
+      }
+
+      targetText = fileDiff.diffText || '';
+    }
+
+    // Line slicing if startLine or lineCount specified
+    if (typeof startLine === 'number' || typeof lineCount === 'number') {
+      const lines = targetText.split(/\r?\n/);
+      const startIdx = Math.max(0, (startLine || 1) - 1);
+      const endIdx = typeof lineCount === 'number' ? startIdx + lineCount : lines.length;
+      targetText = lines.slice(startIdx, endIdx).join('\n');
+    }
+
+    // Byte/character offset & limit
+    let content = targetText;
+    if (offset > 0) {
+      content = content.slice(offset);
+    }
+    if (typeof limit === 'number' && limit > 0) {
+      content = content.slice(0, limit);
+    }
+
+    // Check remaining budget
+    const remainingBudget = Math.max(0, effectiveBudget - bytesRead);
+    let truncated = false;
+    const contentBytes = Buffer.byteLength(content, 'utf8');
+
+    if (contentBytes > remainingBudget) {
+      // Truncate content to fit remaining budget
+      const buf = Buffer.from(content, 'utf8').subarray(0, remainingBudget);
+      content = buf.toString('utf8');
+      truncated = true;
+    }
+
+    const actualBytes = Buffer.byteLength(content, 'utf8');
+    readsCount++;
+    bytesRead += actualBytes;
+
+    return {
+      content,
+      bytesRead: actualBytes,
+      truncated,
+      readsCount,
+      remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+      remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+    };
+  }
+
+  async function grep(params = {}) {
+    const { query, pattern, file, isRegex = false, caseInsensitive = true, maxMatches = 50 } = params;
+    const searchPattern = query || pattern || '';
+
+    if (readsCount >= effectiveMaxReads) {
+      return {
+        error: `ACCESS_BUDGET_EXCEEDED: Maximum read operations (${effectiveMaxReads}) reached.`,
+        matches: [],
+        totalMatches: 0,
+        truncated: true,
+        readsCount,
+        remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+        remainingReads: 0,
+      };
+    }
+
+    if (bytesRead >= effectiveBudget) {
+      return {
+        error: `ACCESS_BUDGET_EXCEEDED: Maximum byte access budget (${effectiveBudget} bytes) reached.`,
+        matches: [],
+        totalMatches: 0,
+        truncated: true,
+        readsCount,
+        remainingBudget: 0,
+        remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+      };
+    }
+
+    let regex;
+    try {
+      if (isRegex) {
+        regex = new RegExp(searchPattern, caseInsensitive ? 'i' : '');
+      } else {
+        const escaped = searchPattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        regex = new RegExp(escaped, caseInsensitive ? 'i' : '');
+      }
+    } catch (err) {
+      return {
+        error: `INVALID_PATTERN: ${err.message}`,
+        matches: [],
+        totalMatches: 0,
+        truncated: false,
+        readsCount,
+        remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+        remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+      };
+    }
+
+    // Determine target files to search
+    const filesToSearch = file
+      ? parsedFiles.filter((f) => f.path === file || f.newPath === file || f.oldPath === file)
+      : parsedFiles;
+
+    const matches = [];
+    let truncated = false;
+
+    for (const f of filesToSearch) {
+      const lines = (f.diffText || '').split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (regex.test(line)) {
+          matches.push({
+            file: f.path,
+            lineNumber: i + 1,
+            content: line,
+          });
+          if (matches.length >= maxMatches) {
+            truncated = true;
+            break;
+          }
+        }
+      }
+      if (truncated) break;
+    }
+
+    readsCount++;
+    const outputBytes = Buffer.byteLength(JSON.stringify(matches), 'utf8');
+    bytesRead += Math.min(outputBytes, effectiveBudget - bytesRead);
+
+    return {
+      matches,
+      totalMatches: matches.length,
+      truncated,
+      readsCount,
+      remainingBudget: Math.max(0, effectiveBudget - bytesRead),
+      remainingReads: Math.max(0, effectiveMaxReads - readsCount),
+    };
+  }
+
+  function find(params = {}) {
+    const { query, pattern, status } = params;
+    const term = (query || pattern || '').toLowerCase().trim();
+
+    let filtered = manifest.files;
+
+    if (status) {
+      filtered = filtered.filter((f) => f.status.toLowerCase() === status.toLowerCase());
+    }
+
+    if (term) {
+      filtered = filtered.filter((f) => f.path.toLowerCase().includes(term));
+    }
+
+    return {
+      files: filtered,
+      totalMatches: filtered.length,
+    };
+  }
+
+  return {
+    getBudgetState,
+    read,
+    grep,
+    find,
+    manifest,
+  };
+}
+
+/**
+ * Creates a file-backed diff transport for large pull request diffs.
+ *
+ * @param {string} diffText - Raw unified diff text
+ * @param {object} [options]
+ * @param {number} [options.threshold=LARGE_DIFF_THRESHOLD_BYTES] - Large diff threshold
+ * @param {number} [options.maxReads=MAX_SUPERVISED_READS]
+ * @param {number} [options.maxBudgetBytes=DEFAULT_SUPERVISED_BUDGET_BYTES]
+ * @param {number} [options.maxBudgetCap=MAX_SUPERVISED_BUDGET_BYTES]
+ * @returns {Promise<object>}
+ */
+export async function createFileBackedDiff(diffText, options = {}) {
+  const text = typeof diffText === 'string' ? diffText : '';
+  const byteSize = Buffer.byteLength(text, 'utf8');
+  const threshold = options.threshold ?? LARGE_DIFF_THRESHOLD_BYTES;
+  const isLarge = byteSize > threshold;
+
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'pr-review-diff-'));
+  const diffFilePath = path.join(tempDir, 'diff.patch');
+
+  try {
+    await fs.promises.writeFile(diffFilePath, text, 'utf8');
+  } catch (err) {
+    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
+
+  const manifest = generateDiffManifest(text, { threshold });
+  const formattedManifest = formatDiffManifest(manifest);
+
+  const reader = createHostSupervisedDiffReader({
+    diffFilePath,
+    diffText: text,
+    manifest,
+    maxReads: options.maxReads ?? MAX_SUPERVISED_READS,
+    maxBudgetBytes: options.maxBudgetBytes ?? DEFAULT_SUPERVISED_BUDGET_BYTES,
+    maxBudgetCap: options.maxBudgetCap ?? MAX_SUPERVISED_BUDGET_BYTES,
+  });
+
+  const cleanup = async () => {
+    try {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } catch {
+      // Ignored
+    }
+  };
+
+  return {
+    diffFilePath,
+    tempDir,
+    byteSize,
+    isLarge,
+    manifest,
+    formattedManifest,
+    reader,
+    cleanup,
+  };
+}
+
+
