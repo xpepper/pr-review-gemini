@@ -6,11 +6,12 @@
 
 ---
 
-## Active Next Task: Increment 9 — Interactive Finding Selection & Cached Publish-Later
+## Active Next Task: Increment 9 / Issue #14 — Interactive Finding Selection & Cached Publish-Later
+- [ ] Create branch `feat/interactive-selection` for Issue #14.
 - [ ] Design finding selection interface (`--all` vs interactive selection).
-- [ ] Implement in-session caching / publish-later retention mechanism to post reviews without re-evaluating model passes.
+- [ ] Implement in-session caching / publish-later retention mechanism (`publish-later` / `publish-cached`) to post reviews without re-evaluating model passes.
 - [ ] Add CLI flags and interactive prompts for finding triage.
-- [ ] Unit test finding selection and cached publish flows.
+- [ ] Unit test finding selection, cache serialization, and stale-head invalidation.
 - [ ] Dogfood-review and open PR on GitHub.
 
 ---
@@ -24,7 +25,7 @@
   - [x] MCP tools integration (`gem_pr_review_diff_read` and enhanced `gem_pr_review_diff`).
   - [x] Agent skill update (`skills/gem-pr-review/SKILL.md`) and documentation in `README.md`.
   - [x] 26 new unit tests across 5 test suites (191 tests passing).
-  - [x] PR #13 opened, dogfood review run against PR #13.
+  - [x] Merged via PR #13 after dogfood review.
 - [x] **Increment 7b / Issue #11: Per-Lens Model & Reasoning-Effort Overrides**
   - [x] Configuration support in `src/config.js` (`resolveConfig`, `loadConfig`) for `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
   - [x] Resolution precedence in `src/subagents.js`: `lens override -> tier configuration -> plugin defaults`.

@@ -3,8 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/large-diff-transport` (clean, 4 commits ahead of `main`)
-* **Active PR**: [PR #13: feat: implement large-diff transport and file-backed paging (> 200 KB)](https://github.com/xpepper/pr-review-gemini/pull/13)
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
 * **Test Suite**: `npm test` runs and passes (191 tests across 50 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -19,7 +18,7 @@
   - PR #10: `feat: rename plugin, skill, and MCP tools to gem-pr-review`
   - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
-  - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
+  - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)` (Merged)
 
 ---
 
@@ -97,39 +96,45 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 9 — Interactive Finding Selection & Cached Publish-Later
+## Next Session Mission: Increment 9 / Issue #14 — Interactive Finding Selection & Cached Publish-Later
+
+- **GitHub Issue**: [#14: feat: interactive finding selection and cached publish-later](https://github.com/xpepper/pr-review-gemini/issues/14)
+- **Target Branch**: `feat/interactive-selection`
 
 ### Goal
-Implement interactive finding selection before publishing reviews, allowing users to pick findings interactively or via `--all`, and support in-session cached retention so users can publish without re-evaluating model passes.
+Implement interactive finding selection before publishing reviews, allowing reviewers to triage findings interactively or via batch selection flags (`--all`), and support in-session cached retention (`publish-later` / `publish-cached`) so reviewers can inspect findings and publish without re-evaluating costly model inference passes.
 
 ### Requirements & Architecture
 1. **Interactive Finding Selection**:
-   - Provide an interactive prompt (or CLI flags like `--all`, `--findings <ids>`) before publishing review comments to GitHub.
-   - Display a clean menu showing finding severity, file:line location, and title.
+   - Provide an interactive prompt or CLI flags (e.g. `--all` vs interactive triage) in `scripts/dogfood-review.mjs` and reviewer orchestrator before publishing review comments to GitHub.
+   - Display a clean, actionable selection table showing finding severity (`P0`–`P3`, `nit`), confidence score, file path, line number, and title.
+   - Allow selecting/unselecting findings individually or by severity threshold.
 2. **In-Session Caching & Publish-Later**:
-   - Retain reviewed findings in session cache/temp artifact.
-   - Allow a subsequent publish command to target cached findings without triggering fresh model inference passes.
+   - Cache reviewed findings in an in-memory session or temporary artifact cache keyed by PR number and head commit SHA.
+   - Support publishing cached findings directly without rerunning specialist subagent passes (`--publish-cached` CLI option and MCP tool `gem_pr_review_publish_cached`).
+   - Freshness & Invalidation: Verify that cached findings match the current PR head SHA; invalidate if the head commit has moved.
 3. **Host-Gating Preserved**:
-   - Ensure all published comments remain subject to host-enforced hunk validation and safety rules.
+   - Ensure all published comments remain strictly subject to host-enforced hunk validation, author checks, and safety rules.
 4. **Test-First Verification**:
-   - Unit test finding filtering, selection logic, and cache serialization/retrieval.
+   - Add unit tests for interactive selection filtering, cache persistence/retrieval, stale-head cache rejection, and CLI parameter parsing.
 
 ---
 
 ## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 9 on this repository: "Interactive Finding Selection & Cached Publish-Later".
+Please implement Increment 9 on this repository: "Interactive Finding Selection & Cached Publish-Later" (addressing Issue #14: https://github.com/xpepper/pr-review-gemini/issues/14).
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm PR #13 is merged or merge feat/large-diff-transport into main, then checkout main and create a feature branch: feat/interactive-selection.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/interactive-selection.
 
 Implementation requirements:
-- Interactive Finding Selection: Provide interactive selection UI / CLI controls (--all vs choosing specific findings) before publishing reviews to GitHub.
-- In-Session Caching (Publish-Later): Store reviewed findings in a cache to allow publishing without rerunning subagent model inference.
+- Interactive Finding Selection: Provide interactive selection UI / CLI controls (--all vs choosing specific findings) before publishing reviews to GitHub, showing severity, confidence, location, and title.
+- In-Session Caching (Publish-Later): Store reviewed findings in a cache keyed by PR and head SHA to allow publishing without rerunning subagent model inference (supporting --publish-cached and MCP tool gem_pr_review_publish_cached).
+- Freshness & Invalidation: Reject/invalidate cached findings if the PR head SHA has changed.
 - Preservation of host-gated publishing guarantees: Selected findings must still be verified against diff hunks and pass all safety checks.
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 191+ tests passing.
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 191+ tests passing and adding unit tests for selection and caching.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 
