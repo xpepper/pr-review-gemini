@@ -1,43 +1,219 @@
 # Copilot PR Review
 
-Parallel, model-agnostic AI code review for GitHub pull requests, ported to GitHub Copilot CLI and the [Agent Plugins](https://agent-plugins.org/) standard.
+Parallel, multi-lens AI code review for GitHub pull requests, adhering to the [Agent Plugins 1.0](https://agent-plugins.org/) standard.
 
-## Features
+Evaluates pull requests across specialized lenses (correctness, contracts, security, performance, conventions, tests), anchors comments strictly in actual git diff hunks to eliminate hallucinations, supports incremental re-reviews on updated commits, and executes tests in detached worktrees.
 
-- **Multi-Lens Specialist Reviews**: Evaluates PRs across correctness, security, contracts, performance, and conventions.
-- **Configurable Model Tiers & Reasoning Efforts**: Map `light`, `medium`, and `heavy` review lenses to specific Copilot models with configurable reasoning effort (`low`, `medium`, `high`).
-- **Review Modes**: Balanced (default), Quick, Full, and Deep review options.
-- **Host-Gated Publishing**: Validates diff anchors against actual git hunks before submitting inline GitHub comments, preventing broken API writes and hallucinated locations.
-- **Incremental Re-reviews**: Hunts only new commits on updated pull requests and revalidates prior findings.
-- **Detached Verification**: Runs test baselines in isolated worktrees to protect local environments.
+---
 
-## Architecture & Standards
+## Quick Start (Get Started in 30 Seconds)
 
-This project is packaged as an **Agent Plugin (v1.0)**:
-- `plugin.json`: Plugin manifest according to the Agent Plugins standard.
-- `skills/pr-review/`: Skill playbook defining the `/pr-review` command and reviewer lens prompts.
-- `mcp.json` & `server/`: Lightweight Model Context Protocol (MCP) server providing diff parsing, anchor verification, Copilot SDK subagents, and GitHub publishing.
+### Prerequisites
+- **Node.js**: `>= 20.0.0`
+- **GitHub CLI (`gh`)**: Authenticated (`gh auth status`)
 
-For an in-depth breakdown of the architecture, feature comparison with `pi-pr-review`, and full delivery backlog, see [docs/roadmap.md](docs/roadmap.md).
+### 1. Run via CLI (Dry-Run)
+Inspect review findings on any pull request without publishing comments to GitHub:
+```bash
+node scripts/dogfood-review.mjs <PR_NUMBER> --dry-run
+```
 
-## Core Principles
+To test the review pipeline instantly without model inference or API keys, use `--mock`:
+```bash
+node scripts/dogfood-review.mjs <PR_NUMBER> --mock --dry-run
+```
 
-1. **Small, Sequential Increments**: Build from the ground up in small, provable steps backed by tests.
-2. **Eat Our Own Dog Food**: As soon as a minimum viable reviewer is ready, all subsequent increments are reviewed by this tool as GitHub PRs.
+### 2. Run via GitHub Copilot CLI (Agent Skill)
+In GitHub Copilot CLI or any Agent Plugins compatible runtime:
+```bash
+/pr-review <PR_NUMBER>
+```
 
-## Agent Guidelines & Handoff
+### 3. Run via MCP Inspector (Web UI)
+Launch the interactive Model Context Protocol inspector to test all tools visually:
+```bash
+npx @modelcontextprotocol/inspector node server/index.js
+```
 
-- Working guidelines for AI agents: [AGENTS.md](AGENTS.md)
-- Current state & next steps: [HANDOFF.md](HANDOFF.md)
-- Task list: [TODO.md](TODO.md)
+---
 
-## Development
+## Core Usage & CLI Options
 
-Run tests:
+The CLI runner (`scripts/dogfood-review.mjs`) provides full control over review modes and publishing:
+
+```bash
+node scripts/dogfood-review.mjs <PR_NUMBER> [options]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--dry-run`, `--no-comment` | Analyze the PR and print the markdown summary without publishing to GitHub |
+| `--publish`, `--comment` | Submit the host-gated review and diff-anchored inline comments to GitHub |
+| `--quick` | Fast triage running 3 critical lenses (Correctness, Security, Conventions) |
+| `--balanced` | *(Default)* Standard multi-lens review running 5 specialist lenses |
+| `--full` | Exhaustive review running 6 lenses, including Test Quality & Coverage |
+| `--deep` | Focused deep dive with high reasoning effort on Correctness & Concurrency |
+| `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
+| `--repo <owner/repo>` | Target repository (defaults to current git origin) |
+| `--model <model>` | Override the default model used by review subagents |
+| `--mock` | Use synthetic runner for rapid offline testing without inference |
+
+### CLI Examples
+
+**Standard balanced dry-run:**
+```bash
+node scripts/dogfood-review.mjs 42 --dry-run
+```
+
+**Fast triage on smaller PRs:**
+```bash
+node scripts/dogfood-review.mjs 42 --quick --dry-run
+```
+
+**Incremental re-review on updated PR:**
+```bash
+node scripts/dogfood-review.mjs 42 --incremental --dry-run
+```
+
+**Publish host-gated review to GitHub:**
+```bash
+node scripts/dogfood-review.mjs 42 --publish
+```
+
+---
+
+## Review Modes & Specialist Lenses
+
+Each review mode selects a curated set of independent specialist lenses:
+
+| Specialist Lens | Focus Area | `quick` | `balanced` | `full` | `deep` |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Correctness & Concurrency** | Logic errors, race conditions, async lifecycles, null pointers | ✅ | ✅ | ✅ | ✅ *(High Reasoning)* |
+| **Contracts & Data** | API compatibility, schema changes, serialization, typing | | ✅ | ✅ | |
+| **Security & Trust** | Injection flaws, auth bypasses, data exposure, tainted inputs | ✅ | ✅ | ✅ | |
+| **Performance & Resources** | Complexity regressions, N+1 queries, leaks, unbatched I/O | | ✅ | ✅ | |
+| **Conventions & Maintainability** | Project idioms, readability, naming, architectural layering | ✅ | ✅ | ✅ | |
+| **Test Quality & Coverage** | Edge cases, missing regression tests, brittle assertions | | | ✅ | |
+
+---
+
+## Key Features
+
+### 1. Host-Gated Publishing & Anti-Hallucination
+The AI agent is never permitted to make direct, unvalidated write requests to GitHub. Every comment passes through host-enforced safety gates:
+- **Diff Anchor Validation**: Verifies that every proposed comment references an actual changed line inside a valid `@@ -old,+new @@` git hunk.
+- **Stale Head Protection**: Blocks submission if the PR branch has moved since analysis started.
+- **Capping & Spam Prevention**: Caps inline comments at 50 to avoid flooding the PR.
+- **Decision Engine**: Resolves to `APPROVE` only when all criteria are satisfied (no P0/P1 issues, verified tests, non-author reviewer).
+
+### 2. Incremental Re-reviews (`--incremental`)
+When authors push updates to address review comments, re-running the full PR wastes tokens and loses context:
+- Inspects only the new commit range (`prior_head...current_head`).
+- Classifies commit relationships (`same_head`, `incremental`, `diverged`, `none`).
+- Revalidates previous findings, categorizing each as **`resolved`**, **`still open`**, or **`obsolete`**.
+
+### 3. Detached Worktree Test Verification (`pr_review_verify`)
+Safely executes test suites against the PR head in an isolated, detached git worktree:
+- Zero pollution of your active working directory or uncommitted changes.
+- Automatically handles worktree creation, timeout supervision, and clean disposal.
+- Supports pre-configured profiles (`node-test`, `npm-test`, `pytest`, `cargo-test`, `go-test`, etc.) or custom commands.
+
+---
+
+## Model Context Protocol (MCP) Server
+
+The package includes a compliant MCP server (`server/index.js`) declared in `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "copilot-pr-review": {
+      "command": "node",
+      "args": ["server/index.js"]
+    }
+  }
+}
+```
+
+### Exposed Tools
+- **`pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
+- **`pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
+- **`pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
+- **`pr_review_verify`**: Detached worktree test execution with process supervision.
+- **`pr_review_publish`**: Host-gated review submission with diff anchor validation.
+
+Test all tools interactively via MCP Inspector:
+```bash
+npx @modelcontextprotocol/inspector node server/index.js
+```
+
+---
+
+## Configuration
+
+Configuration is optional and works out of the box with sensible defaults. You can customize behavior using project-level or user-level configuration files:
+
+- **Project Config**: `.github/pr-review.json`
+- **User Config**: `~/.copilot/pr-review.json`
+
+### Example Configuration
+
+```json
+{
+  "tiers": {
+    "light": "gpt-4o-mini",
+    "medium": "claude-3.5-sonnet",
+    "heavy": "claude-3.7-sonnet"
+  },
+  "reasoningEfforts": {
+    "deep": "high",
+    "balanced": "medium",
+    "quick": "low"
+  },
+  "verification": {
+    "defaultProfile": "node-test",
+    "profiles": {
+      "node-test": {
+        "command": "node",
+        "args": ["--test"],
+        "timeoutMs": 60000
+      }
+    }
+  }
+}
+```
+
+---
+
+## Agent Plugins Standard
+
+This repository strictly complies with the [Agent Plugins 1.0 specification](https://agent-plugins.org/):
+- **`plugin.json`**: Plugin manifest declaring metadata and keywords.
+- **`skills/pr-review/SKILL.md`**: Skill prompt instructions, lens contracts, and severity schemas.
+- **`mcp.json`**: Model Context Protocol configuration for host tool execution.
+
+---
+
+## Testing & Verification
+
+Run the automated test suite:
 
 ```bash
 npm test
 ```
+
+All 151 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
+
+---
+
+## Documentation & Architecture
+
+- **[Architecture & Porting Roadmap](docs/roadmap.md)**: Design comparison with `pi-pr-review` and increment history.
+- **[Agent Guidelines](AGENTS.md)**: Operating principles and paired-agent development standards.
+- **[Session Status & Handoff](HANDOFF.md)**: Current completion status and active notes.
+- **[Task List](TODO.md)**: Roadmap item tracking and maintenance backlog.
+
+---
 
 ## License
 
