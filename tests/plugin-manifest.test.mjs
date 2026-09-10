@@ -7,10 +7,11 @@ describe('Plugin Manifest', () => {
     const raw = fs.readFileSync('plugin.json', 'utf8');
     const manifest = JSON.parse(raw);
 
-    assert.equal(manifest.name, 'copilot-pr-review');
+    assert.equal(manifest.name, 'gem-pr-review');
     assert.equal(typeof manifest.version, 'string');
     assert.ok(manifest.$schema.includes('agent-plugins.org'));
     assert.ok(Array.isArray(manifest.keywords));
     assert.ok(manifest.keywords.includes('copilot'));
+    assert.ok(manifest.keywords.includes('gem-pr-review'));
   });
 });

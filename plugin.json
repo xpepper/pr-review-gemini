@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "copilot-pr-review",
+  "name": "gem-pr-review",
   "version": "0.1.0",
   "description": "Parallel AI code review for GitHub pull requests using GitHub Copilot CLI and Agent Plugins.",
   "license": "MIT",
@@ -9,6 +9,7 @@
     "copilot-cli",
     "agent-plugin",
     "agent-skills",
+    "gem-pr-review",
     "pr-review",
     "code-review",
     "ai-code-review"

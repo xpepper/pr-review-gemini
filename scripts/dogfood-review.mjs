@@ -107,7 +107,7 @@ async function main() {
   }
 
   const cwd = process.cwd();
-  console.log(`\n🔍 Starting Copilot PR Review on PR #${prNumber}...`);
+  console.log(`\n🔍 Starting Gem PR Review on PR #${prNumber}...`);
   console.log(`   Mode: ${mode}${incremental ? ' [incremental]' : ''}`);
   console.log(`   Action: ${dryRun ? 'Dry-run (inspect only)' : publish ? 'Publish host-gated review' : 'Dry-run (default)'}`);
 

@@ -53,7 +53,7 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.equal(response.id, 1);
       assert.ok(response.result);
       assert.equal(response.result.protocolVersion, '2024-11-05');
-      assert.equal(response.result.serverInfo.name, 'copilot-pr-review');
+      assert.equal(response.result.serverInfo.name, 'gem-pr-review');
       assert.ok(response.result.capabilities.tools);
     });
 
@@ -70,7 +70,7 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.deepEqual(response.result, {});
     });
 
-    it('handles tools/list returning pr_review_subagents, pr_review_diff, and pr_review_publish', async () => {
+    it('handles tools/list returning gem_pr_review_subagents, gem_pr_review_diff, and gem_pr_review_publish', async () => {
       const handler = createMcpHandler();
       const response = await handler.handleMessage({
         jsonrpc: '2.0',
@@ -83,23 +83,24 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.ok(Array.isArray(response.result.tools));
 
       const toolNames = response.result.tools.map((t) => t.name);
-      assert.ok(toolNames.includes('pr_review_subagents'));
-      assert.ok(toolNames.includes('pr_review_diff'));
-      assert.ok(toolNames.includes('pr_review_publish'));
-      assert.ok(toolNames.includes('pr_review_prior'));
+      assert.ok(toolNames.includes('gem_pr_review_subagents'));
+      assert.ok(toolNames.includes('gem_pr_review_diff'));
+      assert.ok(toolNames.includes('gem_pr_review_publish'));
+      assert.ok(toolNames.includes('gem_pr_review_prior'));
+      assert.ok(toolNames.includes('gem_pr_review_verify'));
 
-      const subagentsTool = response.result.tools.find((t) => t.name === 'pr_review_subagents');
+      const subagentsTool = response.result.tools.find((t) => t.name === 'gem_pr_review_subagents');
       assert.ok(subagentsTool.description);
       assert.ok(subagentsTool.inputSchema.properties.prNumber);
       assert.ok(subagentsTool.inputSchema.properties.mode);
 
-      const priorTool = response.result.tools.find((t) => t.name === 'pr_review_prior');
+      const priorTool = response.result.tools.find((t) => t.name === 'gem_pr_review_prior');
       assert.ok(priorTool.description);
       assert.ok(priorTool.inputSchema.properties.prNumber);
       assert.ok(priorTool.inputSchema.properties.currentHeadSha);
     });
 
-    it('handles tools/call for pr_review_diff', async () => {
+    it('handles tools/call for gem_pr_review_diff', async () => {
       const mockDiff = `diff --git a/a.js b/a.js
 index 1111111..2222222 100644
 --- a/a.js
@@ -117,7 +118,7 @@ index 1111111..2222222 100644
         id: 4,
         method: 'tools/call',
         params: {
-          name: 'pr_review_diff',
+          name: 'gem_pr_review_diff',
           arguments: { prNumber: 42 },
         },
       });
@@ -130,7 +131,36 @@ index 1111111..2222222 100644
       assert.equal(parsed.files[0].path, 'a.js');
     });
 
-    it('handles tools/call for pr_review_subagents in mock dry-run', async () => {
+    it('handles tools/call for legacy pr_review_diff for backwards compatibility', async () => {
+      const mockDiff = `diff --git a/a.js b/a.js
+index 1111111..2222222 100644
+--- a/a.js
++++ b/a.js
+@@ -1,2 +1,3 @@
+ const x = 1;
++const y = 2;
+`;
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => mockDiff,
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 44,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_diff',
+          arguments: { prNumber: 42 },
+        },
+      });
+
+      assert.equal(response.id, 44);
+      assert.ok(response.result.content);
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.equal(parsed.prNumber, 42);
+    });
+
+    it('handles tools/call for gem_pr_review_subagents in mock dry-run', async () => {
       const mockDiff = `diff --git a/app.js b/app.js
 index 1111111..2222222 100644
 --- a/app.js
@@ -148,7 +178,7 @@ index 1111111..2222222 100644
         id: 5,
         method: 'tools/call',
         params: {
-          name: 'pr_review_subagents',
+          name: 'gem_pr_review_subagents',
           arguments: {
             prNumber: 99,
             mode: 'quick',
@@ -165,7 +195,7 @@ index 1111111..2222222 100644
       assert.ok(resultData.summary.includes('PR Review Summary'));
     });
 
-    it('handles tools/call for pr_review_prior', async () => {
+    it('handles tools/call for gem_pr_review_prior', async () => {
       const handler = createMcpHandler({
         fetchPriorReviewsFn: async () => ({
           latestReview: { id: 101, commitId: 'abc111' },
@@ -186,7 +216,7 @@ index 1111111..2222222 100644
         id: 55,
         method: 'tools/call',
         params: {
-          name: 'pr_review_prior',
+          name: 'gem_pr_review_prior',
           arguments: {
             prNumber: 42,
             currentHeadSha: 'def222',
@@ -261,7 +291,7 @@ index 1111111..2222222 100644
 
       assert.equal(responses.length, 1);
       assert.equal(responses[0].id, 10);
-      assert.equal(responses[0].result.serverInfo.name, 'copilot-pr-review');
+      assert.equal(responses[0].result.serverInfo.name, 'gem-pr-review');
 
       server.close();
     });

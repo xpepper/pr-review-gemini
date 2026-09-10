@@ -29,7 +29,7 @@ import {
 
 export const MCP_TOOLS = [
   {
-    name: 'pr_review_subagents',
+    name: 'gem_pr_review_subagents',
     description:
       'Executes parallel specialist review lenses across a PR diff using Copilot SDK or configured model tiers.',
     inputSchema: {
@@ -72,7 +72,7 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: 'pr_review_diff',
+    name: 'gem_pr_review_diff',
     description:
       'Retrieves and parses the unified diff and hunk commentability for a GitHub pull request.',
     inputSchema: {
@@ -91,7 +91,7 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: 'pr_review_publish',
+    name: 'gem_pr_review_publish',
     description:
       'Publishes host-gated code review comments and summary to GitHub with diff hunk validation.',
     inputSchema: {
@@ -122,7 +122,7 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: 'pr_review_prior',
+    name: 'gem_pr_review_prior',
     description:
       'Discovers prior reviews on a PR, classifies commit relationship (same_head, incremental, diverged, none), and revalidates prior findings against incremental commits.',
     inputSchema: {
@@ -145,7 +145,7 @@ export const MCP_TOOLS = [
     },
   },
   {
-    name: 'pr_review_verify',
+    name: 'gem_pr_review_verify',
     description:
       'Executes verification commands (e.g. tests or build) against the exact PR head in an isolated detached git worktree.',
     inputSchema: {
@@ -230,7 +230,7 @@ export function createMcpHandler(options = {}) {
                 tools: {},
               },
               serverInfo: {
-                name: 'copilot-pr-review',
+                name: 'gem-pr-review',
                 version: '0.1.0',
               },
             },
@@ -260,7 +260,7 @@ export function createMcpHandler(options = {}) {
           const args = params?.arguments || {};
 
           try {
-            if (toolName === 'pr_review_diff') {
+            if (toolName === 'gem_pr_review_diff' || toolName === 'pr_review_diff') {
               const diffText = await getPrDiffFn({
                 prNumber: args.prNumber,
                 repo: args.repo,
@@ -295,7 +295,7 @@ export function createMcpHandler(options = {}) {
               };
             }
 
-            if (toolName === 'pr_review_subagents') {
+            if (toolName === 'gem_pr_review_subagents' || toolName === 'pr_review_subagents') {
               let diffText = args.diffText;
               if (!diffText) {
                 diffText = await getPrDiffFn({
@@ -331,7 +331,7 @@ export function createMcpHandler(options = {}) {
               };
             }
 
-            if (toolName === 'pr_review_publish') {
+            if (toolName === 'gem_pr_review_publish' || toolName === 'pr_review_publish') {
               const pubResult = await publishReviewFn({
                 prNumber: args.prNumber,
                 findings: args.findings || [],
@@ -355,7 +355,7 @@ export function createMcpHandler(options = {}) {
               };
             }
 
-            if (toolName === 'pr_review_prior') {
+            if (toolName === 'gem_pr_review_prior' || toolName === 'pr_review_prior') {
               const prNum = Number(args.prNumber);
               const currentHeadSha = args.currentHeadSha;
               const repo = args.repo;
@@ -411,7 +411,7 @@ export function createMcpHandler(options = {}) {
               };
             }
 
-            if (toolName === 'pr_review_verify') {
+            if (toolName === 'gem_pr_review_verify' || toolName === 'pr_review_verify') {
               const prNum = parseInt(args.prNumber, 10);
               const action = args.action || 'run';
               const headSha = args.headSha;

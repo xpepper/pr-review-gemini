@@ -1,4 +1,4 @@
-# Copilot PR Review
+# Gem PR Review
 
 Parallel, multi-lens AI code review for GitHub pull requests, adhering to the [Agent Plugins 1.0](https://agent-plugins.org/) standard.
 
@@ -33,7 +33,7 @@ copilot plugin install xpepper/pr-review-gemini
 Then start Copilot CLI and trigger the skill:
 ```bash
 copilot
-/pr-review <PR_NUMBER>
+/gem-pr-review <PR_NUMBER>
 ```
 
 
@@ -120,7 +120,7 @@ When authors push updates to address review comments, re-running the full PR was
 - Classifies commit relationships (`same_head`, `incremental`, `diverged`, `none`).
 - Revalidates previous findings, categorizing each as **`resolved`**, **`still open`**, or **`obsolete`**.
 
-### 3. Detached Worktree Test Verification (`pr_review_verify`)
+### 3. Detached Worktree Test Verification (`gem_pr_review_verify`)
 Safely executes test suites against the PR head in an isolated, detached git worktree:
 - Zero pollution of your active working directory or uncommitted changes.
 - Automatically handles worktree creation, timeout supervision, and clean disposal.
@@ -135,7 +135,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 ```json
 {
   "mcpServers": {
-    "copilot-pr-review": {
+    "gem-pr-review": {
       "command": "node",
       "args": ["server/index.js"]
     }
@@ -144,11 +144,13 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 ```
 
 ### Exposed Tools
-- **`pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
-- **`pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
-- **`pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
-- **`pr_review_verify`**: Detached worktree test execution with process supervision.
-- **`pr_review_publish`**: Host-gated review submission with diff anchor validation.
+- **`gem_pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
+- **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
+- **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
+- **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
+- **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
+
+*(Legacy tool names `pr_review_*` remain supported as backward-compatible aliases).*
 
 Test all tools interactively via MCP Inspector:
 ```bash
@@ -161,8 +163,8 @@ npx @modelcontextprotocol/inspector node server/index.js
 
 Configuration is optional and works out of the box with sensible defaults. You can customize behavior using project-level or user-level configuration files:
 
-- **Project Config**: `.github/pr-review.json`
-- **User Config**: `~/.copilot/pr-review.json`
+- **Project Config**: `.github/gem-pr-review.json` *(fallback: `.github/pr-review.json`)*
+- **User Config**: `~/.copilot/gem-pr-review.json` *(fallback: `~/.copilot/pr-review.json`)*
 
 ### Example Configuration
 
@@ -196,16 +198,16 @@ Configuration is optional and works out of the box with sensible defaults. You c
 ## Agent Plugins Standard
 
 This repository strictly complies with the [Agent Plugins 1.0 specification](https://agent-plugins.org/):
-- **`plugin.json`**: Plugin manifest declaring metadata and keywords.
-- **`skills/pr-review/SKILL.md`**: Skill prompt instructions, lens contracts, and severity schemas.
+- **`plugin.json`**: Plugin manifest declaring metadata and keywords (`gem-pr-review`).
+- **`skills/gem-pr-review/SKILL.md`**: Skill prompt instructions, lens contracts, and severity schemas.
 - **`mcp.json`**: Model Context Protocol configuration for host tool execution.
 
-### Handling Plugin or Skill Name Collisions
-If you already have other plugins or skills named `pr-review` installed in Copilot CLI:
-- **Local Session Priority**: Run `copilot --plugin-dir .` to explicitly scope and prioritize this repository's skill and MCP server for the session.
-- **Direct CLI Execution**: Use `node scripts/dogfood-review.mjs <PR_NUMBER>` to run the review pipeline directly without relying on Copilot CLI's global plugin registry.
-- **Explicit MCP Tool Prompting**: In Copilot CLI chat, prompt directly: *"Use the copilot-pr-review MCP server to review PR 123"*. The model will invoke `pr_review_subagents` from this specific MCP server.
-- **Manage Installed Plugins**: Inspect registered plugins via `copilot plugin list` or remove colliding plugins via `copilot plugin uninstall <name>`.
+### Collision-Free by Design
+By using the distinctive `/gem-pr-review` slash command, this plugin runs alongside any existing generic `pr-review` tools without collision:
+- **Direct Skill Invocation**: `/gem-pr-review <PR_NUMBER>`
+- **Local Session Priority**: Run `copilot --plugin-dir .` to explicitly scope this plugin for your CLI session.
+- **Direct CLI Execution**: Run `node scripts/dogfood-review.mjs <PR_NUMBER>` to bypass Copilot CLI's global plugin registry entirely.
+- **Explicit MCP Tool Prompting**: In Copilot CLI chat, prompt directly: *"Use the gem-pr-review MCP server to review PR 123"*. The model will invoke `gem_pr_review_subagents` from this server.
 
 
 ---
