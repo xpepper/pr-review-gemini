@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (280 tests across 68 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (310 tests across 74 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -22,18 +22,19 @@
   - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
   - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
+  - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
 
 ---
 
-## Status: INCREMENT_11_COMPLETE / PHASE_7_IN_PROGRESS
+## Status: ALL_PHASE_7_INCREMENTS_COMPLETE / ROADMAP_DELIVERED
 
-Increment 11 is fully implemented, verified test-first (280 passing tests across 68 suites), documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+All 12 roadmap increments across Phases 1 through 7 are fully implemented, verified test-first (310 passing tests across 74 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 Phase 7 backlog:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
 - [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
-- [ ] Increment 12: Candidate finding recovery from degraded/malformed model outputs
+- [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
 
 ---
 
@@ -188,43 +189,58 @@ Phase 7 backlog:
 
 ---
 
-## Next Session Mission: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output (Issue #20)
+## Completed Work: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output (Issue #20)
 
-- **GitHub Issue**: [#20: feat: candidate finding recovery from degraded or malformed model output](https://github.com/xpepper/pr-review-gemini/issues/20)
-- **Target Branch**: `feat/candidate-finding-recovery`
-
-### Goal
-Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses rather than dropping entire review passes or failing silently when LLMs produce JSON syntax flaws, unescaped characters, or truncated output.
-
-### Requirements & Architecture
-1. **Partial / Malformed JSON Recovery**:
-   - Resiliently extract finding blocks even when the model output contains truncated JSON, missing closing brackets, trailing commas, or markdown formatting quirks within `<<<PR_REVIEW_JSON>>>` envelopes.
-2. **Contract Normalization**:
-   - Validate and normalize candidate findings against the structured findings contract (severity `P0`–`nit`, valid side `LEFT`/`RIGHT`, file path, line numbers).
-3. **Loss Prevention**:
-   - Ensure high-signal findings are preserved even when the primary parser encounters syntax anomalies.
-4. **Pipeline Integration**:
-   - Integrate into `parseMarkdownFindings` in `src/publish.js`, `src/subagents.js`, and `src/self-review.js` so PR reviews, cached reviews, and local self-reviews all benefit.
-5. **Test-First Verification**:
-   - Add unit tests covering malformed envelopes, unclosed arrays, unescaped quotes, and corrupt candidate recovery.
+- **GitHub Issue**: [#20: feat: candidate finding recovery from degraded or malformed model output](https://github.com/xpepper/pr-review-gemini/issues/20) (Closed)
+- **GitHub PR**: [#21: feat: implement candidate finding recovery from degraded and malformed model output (#20)](https://github.com/xpepper/pr-review-gemini/pull/21) (Merged, commit `69f42c4`)
+- **Branch**: `feat/candidate-finding-recovery`
+- **Changes Delivered**:
+  - `src/recovery.js`:
+    - `extractJsonEnvelope(text)`: Resiliently extracts JSON payloads from delimited `<<<PR_REVIEW_JSON>>>` envelopes even when the closing delimiter `<<<END_PR_REVIEW_JSON>>>` was truncated due to model token limits; strips surrounding or nested ````json ... ```` code blocks; falls back to raw JSON array/object scanning when delimiters are omitted.
+    - `repairJsonString(jsonText)`: Cleans syntax flaws preventing JSON parsing: removes illegal trailing commas before closing `}` and `]`; automatically escapes raw literal newlines and control characters inside string properties (`body`, `commentary`); strips single-line and multi-line comments outside of strings; normalizes smart/curly quotes; balances unclosed arrays and objects; prunes broken trailing fragments when output was truncated midway.
+    - `extractCandidateObjects(text)`: Balanced-brace scanner iterating through text to isolate individual `{ ... }` candidate objects even when outer array syntax is corrupt, unclosed, or interspersed with free-form markdown; includes regex field extraction fallback for truncated tail objects.
+    - `normalizeFindingCandidate(item)`: Validates and normalizes candidate findings against structured contract: standardizes severities (`P0`, `P1`, `P2`, `P3`, `nit`) and maps descriptive labels (`critical`/`blocker` -> `P0`, `high`/`major` -> `P1`, `medium`/`warning` -> `P2`, `low`/`minor` -> `P3`, `cosmetic`/`trivial` -> `nit`); clamps confidence scores in `[0.0, 1.0]`; normalizes line numbers to positive integers; cleans git diff prefixes (`a/`, `b/`).
+    - `isValidFindingCandidate(item)`: Rejects arbitrary JSON noise (config objects, tool parameters) requiring at least a valid file path or line number paired with a severity, title, or body.
+    - `recoverFindingsFromText(input)`: Orchestrates multi-stage recovery pipeline across direct parsing, string repair, candidate scanning, and fallback recovery.
+  - `src/publish.js`:
+    - Integrated `recoverFindingsFromText` into `parseMarkdownFindings(input)` so all PR reviews, cached reviews, and local self-reviews automatically benefit without losing valid findings.
+    - Re-exported all recovery utilities.
+  - `src/reviewer.js`:
+    - Re-exported all recovery utilities.
+  - Documentation & Skill:
+    - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on candidate finding recovery, envelope resilience, and JSON repair.
+  - Tests:
+    - Added 30 new unit and integration tests across `tests/recovery.test.mjs`, `tests/publish.test.mjs`, `tests/subagents.test.mjs`, `tests/self-review.test.mjs`, and `tests/skills.test.mjs`.
+    - Total **310 tests passing across 74 suites with 0 failures**.
+  - Dogfood Review:
+    - Successfully auto-reviewed PR #21 using `scripts/dogfood-review.mjs 21 --publish --mock` before squash-merging into `main`.
 
 ---
 
-## Ready-to-Use Prompt for the Next Session
+## Roadmap Status: Phases 1–7 Fully Completed
 
-```text
-Please implement Increment 12 on this repository: "Candidate Finding Recovery from Degraded/Malformed Model Output" (addressing Issue #20: https://github.com/xpepper/pr-review-gemini/issues/20).
+Every planned increment across the entire roadmap has been delivered, tested, dogfood-reviewed, and merged:
+- **Phase 1**: Scaffolding, Agent Plugins 1.0 manifest, test runner.
+- **Phase 2**: Layered configuration, model tiers (`light`, `medium`, `heavy`), reasoning efforts.
+- **Phase 3**: Unified diff parser, hunk boundary extraction, commentability safety gates.
+- **Phase 4**: Host-gated review publisher, diff anchor validation, stale-head protection, dogfood loop.
+- **Phase 5**: Parallel multi-lens subagents via `@github/copilot-sdk`, review modes (`--quick`, `--balanced`, `--full`, `--deep`), MCP server.
+- **Phase 6**: Incremental re-reviews (`--incremental`), prior finding revalidation (`resolved`, `still open`, `obsolete`), detached worktree test verification (`gem_pr_review_verify`).
+- **Phase 7 (Advanced Resiliency, Transport & Interaction)**:
+  - Increment 8: Large-diff transport & file-backed paging (> 200 KB) with host-supervised reader tools (`diff_read`, `diff_grep`, `diff_find`).
+  - Increment 9: Interactive finding selection UI (`--interactive`, `--select`) and session review caching (`--publish-cached`, `gem_pr_review_publish_cached`).
+  - Increment 10: Automatic fallback model retry on quota/capacity errors (HTTP 429, resource exhaustion) with zero timeouts.
+  - Increment 11: One-shot coding-task self-review (`gem_self_review`) with local diff acquisition and fail-closed safety gate.
+  - Increment 12: Candidate finding recovery from degraded/malformed model output with deterministic JSON repair and candidate scanning.
 
-Before writing code:
-1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/candidate-finding-recovery.
+---
 
-Implementation requirements:
-- Resilient Envelope & Candidate Extraction: Deterministically extract and recover contract-valid candidate findings from degraded or malformed model outputs (truncated JSON, missing brackets, trailing commas, unclosed objects).
-- Contract Normalization: Validate extracted candidates against structured finding schemas (severity P0-nit, file path, line number, side LEFT/RIGHT, confidence score).
-- Seamless Pipeline Integration: Ensure parseMarkdownFindings, subagent collection, and self-review automatically benefit from recovery without dropping valid findings.
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 280+ tests passing and adding unit tests for recovery heuristics and corrupted envelope fixtures.
-- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
-```
+## Future Opportunities / Phase 8 Ideas
+
+Possible future enhancements if further expansion is desired:
+1. **GitHub Actions CI Runner**: A reusable GitHub Action workflow running `gem-pr-review` on `pull_request` triggers in CI with GitHub token authentication.
+2. **Additional Specialist Lenses**: Domain-specific lenses like Accessibility (a11y), Internationalization (i18n), or Database Migration safety.
+3. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
+
 
 
