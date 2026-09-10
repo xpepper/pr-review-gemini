@@ -206,6 +206,72 @@ This old check was flawed.
       assert.equal(findings[0].severity, 'P2');
       assert.equal(findings[0].line, 12);
     });
+
+    it('recovers findings from envelope with unclosed delimiters and trailing commas', () => {
+      const degradedMarkdown = `
+Review in progress:
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Unhandled error",
+    "severity": "P1",
+    "file": "src/server.js",
+    "line": 42,
+    "body": "Missing catch on async handler.",
+  },
+`;
+      const findings = parseMarkdownFindings(degradedMarkdown);
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0].title, 'Unhandled error');
+      assert.equal(findings[0].severity, 'P1');
+      assert.equal(findings[0].filePath, 'src/server.js');
+      assert.equal(findings[0].line, 42);
+    });
+
+    it('recovers findings from JSON with unescaped literal newlines in commentary', () => {
+      const multilineMarkdown = `
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Complex defect",
+    "severity": "P0",
+    "file": "src/core.js",
+    "line": 88,
+    "body": "Step 1: fail
+Step 2: crash"
+  }
+]
+<<<END_PR_REVIEW_JSON>>>
+`;
+      const findings = parseMarkdownFindings(multilineMarkdown);
+      assert.equal(findings.length, 1);
+      assert.equal(findings[0].severity, 'P0');
+      assert.equal(findings[0].filePath, 'src/core.js');
+      assert.equal(findings[0].line, 88);
+      assert.match(findings[0].commentary, /Step 1: fail\nStep 2: crash/);
+    });
+
+    it('recovers first complete finding when stream was truncated midway', () => {
+      const truncatedMarkdown = `
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Clean finding",
+    "severity": "P2",
+    "file": "src/clean.js",
+    "line": 15,
+    "body": "All good."
+  },
+  {
+    "title": "Cutoff finding",
+    "severity": "P1",
+    "file": "src/cut.js",
+    "line`;
+      const findings = parseMarkdownFindings(truncatedMarkdown);
+      assert.ok(findings.length >= 1);
+      assert.equal(findings[0].title, 'Clean finding');
+      assert.equal(findings[0].filePath, 'src/clean.js');
+    });
   });
 
   // --------------------------------------------------------------------------

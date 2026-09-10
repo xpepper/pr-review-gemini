@@ -167,6 +167,13 @@ Provides coding agents and developers with a fail-closed self-review safety gate
 - **Actionable Remediation**: Produces concrete file and line-anchored remediation instructions for each detected defect.
 - **CLI Runners**: Run via `npm run self-review`, `node scripts/self-review.mjs [options]`, or `node scripts/dogfood-review.mjs --self`.
 
+### 8. Candidate Finding Recovery from Degraded/Malformed Model Output
+Prevents loss of high-signal review findings when LLMs produce truncated or syntax-flawed output under token limits or generation cutoffs:
+- **Resilient Envelope Extraction**: Extracts finding envelopes (`<<<PR_REVIEW_JSON>>>`) even when closing delimiters are truncated.
+- **Deterministic JSON Repair**: Automatically repairs trailing commas, unclosed brackets and braces, smart quotes, and unescaped literal newlines in review commentary.
+- **Individual Candidate Object Scanner**: Scans balanced `{ ... }` candidate objects and recovers individual findings even when outer structures are corrupt or mixed with free-form text.
+- **Contract Normalization**: Normalizes severities (`P0`–`nit` as well as descriptive labels), line numbers, file paths, and confidence scores across PR reviews, cached reviews, and local self-reviews.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -286,7 +293,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 280+ unit tests across 68 suites verify parser accuracy, host-gated security, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, and worktree lifecycles.
+All 309+ unit tests across 74 suites verify parser accuracy, host-gated security, candidate finding recovery from degraded/malformed model output, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, and worktree lifecycles.
 
 ---
 

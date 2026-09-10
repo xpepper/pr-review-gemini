@@ -104,4 +104,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /synthetic/i, 'Should document synthetic diffs for untracked files');
     assert.match(content, /scripts\/self-review\.mjs/i, 'Should document self-review script');
   });
+
+  it('documents candidate finding recovery from degraded or malformed model output', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Candidate Finding Recovery/i, 'Should document candidate finding recovery');
+    assert.match(content, /repairJsonString/i, 'Should mention repairJsonString');
+    assert.match(content, /extractCandidateObjects/i, 'Should mention extractCandidateObjects');
+    assert.match(content, /extractJsonEnvelope/i, 'Should mention extractJsonEnvelope');
+    assert.match(content, /normalizeFindingCandidate/i, 'Should mention normalizeFindingCandidate');
+  });
 });

@@ -8,11 +8,6 @@ import { parseUnifiedDiff, getFileDiff, isLineCommentable, getPrDiff } from './d
 export const MAX_INLINE_COMMENTS = 50;
 
 /**
- * Valid review finding severity levels.
- */
-export const VALID_SEVERITIES = Object.freeze(['P0', 'P1', 'P2', 'P3', 'nit']);
-
-/**
  * Relative priority rank of severities (lower index = higher urgency).
  */
 export const SEVERITY_RANK = Object.freeze({
@@ -23,94 +18,41 @@ export const SEVERITY_RANK = Object.freeze({
   nit: 4,
 });
 
-/**
- * Delimited JSON envelope markers used by AI review models.
- */
-export const JSON_ENVELOPE_START = '<<<PR_REVIEW_JSON>>>';
-export const JSON_ENVELOPE_END = '<<<END_PR_REVIEW_JSON>>>';
+import {
+  JSON_ENVELOPE_START,
+  JSON_ENVELOPE_END,
+  VALID_SEVERITIES,
+  normalizeSeverity,
+  normalizeConfidence,
+  normalizeLine,
+  cleanFilePath,
+  extractJsonEnvelope,
+  repairJsonString,
+  extractCandidateObjects,
+  normalizeFindingCandidate,
+  isValidFindingCandidate,
+  recoverFindingsFromText,
+} from './recovery.js';
 
-/**
- * Cleans backticks, quotes, and whitespace from file paths.
- *
- * @param {string | null | undefined} rawPath
- * @returns {string}
- */
-function cleanFilePath(rawPath) {
-  if (!rawPath || typeof rawPath !== 'string') return '';
-  let cleaned = rawPath.trim();
-  if (cleaned.startsWith('`') && cleaned.endsWith('`')) {
-    cleaned = cleaned.slice(1, -1).trim();
-  }
-  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-    cleaned = cleaned.slice(1, -1).trim();
-  }
-  if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
-    cleaned = cleaned.slice(1, -1).trim();
-  }
-  if (cleaned.startsWith('a/') || cleaned.startsWith('b/')) {
-    cleaned = cleaned.slice(2);
-  }
-  return cleaned;
-}
-
-/**
- * Normalizes a severity string to standard vocabulary.
- *
- * @param {string | null | undefined} raw
- * @returns {'P0' | 'P1' | 'P2' | 'P3' | 'nit'}
- */
-function normalizeSeverity(raw) {
-  if (!raw || typeof raw !== 'string') return 'P2';
-  const upper = raw.trim().toUpperCase();
-  if (upper === 'NIT') return 'nit';
-  if (VALID_SEVERITIES.includes(upper)) return upper;
-  return 'P2';
-}
-
-/**
- * Parses confidence score into a float between 0.0 and 1.0.
- *
- * @param {number | string | null | undefined} raw
- * @returns {number}
- */
-function normalizeConfidence(raw) {
-  if (typeof raw === 'number' && !Number.isNaN(raw)) {
-    return Math.max(0, Math.min(1, raw));
-  }
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    if (trimmed.endsWith('%')) {
-      const parsedPct = parseFloat(trimmed.slice(0, -1));
-      if (!Number.isNaN(parsedPct)) return Math.max(0, Math.min(1, parsedPct / 100));
-    }
-    const parsed = parseFloat(trimmed);
-    if (!Number.isNaN(parsed)) return Math.max(0, Math.min(1, parsed));
-  }
-  return 1.0;
-}
-
-/**
- * Normalizes a line number to a positive integer or null.
- *
- * @param {number | string | null | undefined} raw
- * @returns {number | null}
- */
-function normalizeLine(raw) {
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
-  if (typeof raw === 'string') {
-    const match = raw.match(/\d+/);
-    if (match) {
-      const num = parseInt(match[0], 10);
-      if (Number.isInteger(num) && num > 0) return num;
-    }
-  }
-  return null;
-}
+export {
+  JSON_ENVELOPE_START,
+  JSON_ENVELOPE_END,
+  VALID_SEVERITIES,
+  normalizeSeverity,
+  normalizeConfidence,
+  normalizeLine,
+  cleanFilePath,
+  extractJsonEnvelope,
+  repairJsonString,
+  extractCandidateObjects,
+  normalizeFindingCandidate,
+  isValidFindingCandidate,
+  recoverFindingsFromText,
+};
 
 /**
  * Extracts and parses finding objects from Markdown review text, structured bullet lists,
- * or embedded JSON blocks.
+ * or embedded JSON blocks with resilient recovery for malformed/truncated output.
  *
  * @param {string | Array<object>} input - Markdown string or finding object array
  * @returns {Array<object>} Parsed finding objects
@@ -120,15 +62,7 @@ export function parseMarkdownFindings(input) {
 
   // If already an array of finding objects, normalize each entry
   if (Array.isArray(input)) {
-    return input.map((item) => ({
-      title: item.title || '',
-      severity: normalizeSeverity(item.severity),
-      confidence: normalizeConfidence(item.confidence),
-      filePath: cleanFilePath(item.filePath || item.path || item.file),
-      line: normalizeLine(item.line ?? item.endLine ?? item.startLine),
-      side: item.side === 'LEFT' ? 'LEFT' : 'RIGHT',
-      commentary: item.commentary || item.body || item.description || item.actual || '',
-    }));
+    return input.map(normalizeFindingCandidate).filter(Boolean);
   }
 
   if (typeof input !== 'string' || !input.trim()) {
@@ -136,69 +70,17 @@ export function parseMarkdownFindings(input) {
   }
 
   const text = input.trim();
-  const findings = [];
 
-  // 1. Try parsing delimited JSON envelope (<<<PR_REVIEW_JSON>>> ... <<<END_PR_REVIEW_JSON>>>)
-  if (text.includes(JSON_ENVELOPE_START) && text.includes(JSON_ENVELOPE_END)) {
-    try {
-      const startIndex = text.indexOf(JSON_ENVELOPE_START) + JSON_ENVELOPE_START.length;
-      const endIndex = text.indexOf(JSON_ENVELOPE_END);
-      const jsonContent = text.slice(startIndex, endIndex).trim();
-      const parsed = JSON.parse(jsonContent);
-
-      const items = Array.isArray(parsed)
-        ? parsed
-        : parsed.candidates || parsed.findings || parsed.decisions || [];
-
-      if (Array.isArray(items) && items.length > 0) {
-        for (const item of items) {
-          const loc = item.location || {};
-          findings.push({
-            title: item.title || '',
-            severity: normalizeSeverity(item.severity),
-            confidence: normalizeConfidence(item.confidence),
-            filePath: cleanFilePath(item.filePath || item.path || loc.path),
-            line: normalizeLine(item.line ?? loc.endLine ?? loc.startLine),
-            side: (item.side || loc.side) === 'LEFT' ? 'LEFT' : 'RIGHT',
-            commentary:
-              item.commentary ||
-              item.actual ||
-              [item.trigger, item.expected, item.actual].filter(Boolean).join('\n\n') ||
-              '',
-          });
-        }
-        return findings;
-      }
-    } catch {
-      // Fall through to markdown parsing if JSON fails
-    }
+  // 1. Delimited JSON envelope (<<<PR_REVIEW_JSON>>>)
+  if (text.includes(JSON_ENVELOPE_START)) {
+    return recoverFindingsFromText(text);
   }
 
-  // 2. Try parsing fenced ```json blocks
-  const jsonCodeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
-  let codeBlockMatch;
-  while ((codeBlockMatch = jsonCodeBlockRegex.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(codeBlockMatch[1].trim());
-      const items = Array.isArray(parsed)
-        ? parsed
-        : parsed.findings || parsed.candidates || [];
-      if (Array.isArray(items) && items.length > 0) {
-        for (const item of items) {
-          findings.push({
-            title: item.title || '',
-            severity: normalizeSeverity(item.severity),
-            confidence: normalizeConfidence(item.confidence),
-            filePath: cleanFilePath(item.filePath || item.path || item.location?.path),
-            line: normalizeLine(item.line ?? item.location?.endLine),
-            side: item.side === 'LEFT' ? 'LEFT' : 'RIGHT',
-            commentary: item.commentary || item.body || item.actual || '',
-          });
-        }
-        return findings;
-      }
-    } catch {
-      // Not a valid JSON finding block, continue parsing markdown
+  // 2. Fenced ```json code blocks or raw JSON array/object
+  if (/```(?:json)?\s*[\{\[]/i.test(text) || (text.startsWith('[') && text.endsWith(']')) || (text.startsWith('{') && text.endsWith('}'))) {
+    const recovered = recoverFindingsFromText(text);
+    if (recovered.length > 0) {
+      return recovered;
     }
   }
 
@@ -207,6 +89,7 @@ export function parseMarkdownFindings(input) {
   const headingSectionRegex = /(?:^|\n)#{1,4}\s+(?:Finding(?:\s+\d+)?:?\s*)?(?:\[(P[0-3]|nit)\])?\s*([^\n]+)\n([\s\S]*?)(?=(?:\n#{1,4}\s+)|$)/gi;
   let match;
   let hasHeadingFindings = false;
+  const findings = [];
 
   while ((match = headingSectionRegex.exec(text)) !== null) {
     const rawHeaderSeverity = match[1];
@@ -282,7 +165,17 @@ export function parseMarkdownFindings(input) {
     });
   }
 
-  return findings;
+  if (findings.length > 0) {
+    return findings;
+  }
+
+  // 5. Fallback candidate recovery on raw text if no other format matched
+  const fallbackRecovered = recoverFindingsFromText(text);
+  if (fallbackRecovered.length > 0) {
+    return fallbackRecovered;
+  }
+
+  return [];
 }
 
 /**

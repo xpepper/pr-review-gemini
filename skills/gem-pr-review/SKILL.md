@@ -368,6 +368,46 @@ Agents can invoke self-review via MCP:
   ```
 - **Exit Code**: Returns `0` on `status: "passed"` and `1` on `status: "failed"`, suitable for pre-commit git hooks and agent loop guardrails.
 
+---
+
+## Candidate Finding Recovery from Degraded/Malformed Model Output
+
+Specialist subagent review passes and local self-review passes format findings inside `<<<PR_REVIEW_JSON>>>...<<<END_PR_REVIEW_JSON>>>` envelopes. Under token limits, generation cutoffs, or minor LLM syntax anomalies, models may produce malformed, unclosed, or truncated outputs. `gem-pr-review` features a resilient candidate finding recovery pipeline (`recoverFindingsFromText`, `repairJsonString`, `extractCandidateObjects`, `extractJsonEnvelope`) to ensure high-signal findings are never dropped:
+
+### 1. Resilient Envelope Extraction (`extractJsonEnvelope`)
+- Recovers finding blocks even when the closing delimiter (`<<<END_PR_REVIEW_JSON>>>`) is truncated or missing due to token generation limits.
+- Strips surrounding or interior markdown code fences (````json ... ````) seamlessly.
+- Falls back to scanning raw JSON arrays or objects directly when delimiter tags are omitted.
+
+### 2. Deterministic JSON Repair (`repairJsonString`)
+- **Trailing Comma Cleanup**: Strips illegal trailing commas before closing `}` and `]`.
+- **Unescaped Character Handling**: Automatically escapes literal newlines and control characters inside JSON string values (`body`, `commentary`).
+- **Quote Normalization**: Converts smart or curly quotes to standard JSON double quotes.
+- **Unclosed Bracket / Brace Balancing**: Automatically closes unclosed arrays and objects at the end of truncated responses.
+- **Truncated Tail Pruning**: If an LLM stream terminates midway through an incomplete trailing object, prunes back to the last valid comma, preserving all preceding valid findings.
+
+### 3. Individual Candidate Scanner (`extractCandidateObjects`)
+- When whole-envelope JSON parsing fails even after repair, scans the response text for balanced `{ ... }` candidate object blocks.
+- Recovers individual finding candidate objects even if interspersed with free-form markdown commentary or unclosed delimiters.
+- Extracts partial fields (title, severity, file, line, body) via regex fallback when the final object was cut off midway.
+
+### 4. Structured Contract Normalization (`normalizeFindingCandidate`)
+- Validates each candidate against the structured findings contract:
+  - Normalizes severities: supports standard `P0`–`nit` as well as descriptive labels (`critical`/`blocker` -> `P0`, `high`/`major` -> `P1`, `medium`/`warning` -> `P2`, `low`/`minor` -> `P3`, `cosmetic`/`trivial` -> `nit`).
+  - Clamps confidence scores between `0.0` and `1.0`.
+  - Normalizes line numbers to positive integers.
+  - Cleans git diff path prefixes (`a/`, `b/`).
+- Filters out non-finding metadata objects (e.g. tool configs, random JSON) so only valid defect findings enter the review pipeline.
+
+### 5. Seamless Pipeline Integration
+- Integrated directly into `parseMarkdownFindings`:
+  - Remote PR reviews (`runReview`, `publishReview`, `dogfood-review.mjs`)
+  - Cached reviews (`publishCachedReview`, `gem_pr_review_publish_cached`)
+  - Local one-shot self-reviews (`runSelfReview`, `scripts/self-review.mjs`, `gem_self_review`)
+  - Incremental re-reviews (`revalidatePriorFindings`)
+  All workflows automatically benefit with zero configuration required.
+
+
 
 
 

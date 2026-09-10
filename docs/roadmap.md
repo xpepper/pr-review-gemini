@@ -97,6 +97,9 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Evaluate multi-lens review passes locally without remote PR numbers or network mutation dependencies.
   - Return explicit pass/fail verdict (`passed` vs `failed`) blocking on P0/P1 issues with actionable remediation guidance.
   - Expose MCP tools (`gem_self_review`, `gem_pr_review_self`) and CLI runners (`scripts/self-review.mjs`, `npm run self-review`, `dogfood-review.mjs --self`).
-- [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**
-  - Recover contract-valid candidate finding blocks from partial or malformed lane history instead of dropping passes.
+- [x] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output (#20)**
+  - Deterministically recover contract-valid candidate finding blocks from partial, degraded, or malformed model responses (truncated JSON, missing closing brackets, trailing commas, unescaped literal newlines in commentary, smart quotes).
+  - Implement resilient envelope extraction (`extractJsonEnvelope`), deterministic JSON repair (`repairJsonString`), individual candidate object scanner (`extractCandidateObjects`), and structured contract normalization (`normalizeFindingCandidate`).
+  - Seamlessly integrate into `parseMarkdownFindings` in `src/publish.js`, `src/subagents.js`, and `src/self-review.js` so PR reviews, cached reviews, and local self-reviews automatically preserve high-signal findings without dropping passes.
+
 

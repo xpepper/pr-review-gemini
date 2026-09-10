@@ -6,16 +6,30 @@
 
 ---
 
-## Active Next Task: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output
-- [ ] Implement partial/malformed output recovery heuristics for specialist review lenses.
-- [ ] Deterministically extract valid finding objects from corrupted or truncated JSON blocks.
-- [ ] Safeguard against loss of high-signal findings during degraded LLM responses.
-- [ ] Unit tests for candidate finding recovery and malformed envelope resilience.
-- [ ] Dogfood auto-review and PR submission.
+## Active Next Task: Increment 12 — Candidate Finding Recovery from Degraded/Malformed Model Output (Issue #20)
+- [x] Step 1: Design and write unit tests in `tests/recovery.test.mjs` covering malformed envelopes, unclosed brackets, trailing commas, unescaped quotes/newlines, truncated arrays, and corrupted candidate recovery.
+- [x] Step 2: Implement core recovery utilities in `src/recovery.js`:
+  - [x] `extractJsonEnvelope`: Resiliently extracts JSON envelope from `<<<PR_REVIEW_JSON>>>` even when unclosed, surrounded by code blocks, or missing closing tags.
+  - [x] `repairJsonString`: Fixes trailing commas, unclosed brackets/braces, unescaped characters, and truncated endings.
+  - [x] `extractCandidateObjects`: Scans and recovers individual `{ ... }` candidate finding blocks using balanced brace scanning and heuristic repair/regex fallback.
+  - [x] `normalizeFindingCandidate` & `isValidFindingCandidate`: Validates and normalizes candidate findings against structured contract (`severity` P0-nit, `file`, `line`, `side`, `confidence`).
+  - [x] `recoverFindingsFromText`: Orchestrates recovery pipeline with multi-stage fallback.
+- [x] Step 3: Integrate `src/recovery.js` into `parseMarkdownFindings` in `src/publish.js` and re-export via `src/publish.js` and `src/reviewer.js`.
+- [x] Step 4: Add integration tests in `tests/publish.test.mjs`, `tests/subagents.test.mjs`, and `tests/self-review.test.mjs`.
+- [x] Step 5: Verify all existing and new tests (`npm test`), check documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
+- [ ] Step 6: Run dogfood auto-review, commit with conventional commits, update `TODO.md` and `HANDOFF.md`, and open PR.
 
 ---
 
 ## Completed Increments
+- [x] **Increment 12 / Issue #20: Candidate Finding Recovery from Degraded/Malformed Model Output**
+  - [x] Resilient envelope extraction (`extractJsonEnvelope`) handling unclosed or truncated `<<<PR_REVIEW_JSON>>>` markers and markdown code fences.
+  - [x] Deterministic JSON repair (`repairJsonString`) resolving trailing commas, missing closing brackets/braces, unescaped literal newlines in commentary, comments, and smart quotes.
+  - [x] Balanced-brace candidate scanner (`extractCandidateObjects`) recovering individual finding objects from corrupted arrays, truncated tails, or mixed prose with regex field extraction fallback.
+  - [x] Structured contract validation and normalization (`normalizeFindingCandidate`, `isValidFindingCandidate`) for severities (standard P0-nit and descriptive mappings), line numbers, file paths, and confidence scores.
+  - [x] Seamless pipeline integration into `parseMarkdownFindings` in `src/publish.js`, `src/subagents.js`, and `src/self-review.js`.
+  - [x] 29 new unit and integration tests across `tests/recovery.test.mjs`, `tests/publish.test.mjs`, `tests/subagents.test.mjs`, `tests/self-review.test.mjs`, and `tests/skills.test.mjs` (309 tests passing across 74 suites).
+  - [x] Documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 11 / Issue #18: One-Shot Coding-Task Self-Review (`gem_self_review`)**
   - [x] Local git worktree diff acquisition (`getWorktreeDiff`) across staged changes (`git diff --cached`), unstaged modifications (`git diff`), and untracked files (`git status --porcelain`).
   - [x] Synthetic unified diff generator (`generateSyntheticDiff`) for untracked files with valid headers and line commentability.
