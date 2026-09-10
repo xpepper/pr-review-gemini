@@ -599,6 +599,45 @@ Issue identified by ${lens.id} using ${model}.
       assert.equal(output.results[0].attemptsCount, 3);
       assert.equal(output.findings.length, 0);
     });
+
+    it('recovers findings when a lens returns degraded or malformed JSON envelope', async () => {
+      const plan = [
+        {
+          lensId: 'security',
+          lensDef: LENS_DEFINITIONS.security,
+          tier: 'heavy',
+          model: 'gpt-4o',
+        },
+      ];
+
+      const runnerFn = async () => `
+Thinking: Analyzing diff for security vulnerabilities...
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "SQL Injection vulnerability",
+    "severity": "P0",
+    "file": "src/user.js",
+    "line": 105,
+    "confidence": 0.95,
+    "body": "User input directly concatenated into SQL query.",
+  },
+`;
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.findings[0].title, 'SQL Injection vulnerability');
+      assert.equal(output.findings[0].severity, 'P0');
+      assert.equal(output.findings[0].filePath, 'src/user.js');
+      assert.equal(output.findings[0].line, 105);
+      assert.equal(output.findings[0].lens, 'security');
+    });
   });
 
   describe('createSubagentRunner', () => {

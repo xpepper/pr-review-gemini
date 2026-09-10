@@ -14,6 +14,12 @@ import {
   formatReviewSummary,
   publishReview,
   checkHeadFreshness,
+  recoverFindingsFromText,
+  extractJsonEnvelope,
+  repairJsonString,
+  extractCandidateObjects,
+  normalizeFindingCandidate,
+  isValidFindingCandidate,
 } from './publish.js';
 import { loadConfig, DEFAULT_CONFIG } from './config.js';
 import {
@@ -80,6 +86,12 @@ export {
   formatSelfReviewSummary,
   getWorktreeDiff,
   generateSyntheticDiff,
+  recoverFindingsFromText,
+  extractJsonEnvelope,
+  repairJsonString,
+  extractCandidateObjects,
+  normalizeFindingCandidate,
+  isValidFindingCandidate,
 };
 
 export const REVIEW_MODES = {

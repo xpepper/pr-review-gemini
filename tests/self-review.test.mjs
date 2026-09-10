@@ -570,5 +570,47 @@ new file mode 100644
       assert.equal(result.verdict, 'FAIL');
       assert.ok(result.summary.includes('Execution Error') || result.summary.includes('FAILED'));
     });
+
+    it('recovers findings from degraded/malformed JSON envelope in self-review and fails closed on blocking defect', async () => {
+      const diffText = `diff --git a/src/auth.js b/src/auth.js
+new file mode 100644
+--- /dev/null
++++ b/src/auth.js
+@@ -0,0 +1,5 @@
++export function login(user) {
++  return user.admin === true;
++}
++`;
+
+      // Simulates truncated JSON envelope with trailing comma from local LLM pass
+      const runnerFn = async () => ({
+        output: `
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Insecure authorization bypass",
+    "severity": "P1",
+    "file": "src/auth.js",
+    "line": 2,
+    "confidence": 0.9,
+    "body": "Does not verify password or token before checking admin flag.",
+  },
+`,
+      });
+
+      const result = await runSelfReview({
+        diffText,
+        mode: 'quick',
+        runnerFn,
+      });
+
+      assert.equal(result.status, 'failed');
+      assert.equal(result.verdict, 'FAIL');
+      assert.equal(result.blockingCount, 1);
+      assert.equal(result.findings.length, 1);
+      assert.equal(result.findings[0].title, 'Insecure authorization bypass');
+      assert.equal(result.findings[0].severity, 'P1');
+      assert.equal(result.findings[0].filePath, 'src/auth.js');
+    });
   });
 });
