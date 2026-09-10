@@ -246,6 +246,45 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       const correctness = plan.find((p) => p.lensId === 'correctness');
       assert.equal(correctness.tier, 'heavy');
     });
+
+    it('resolves configured tier fallbacks onto plan items', () => {
+      const config = {
+        heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o'],
+        medium_fallbacks: ['gpt-4o-mini'],
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+      const correctness = plan.find((p) => p.lensId === 'correctness');
+      assert.deepEqual(correctness.fallbacks, ['claude-3.5-sonnet', 'gpt-4o']);
+
+      const contracts = plan.find((p) => p.lensId === 'contracts');
+      assert.deepEqual(contracts.fallbacks, ['gpt-4o-mini']);
+    });
+
+    it('excludes primary model from fallback chain and applies per-lens overrides', () => {
+      const config = {
+        tiers: {
+          heavy: 'claude-3.5-sonnet',
+        },
+        heavy_fallbacks: ['claude-3.5-sonnet', 'gpt-4o', 'gemini-2.5-pro'],
+        lenses: {
+          correctness: {
+            fallbacks: ['o3', 'gpt-4o'],
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+
+      // Correctness uses lens-specific fallbacks
+      const correctness = plan.find((p) => p.lensId === 'correctness');
+      assert.deepEqual(correctness.fallbacks, ['o3', 'gpt-4o']);
+
+      // Security uses tier fallbacks minus its primary model (claude-3.5-sonnet)
+      const security = plan.find((p) => p.lensId === 'security');
+      assert.equal(security.model, 'claude-3.5-sonnet');
+      assert.deepEqual(security.fallbacks, ['gpt-4o', 'gemini-2.5-pro']);
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {
@@ -339,6 +378,226 @@ Explanation.
       // Security lens findings still captured
       assert.equal(output.findings.length, 1);
       assert.equal(output.findings[0].severity, 'P2');
+    });
+
+    it('automatically retries failing lens on fallback model when encountering HTTP 429 quota error', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'primary-heavy',
+          fallbacks: ['fallback-heavy'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        if (model === 'primary-heavy') {
+          const quotaErr = new Error('HTTP 429: Too Many Requests');
+          quotaErr.status = 429;
+          throw quotaErr;
+        }
+        return `
+### [P1] Null pointer dereference
+- **File**: \`src/calc.js:8\`
+- **Side**: RIGHT
+- **Confidence**: 0.9
+
+Denominator b is zero.
+`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['primary-heavy', 'fallback-heavy']);
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.findings[0].severity, 'P1');
+      assert.equal(output.results[0].fallbackUsed, true);
+      assert.equal(output.results[0].model, 'fallback-heavy');
+      assert.equal(output.results[0].primaryModel, 'primary-heavy');
+      assert.deepEqual(output.results[0].fallbackModelsTried, ['fallback-heavy']);
+    });
+
+    it('chains through multiple fallback models until success', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'model-a',
+          fallbacks: ['model-b', 'model-c'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        if (model === 'model-a') {
+          throw new Error('Quota exceeded for model-a');
+        }
+        if (model === 'model-b') {
+          const err = new Error('Resource has been exhausted');
+          err.code = 'RESOURCE_EXHAUSTED';
+          throw err;
+        }
+        return `
+### [P2] Inefficient calculation
+- **File**: \`src/calc.js:5\`
+- **Side**: RIGHT
+- **Confidence**: 0.85
+
+Review notes.
+`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['model-a', 'model-b', 'model-c']);
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.findings[0].severity, 'P2');
+      assert.equal(output.results[0].fallbackUsed, true);
+      assert.equal(output.results[0].model, 'model-c');
+      assert.deepEqual(output.results[0].fallbackModelsTried, ['model-b', 'model-c']);
+    });
+
+    it('preserves completed sibling lens passes when one lens fails and retries on fallback', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'claude-3.7-sonnet',
+          fallbacks: ['gpt-4o'],
+        },
+        {
+          lensId: 'security',
+          lensDef: LENS_DEFINITIONS.security,
+          tier: 'heavy',
+          model: 'claude-3.7-sonnet',
+          fallbacks: ['gpt-4o'],
+        },
+        {
+          lensId: 'conventions',
+          lensDef: LENS_DEFINITIONS.conventions,
+          tier: 'light',
+          model: 'claude-3.5-haiku',
+          fallbacks: [],
+        },
+      ];
+
+      const modelCalls = {};
+      const runnerFn = async ({ lens, model }) => {
+        if (!modelCalls[lens.id]) modelCalls[lens.id] = [];
+        modelCalls[lens.id].push(model);
+
+        // Lens 'correctness' hits capacity on primary, succeeds on fallback
+        if (lens.id === 'correctness' && model === 'claude-3.7-sonnet') {
+          throw new Error('Model claude-3.7-sonnet is overloaded. Please try again later.');
+        }
+
+        return `
+### [P1] Issue from ${lens.id}
+- **File**: \`src/calc.js:8\`
+- **Side**: RIGHT
+- **Confidence**: 0.9
+
+Issue identified by ${lens.id} using ${model}.
+`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 3);
+      assert.deepEqual(modelCalls.correctness, ['claude-3.7-sonnet', 'gpt-4o']);
+      assert.deepEqual(modelCalls.security, ['claude-3.7-sonnet']);
+      assert.deepEqual(modelCalls.conventions, ['claude-3.5-haiku']);
+
+      const correctnessResult = output.results.find((r) => r.lensId === 'correctness');
+      assert.equal(correctnessResult.fallbackUsed, true);
+      assert.equal(correctnessResult.model, 'gpt-4o');
+
+      const securityResult = output.results.find((r) => r.lensId === 'security');
+      assert.equal(securityResult.fallbackUsed, false);
+      assert.equal(securityResult.model, 'claude-3.7-sonnet');
+    });
+
+    it('does not retry when encountering non-quota errors (e.g. syntax or runtime errors)', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'primary-model',
+          fallbacks: ['fallback-model'],
+        },
+      ];
+
+      let callCount = 0;
+      const runnerFn = async () => {
+        callCount++;
+        throw new TypeError('Cannot read property undefined');
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      // Must fail fast on non-quota error without retrying
+      assert.equal(callCount, 1);
+      assert.equal(output.errors.length, 1);
+      assert.equal(output.errors[0].lensId, 'correctness');
+      assert.ok(output.errors[0].error instanceof TypeError);
+      assert.equal(output.results[0].fallbackUsed, false);
+    });
+
+    it('returns final error when all fallback models in chain fail with quota errors', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'primary-model',
+          fallbacks: ['fallback-1', 'fallback-2'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        throw new Error(`Rate limit exceeded for ${model}`);
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['primary-model', 'fallback-1', 'fallback-2']);
+      assert.equal(output.errors.length, 1);
+      assert.equal(output.errors[0].lensId, 'correctness');
+      assert.match(output.errors[0].error.message, /Rate limit exceeded for fallback-2/);
+      assert.equal(output.results[0].attemptsCount, 3);
+      assert.equal(output.findings.length, 0);
     });
   });
 

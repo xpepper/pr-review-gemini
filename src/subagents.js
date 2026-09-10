@@ -201,6 +201,14 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       }
     }
 
+    // Resolve fallback models: lens override -> tier fallbacks (excluding primary model)
+    const rawFallbacks = lensOverride?.fallbacks
+      ? lensOverride.fallbacks
+      : getFallbackModels(resolvedConfig, { tier, lensId });
+    const fallbacks = (Array.isArray(rawFallbacks) ? rawFallbacks : []).filter(
+      (fb) => fb && fb !== model
+    );
+
     plan.push({
       lensId,
       lensDef,
@@ -208,6 +216,7 @@ export function resolveLensPlan({ mode = 'balanced', config } = {}) {
       tier,
       model,
       reasoningEffort,
+      fallbacks,
     });
   }
 
@@ -301,6 +310,7 @@ export async function dispatchSubagentsParallel({
   customInstructions,
   runnerFn,
   diffTransport,
+  config,
 }) {
   if (!Array.isArray(plan) || plan.length === 0) {
     return { results: [], findings: [], errors: [] };
@@ -332,44 +342,94 @@ export async function dispatchSubagentsParallel({
         ? buildSdkReaderTools(activeTransport.reader)
         : [];
 
-      try {
-        const rawOutput = await runnerFn({
-          lens: item.lensDef,
-          prompt,
-          mode: item.mode,
-          tier: item.tier,
-          model: item.model,
-          reasoningEffort: item.reasoningEffort,
-          diffTransport: activeTransport,
-          tools: sdkTools,
-        });
+      const primaryModel = item.model;
+      const configuredFallbacks = Array.isArray(item.fallbacks)
+        ? item.fallbacks
+        : config
+          ? getFallbackModels(config, { tier: item.tier, lensId: item.lensId })
+          : [];
+      const fallbackModels = (configuredFallbacks || []).filter((m) => m && m !== primaryModel);
+      const modelCandidates = [primaryModel, ...fallbackModels];
 
-        const parsed = parseMarkdownFindings(rawOutput || '');
-        const lensFindings = parsed.map((f) => ({
-          ...f,
-          file: f.filePath || f.file,
-          filePath: f.filePath || f.file,
-          lens: item.lensId,
-        }));
+      let lastError = null;
+      const attempts = [];
 
-        return {
-          lensId: item.lensId,
-          tier: item.tier,
-          model: item.model,
-          findings: lensFindings,
-          rawOutput,
-          error: null,
-        };
-      } catch (err) {
-        return {
-          lensId: item.lensId,
-          tier: item.tier,
-          model: item.model,
-          findings: [],
-          rawOutput: '',
-          error: err,
-        };
+      for (let i = 0; i < modelCandidates.length; i++) {
+        const candidateModel = modelCandidates[i];
+        const isFallback = i > 0;
+
+        try {
+          const rawOutput = await runnerFn({
+            lens: item.lensDef,
+            prompt,
+            mode: item.mode,
+            tier: item.tier,
+            model: candidateModel,
+            reasoningEffort: item.reasoningEffort,
+            diffTransport: activeTransport,
+            tools: sdkTools,
+            isFallback,
+            attemptIndex: i,
+          });
+
+          const parsed = parseMarkdownFindings(rawOutput || '');
+          const lensFindings = parsed.map((f) => ({
+            ...f,
+            file: f.filePath || f.file,
+            filePath: f.filePath || f.file,
+            lens: item.lensId,
+          }));
+
+          attempts.push({
+            model: candidateModel,
+            isFallback,
+            success: true,
+          });
+
+          return {
+            lensId: item.lensId,
+            tier: item.tier,
+            model: candidateModel,
+            primaryModel,
+            fallbackUsed: isFallback,
+            fallbackModelsTried: attempts.filter((a) => a.isFallback).map((a) => a.model),
+            attemptsCount: attempts.length,
+            findings: lensFindings,
+            rawOutput,
+            error: null,
+          };
+        } catch (err) {
+          lastError = err;
+          attempts.push({
+            model: candidateModel,
+            isFallback,
+            success: false,
+            error: err,
+          });
+
+          const isQuota = isQuotaOrCapacityError(err);
+          const hasMoreFallbacks = i < modelCandidates.length - 1;
+
+          if (isQuota && hasMoreFallbacks) {
+            continue;
+          }
+
+          break;
+        }
       }
+
+      return {
+        lensId: item.lensId,
+        tier: item.tier,
+        model: primaryModel,
+        primaryModel,
+        fallbackUsed: attempts.some((a) => a.isFallback),
+        fallbackModelsTried: attempts.filter((a) => a.isFallback).map((a) => a.model),
+        attemptsCount: attempts.length,
+        findings: [],
+        rawOutput: '',
+        error: lastError,
+      };
     });
 
     const results = await Promise.all(tasks);
