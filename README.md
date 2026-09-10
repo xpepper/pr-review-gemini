@@ -78,6 +78,8 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--full` | Exhaustive review running 6 lenses, including Test Quality & Coverage |
 | `--deep` | Focused deep dive with high reasoning effort on Correctness & Concurrency |
 | `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
+| `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
+| `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
 | `--repo <owner/repo>` | Target repository (defaults to current git origin) |
 | `--model <model>` | Override the default model used by review subagents |
 | `--mock` | Use synthetic runner for rapid offline testing without inference |
@@ -244,6 +246,20 @@ Configuration is optional and works out of the box with sensible defaults. You c
   },
   "heavy_fallbacks": ["claude-3.5-sonnet", "gpt-4o"],
   "medium_fallbacks": ["gpt-4o-mini"],
+  "custom_roles": {
+    "accessibility": {
+      "name": "Accessibility & WCAG",
+      "prompt": "Evaluate WCAG 2.1 AA compliance, ARIA attributes, semantic HTML elements, keyboard traps, and screen reader announcements.",
+      "model": "gpt-4o",
+      "reasoningEffort": "medium"
+    },
+    "database_migrations": {
+      "name": "Database Migrations",
+      "prompt": "Verify zero-downtime migrations, column additions with defaults, lock times, missing foreign key indexes, and backward-compatible data transforms.",
+      "tier": "heavy",
+      "reasoningEffort": "high"
+    }
+  },
   "lenses": {
     "correctness": {
       "model": "claude-3.7-sonnet",
@@ -270,12 +286,15 @@ Configuration is optional and works out of the box with sensible defaults. You c
 
 ### Configuration Options & Precedence
 
+- **`custom_roles`** *(or `roles`)*: Pluggable domain-specific review roles. Each entry specifies a domain `prompt`, optional `name`, preferred `model`, `reasoningEffort`, `tier`, and fallback chain. Mounted alongside standard lenses by default.
+- **`replace_standard_roles`**: When set to `true`, disables built-in standard lenses and runs only custom or explicitly specified roles.
+- **`enabled_roles`**: Array of role IDs to execute (e.g. `["accessibility", "security"]`), filtering out unlisted roles.
 - **`tiers`**: Base model mappings for `light`, `medium`, and `heavy` tiers.
 - **`reasoningEfforts`**: Reasoning effort levels (`off`, `low`, `medium`, `high`) configured per tier (`light`, `medium`, `heavy`).
 - **`heavy_fallbacks` / `medium_fallbacks` / `light_fallbacks`**: Configurable chains of backup models automatically tried on quota exhaustion or capacity limits (also configurable via `fallbacks: { heavy: [...], medium: [...] }`).
 - **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`, `fallbacks`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models, reasoning profiles, and failover chains.
 - **Resolution Precedence**:
-  $$\text{lens override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
+  $$\text{lens / custom role override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
 
 ---
 

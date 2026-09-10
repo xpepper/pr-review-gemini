@@ -123,5 +123,16 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /synchronize/i, 'Should document synchronize event auto-detection');
     assert.match(content, /starter workflow|\.github\/workflows\/gem-pr-review\.yml/i, 'Should document starter workflow');
   });
+
+  it('documents pluggable custom review roles and flexible role composition', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /custom_roles|custom review roles/i, 'Should document custom review roles');
+    assert.match(content, /replace_standard_roles/i, 'Should document replace_standard_roles');
+    assert.match(content, /enabled_roles/i, 'Should document enabled_roles');
+    assert.match(content, /--role/i, 'Should document --role CLI flag');
+    assert.match(content, /--replace-standard-roles/i, 'Should document --replace-standard-roles CLI flag');
+    assert.match(content, /reasoningEffort/i, 'Should document reasoningEffort');
+  });
 });
 
