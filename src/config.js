@@ -37,12 +37,31 @@ export const DEFAULT_CONFIG = Object.freeze({
     medium: 'off',
     heavy: 'medium',
   }),
+  fallbacks: Object.freeze({
+    light: Object.freeze([]),
+    medium: Object.freeze([]),
+    heavy: Object.freeze([]),
+  }),
+  heavy_fallbacks: Object.freeze([]),
+  medium_fallbacks: Object.freeze([]),
+  light_fallbacks: Object.freeze([]),
   lenses: Object.freeze({}),
   autoPostReviews: false,
   approveMaxPriorityLevel: 'off',
 });
 
 const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'prototype', 'constructor']);
+
+function sanitizeModelList(list) {
+  if (!Array.isArray(list)) return [];
+  const result = [];
+  for (const item of list) {
+    if (typeof item === 'string' && item.trim().length > 0) {
+      result.push(item.trim());
+    }
+  }
+  return result;
+}
 
 function isPlainObject(val) {
   return val !== null && typeof val === 'object' && !Array.isArray(val);
@@ -80,6 +99,14 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     defaultReviewMode: DEFAULT_CONFIG.defaultReviewMode,
     tiers: { ...DEFAULT_CONFIG.tiers },
     reasoningEfforts: { ...DEFAULT_CONFIG.reasoningEfforts },
+    fallbacks: {
+      light: [...DEFAULT_CONFIG.fallbacks.light],
+      medium: [...DEFAULT_CONFIG.fallbacks.medium],
+      heavy: [...DEFAULT_CONFIG.fallbacks.heavy],
+    },
+    heavy_fallbacks: [...DEFAULT_CONFIG.heavy_fallbacks],
+    medium_fallbacks: [...DEFAULT_CONFIG.medium_fallbacks],
+    light_fallbacks: [...DEFAULT_CONFIG.light_fallbacks],
     lenses: { ...DEFAULT_CONFIG.lenses },
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
@@ -117,6 +144,32 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
       }
     }
 
+    // Top-level tier fallback keys (e.g. heavy_fallbacks or heavyFallbacks)
+    for (const tier of VALID_TIERS) {
+      const snakeKey = `${tier}_fallbacks`;
+      const camelKey = `${tier}Fallbacks`;
+      if (Array.isArray(src[snakeKey])) {
+        const sanitized = sanitizeModelList(src[snakeKey]);
+        resolved[snakeKey] = sanitized;
+        resolved.fallbacks[tier] = sanitized;
+      } else if (Array.isArray(src[camelKey])) {
+        const sanitized = sanitizeModelList(src[camelKey]);
+        resolved[snakeKey] = sanitized;
+        resolved.fallbacks[tier] = sanitized;
+      }
+    }
+
+    // Nested fallbacks object (e.g. fallbacks: { heavy: [...] })
+    if (isPlainObject(src.fallbacks)) {
+      for (const tier of VALID_TIERS) {
+        if (Array.isArray(src.fallbacks[tier])) {
+          const sanitized = sanitizeModelList(src.fallbacks[tier]);
+          resolved.fallbacks[tier] = sanitized;
+          resolved[`${tier}_fallbacks`] = sanitized;
+        }
+      }
+    }
+
     if (isPlainObject(src.lenses)) {
       for (const [lensId, lensConfig] of Object.entries(src.lenses)) {
         if (UNSAFE_OBJECT_KEYS.includes(lensId) || !isPlainObject(lensConfig)) continue;
@@ -129,6 +182,9 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
         }
         if (typeof lensConfig.tier === 'string' && VALID_TIERS.includes(lensConfig.tier)) {
           validLens.tier = lensConfig.tier;
+        }
+        if (Array.isArray(lensConfig.fallbacks)) {
+          validLens.fallbacks = sanitizeModelList(lensConfig.fallbacks);
         }
         if (Object.keys(validLens).length > 0) {
           resolved.lenses[lensId] = {
@@ -206,4 +262,38 @@ export function getReasoningEffortForTier(config, tier) {
     throw new Error(`Unknown tier: ${tier}. Expected one of: ${VALID_TIERS.join(', ')}`);
   }
   return config?.reasoningEfforts?.[tier] || DEFAULT_CONFIG.reasoningEfforts[tier];
+}
+
+/**
+ * Returns the configured fallback model list for a given tier.
+ *
+ * @param {Object} config - Resolved configuration object
+ * @param {'light'|'medium'|'heavy'} tier - Tier name
+ * @returns {Array<string>} Array of fallback model identifiers
+ */
+export function getFallbackModelsForTier(config, tier) {
+  if (!VALID_TIERS.includes(tier)) {
+    throw new Error(`Unknown tier: ${tier}. Expected one of: ${VALID_TIERS.join(', ')}`);
+  }
+  return config?.fallbacks?.[tier] || config?.[`${tier}_fallbacks`] || [];
+}
+
+/**
+ * Resolves fallback models for a lens, giving precedence to per-lens fallbacks,
+ * then tier fallbacks, then empty array.
+ *
+ * @param {Object} config - Resolved configuration object
+ * @param {Object} [options]
+ * @param {string} [options.tier] - Model tier
+ * @param {string} [options.lensId] - Lens identifier
+ * @returns {Array<string>} Array of fallback model identifiers
+ */
+export function getFallbackModels(config, { tier, lensId } = {}) {
+  if (lensId && Array.isArray(config?.lenses?.[lensId]?.fallbacks)) {
+    return config.lenses[lensId].fallbacks;
+  }
+  if (tier && VALID_TIERS.includes(tier)) {
+    return getFallbackModelsForTier(config, tier);
+  }
+  return [];
 }
