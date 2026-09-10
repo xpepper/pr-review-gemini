@@ -6,10 +6,16 @@
 
 ---
 
-## Active Next Task: Increment 11 / One-Shot Coding-Task Self-Review (`gem_self_review`)
-- [ ] Implement `gem_self_review` tool for local uncommitted changes.
-- [ ] Inspect working directory git status (staged, unstaged, untracked).
-- [ ] Fail-closed validation before committing or completing coding agent tasks.
+## Active Next Task: Increment 11 / Issue #18 — One-Shot Coding-Task Self-Review (`gem_self_review`)
+- [ ] Create branch `feat/self-review` for Issue #18.
+- [ ] Implement local git worktree diff acquisition (`git diff HEAD`, staged, unstaged, and untracked files).
+- [ ] Implement self-review orchestrator in `src/self-review.js` (reusing lens definitions & subagent runners without remote PR number).
+- [ ] Implement fail-closed safety gate: `status: 'passed' | 'failed'` based on presence of P0/P1 blocking issues.
+- [ ] Expose MCP tool `gem_self_review` (and alias `gem_pr_review_self`) in `server/index.js`.
+- [ ] Add CLI runner `scripts/self-review.mjs` or flag `--self` in `scripts/dogfood-review.mjs`.
+- [ ] Unit tests covering worktree diff acquisition, fail-closed thresholds, and MCP tool execution.
+- [ ] Verify test suite (`npm test`).
+- [ ] Run dogfood review against PR and submit against `main`.
 
 ---
 

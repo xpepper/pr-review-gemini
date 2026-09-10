@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/quota-fallback-retry`
+* **Current Branch**: `main`
 * **Test Suite**: `npm test` runs and passes (249 tests across 62 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -20,7 +20,7 @@
   - PR #12 (Issue #11): `feat: allow per-lens model and reasoning-effort overrides`
   - PR #13 (Increment 8): `feat: implement large-diff transport and file-backed paging (> 200 KB)`
   - PR #15 (Issue #14 / Increment 9): `feat: interactive finding selection and cached publish-later` (Merged, commit `a0def2c`)
-  - Increment 10 (Issue #16): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)`
+  - PR #17 (Issue #16 / Increment 10): `feat: automatic fallback model retry on quota/capacity errors (without timeouts)` (Merged, commit `9f20254`)
 
 ---
 
@@ -160,21 +160,43 @@ Phase 7 backlog:
 
 ## Next Session Mission: Increment 11 — One-Shot Coding-Task Self-Review (`gem_self_review`)
 
-- **Goal**: Expose a fail-closed tool for coding agents to review uncommitted local changes (staged, tracked, untracked) before concluding a task.
+- **GitHub Issue**: [#18: feat: one-shot coding-task self-review (gem_self_review)](https://github.com/xpepper/pr-review-gemini/issues/18)
+- **Target Branch**: `feat/self-review`
 
-### Ready-to-Use Prompt for the Next Session
+### Goal
+Expose a fail-closed self-review tool (`gem_self_review` / `gem_pr_review_self`) for coding agents to review uncommitted local changes (staged, unstaged, untracked) before concluding a task or preparing commits, preventing subtle bugs and regressions from slipping through.
+
+### Requirements & Architecture
+1. **Local Git Worktree Diff Acquisition**:
+   - Inspect uncommitted changes using git commands: staged (`git diff --cached`), unstaged (`git diff`), or combined worktree (`git diff HEAD`), including untracked files (`git status --porcelain`).
+2. **Local Multi-Lens Review Engine (`src/self-review.js` or in `src/reviewer.js`)**:
+   - Run specialist lenses (e.g. correctness, security, conventions) over local changes without requiring a remote GitHub PR number or network API calls.
+3. **Fail-Closed Safety Gate**:
+   - Return explicit verdict: `status: 'passed'` vs `status: 'failed'`.
+   - Fail closed when P0 or P1 blocking issues are detected, reporting concrete remediation suggestions for the agent to fix.
+4. **MCP Tool & CLI Integration**:
+   - Expose MCP tool `gem_self_review` (with backward-compatible alias `gem_pr_review_self`).
+   - Add CLI runner `scripts/self-review.mjs` or `--self` flag in `scripts/dogfood-review.mjs`.
+5. **Zero Remote Mutations**:
+   - Purely local evaluation without publishing remote GitHub reviews or modifying git state.
+
+---
+
+## Ready-to-Use Prompt for the Next Session
 
 ```text
-Please implement Increment 11 on this repository: "One-Shot Coding-Task Self-Review (gem_self_review)".
+Please implement Increment 11 on this repository: "One-Shot Coding-Task Self-Review (gem_self_review)" (addressing Issue #18: https://github.com/xpepper/pr-review-gemini/issues/18).
 
 Before writing code:
 1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
 2. Confirm git working tree is clean on main, then create a feature branch: feat/self-review.
 
 Implementation requirements:
-- Tool Implementation: Implement gem_self_review inspecting working tree git status and diffs.
-- Fail-Closed Gate: Prevent agents from finishing coding tasks when P0/P1 issues are detected in uncommitted work.
-- Test-First Verification: Follow test-first development in small verified steps, keeping all 249+ tests passing.
+- Local Diff Acquisition: Reliably acquire uncommitted worktree changes (staged, unstaged, untracked) via git without side effects.
+- Self-Review Engine: Implement local multi-lens analysis (e.g. in src/self-review.js) reusing existing specialist lenses and prompt builders without requiring a remote PR number.
+- Fail-Closed Safety Gate: Return explicit pass/fail status ('passed' | 'failed'), failing when blocking P0/P1 issues are detected so coding agents self-correct before finishing tasks.
+- MCP Tool & CLI Runner: Expose gem_self_review (and alias gem_pr_review_self) on the MCP server and provide a CLI runner (e.g. scripts/self-review.mjs or scripts/dogfood-review.mjs --self).
+- Test-First Verification: Follow test-first development in small verified steps, keeping all 249+ tests passing and adding unit tests for worktree diff acquisition, fail-closed policy, finding formatting, and MCP tool execution.
 - Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
 ```
 
