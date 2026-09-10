@@ -14,6 +14,7 @@
   - PR #6: `feat(prior): implement incremental re-reviews and prior finding revalidation`
   - PR #7: `feat(verify): implement detached worktree test verification (pr_review_verify)`
   - PR #8: `docs: add quick start and comprehensive usage guide to README`
+  - PR #9: `docs: add copilot plugin install instructions and collision guidance`
 
 ---
 
