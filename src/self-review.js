@@ -11,7 +11,7 @@ import {
   LARGE_DIFF_THRESHOLD_BYTES,
 } from './diff.js';
 import { parseMarkdownFindings } from './publish.js';
-import { loadConfig } from './config.js';
+import { loadConfig, formatDefaultRoleName } from './config.js';
 import {
   resolveReviewMode,
   deduplicateFindings,
@@ -138,7 +138,14 @@ No uncommitted changes detected in working tree. Self-review passed cleanly.`;
   }
 
   if (executionErrors.length > 0) {
-    const errorLines = executionErrors.map((e) => `- **${e.lensName || e.lensId}**: ${e.error}`);
+    const errorLines = executionErrors.map((e) => {
+      const name =
+        e.lensName ||
+        customRoles?.[e.lensId]?.name ||
+        LENS_DEFINITIONS[e.lensId]?.name ||
+        (e.lensId ? formatDefaultRoleName(e.lensId) : 'Unknown Lens');
+      return `- **${name}**: ${e.error}`;
+    });
     return `${header}
 
 > ⚠️ **Execution Errors Encountered**:
@@ -161,7 +168,7 @@ Self-review failed closed due to execution errors during specialist subagent ana
 
     const lensList = lenses.length > 0
       ? `\n### Evaluated Specialist Lenses:\n${lenses.map((l) => {
-          const name = customRoles?.[l]?.name || LENS_DEFINITIONS[l]?.name || l;
+          const name = customRoles?.[l]?.name || LENS_DEFINITIONS[l]?.name || formatDefaultRoleName(l);
           return `- ✅ ${name} (\`${l}\`)`;
         }).join('\n')}`
       : '';

@@ -432,7 +432,30 @@ index aaaaaaa..bbbbbbb 100644
       assert.ok(summary.includes('Ensure length check before indexing array.'));
       assert.ok(summary.includes('Action Required'));
     });
+
+    it('formats nameless custom roles with formatDefaultRoleName fallback in evaluated lenses', () => {
+      const summary = formatSelfReviewSummary({
+        verdict: 'PASS',
+        status: 'passed',
+        findings: [],
+        counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
+        mode: 'balanced',
+        lenses: ['database_migrations', 'api_backwards_compat'],
+        customRoles: {
+          database_migrations: {
+            prompt: 'Check zero downtime migrations.',
+          },
+          api_backwards_compat: {
+            prompt: 'Check API contracts.',
+          },
+        },
+      });
+
+      assert.ok(summary.includes('- ✅ Database Migrations (`database_migrations`)'));
+      assert.ok(summary.includes('- ✅ Api Backwards Compat (`api_backwards_compat`)'));
+    });
   });
+
 
   // --------------------------------------------------------------------------
   // 5. Orchestrator (runSelfReview)
@@ -717,5 +740,34 @@ new file mode 100644
 
       fs.rmSync(tempCwd, { recursive: true, force: true });
     });
+
+    it('uses formatDefaultRoleName in summary for nameless custom roles in runSelfReview', async () => {
+      const diffText = `diff --git a/src/db.js b/src/db.js
+new file mode 100644
+--- /dev/null
++++ b/src/db.js
+@@ -0,0 +1,2 @@
++export const query = 'SELECT * FROM users';
++`;
+
+      const runnerFn = async () => ({
+        output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>',
+      });
+
+      const result = await runSelfReview({
+        diffText,
+        replaceStandardRoles: true,
+        customRoles: {
+          database_migrations: {
+            prompt: 'Check SQL schema changes.',
+          },
+        },
+        runnerFn,
+      });
+
+      assert.deepEqual(result.lenses, ['database_migrations']);
+      assert.match(result.summary, /Database Migrations \(`database_migrations`\)/);
+    });
   });
 });
+
