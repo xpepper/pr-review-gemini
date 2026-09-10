@@ -63,6 +63,7 @@ export function parseCliArgs(args) {
   let repo = null;
   let model = null;
   let mock = false;
+  let mockGh = process.env.MOCK_GH === '1';
   let incremental = false;
   let showHelp = false;
 
@@ -106,6 +107,8 @@ export function parseCliArgs(args) {
       model = args[++i] || null;
     } else if (arg === '--mock') {
       mock = true;
+    } else if (arg === '--mock-gh') {
+      mockGh = true;
     } else if (/^\d+$/.test(arg) && !prNumber) {
       prNumber = parseInt(arg, 10);
     }
@@ -124,6 +127,7 @@ export function parseCliArgs(args) {
     repo,
     model,
     mock,
+    mockGh,
     incremental,
     showHelp,
   };
@@ -154,6 +158,7 @@ export async function main() {
     repo,
     model,
     mock,
+    mockGh,
     incremental,
     showHelp,
   } = parseCliArgs(process.argv.slice(2));
@@ -175,7 +180,7 @@ export async function main() {
 
   // Wrapper for gh CLI execution
   const execGhFn = (args, options = {}) => {
-    if (mock) {
+    if (mockGh) {
       if (args[0] === 'pr' && args[1] === 'view') {
         return Promise.resolve(
           JSON.stringify({

@@ -115,7 +115,7 @@ describe('Dogfood Review Script CLI', () => {
 
       const { stdout } = await execFileAsync(
         process.execPath,
-        [scriptPath, '88', '--publish-cached', '--all', '--mock', `--cache-dir=${tempDir}`],
+        [scriptPath, '88', '--publish-cached', '--all', '--mock', '--mock-gh', `--cache-dir=${tempDir}`],
         { env: { ...process.env, NODE_ENV: 'test' } }
       );
 
