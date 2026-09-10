@@ -7,12 +7,12 @@
 ---
 
 ## Active Next Task: Issue #11 — Per-Lens Model & Reasoning-Effort Overrides
-- [ ] Create branch `feat/11-per-lens-overrides`
-- [ ] Extend configuration schema in `src/config.js` (`resolveConfig`, `loadConfig`) to support optional `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
-- [ ] Update `resolveLensPlan()` in `src/subagents.js` with resolution order: `lens override -> tier config -> default tier mapping`.
-- [ ] Fix user-facing documentation in `README.md` (`reasoningEfforts` keys using `light`/`medium`/`heavy` instead of modes, plus `lenses` schema example).
-- [ ] Add comprehensive test-first suites in `tests/config.test.mjs` and `tests/subagents.test.mjs`.
-- [ ] Verify test suite passes (`npm test`) and dogfood-review / open PR on GitHub.
+- [x] Create branch `feat/11-per-lens-overrides`
+- [x] Extend configuration schema in `src/config.js` (`resolveConfig`, `loadConfig`) to support optional `lenses: { [lensId]: { model, reasoningEffort, tier } }`.
+- [x] Update `resolveLensPlan()` in `src/subagents.js` with resolution order: `lens override -> tier config -> default tier mapping`.
+- [x] Fix user-facing documentation in `README.md` (`reasoningEfforts` keys using `light`/`medium`/`heavy` instead of modes, plus `lenses` schema example).
+- [x] Add comprehensive test-first suites in `tests/config.test.mjs` and `tests/subagents.test.mjs`.
+- [x] Verify test suite passes (`npm test`) and dogfood-review / open PR on GitHub.
 
 ---
 

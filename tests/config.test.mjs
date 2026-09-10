@@ -44,6 +44,7 @@ describe('Configuration & Model Tier Management', () => {
         medium: 'off',
         heavy: 'medium',
       });
+      assert.deepEqual(DEFAULT_CONFIG.lenses, {});
     });
 
     it('defines valid allowed option sets', () => {
@@ -166,6 +167,127 @@ describe('Configuration & Model Tier Management', () => {
       assert.deepEqual(resolved, DEFAULT_CONFIG);
     });
 
+    it('parses valid per-lens configuration overrides', () => {
+      const userConfig = {
+        lenses: {
+          correctness: {
+            model: 'gpt-5.6-terra',
+            reasoningEffort: 'high',
+          },
+          security: {
+            model: 'claude-opus-5',
+            reasoningEffort: 'high',
+            tier: 'heavy',
+          },
+          conventions: {
+            tier: 'medium',
+          },
+        },
+      };
+
+      const resolved = resolveConfig({ userConfig });
+      assert.deepEqual(resolved.lenses, {
+        correctness: {
+          model: 'gpt-5.6-terra',
+          reasoningEffort: 'high',
+        },
+        security: {
+          model: 'claude-opus-5',
+          reasoningEffort: 'high',
+          tier: 'heavy',
+        },
+        conventions: {
+          tier: 'medium',
+        },
+      });
+    });
+
+    it('merges project-level and user-level lenses overrides', () => {
+      const userConfig = {
+        lenses: {
+          correctness: {
+            model: 'gpt-5.6-terra',
+            reasoningEffort: 'medium',
+          },
+          security: {
+            model: 'claude-opus-5',
+          },
+        },
+      };
+
+      const projectConfig = {
+        lenses: {
+          correctness: {
+            reasoningEffort: 'high',
+          },
+          tests: {
+            tier: 'heavy',
+          },
+        },
+      };
+
+      const resolved = resolveConfig({ userConfig, projectConfig });
+      assert.deepEqual(resolved.lenses, {
+        correctness: {
+          model: 'gpt-5.6-terra',
+          reasoningEffort: 'high',
+        },
+        security: {
+          model: 'claude-opus-5',
+        },
+        tests: {
+          tier: 'heavy',
+        },
+      });
+    });
+
+    it('ignores malformed or invalid lens entries gracefully', () => {
+      const malformedConfig = {
+        lenses: {
+          invalidEntry: null,
+          notAnObject: 'invalid',
+          emptyObject: {},
+          invalidFields: {
+            model: '',
+            reasoningEffort: 'ultra',
+            tier: 'super-heavy',
+            unknownField: 42,
+          },
+          partiallyValid: {
+            model: 'valid-model',
+            reasoningEffort: 99,
+            tier: 'invalid-tier',
+          },
+        },
+      };
+
+      const resolved = resolveConfig({ userConfig: malformedConfig });
+      assert.deepEqual(resolved.lenses, {
+        partiallyValid: {
+          model: 'valid-model',
+        },
+      });
+    });
+
+    it('guards against prototype pollution keys in lenses', () => {
+      const maliciousConfig = JSON.parse(`{
+        "lenses": {
+          "__proto__": { "polluted": true, "model": "evil" },
+          "constructor": { "polluted": true, "model": "evil" },
+          "prototype": { "polluted": true, "model": "evil" },
+          "correctness": { "model": "safe-model" }
+        }
+      }`);
+
+      const resolved = resolveConfig({ userConfig: maliciousConfig });
+      assert.deepEqual(resolved.lenses, {
+        correctness: {
+          model: 'safe-model',
+        },
+      });
+      assert.equal(Object.prototype.polluted, undefined);
+    });
+
     it('ignores non-object configurations gracefully', () => {
       assert.deepEqual(resolveConfig({ userConfig: 'invalid-string' }), DEFAULT_CONFIG);
       assert.deepEqual(resolveConfig({ userConfig: [1, 2, 3] }), DEFAULT_CONFIG);
@@ -238,6 +360,43 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(config.tiers.light, 'user-light');
       assert.equal(config.tiers.heavy, 'project-heavy');
       assert.equal(config.reasoningEfforts.heavy, 'high');
+    });
+
+    it('loads and merges lenses overrides from user and project files', () => {
+      const homeDir = path.join(tmpDir, 'home');
+      const userCopilotDir = path.join(homeDir, '.copilot');
+      fs.mkdirSync(userCopilotDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(userCopilotDir, 'gem-pr-review.json'),
+        JSON.stringify({
+          lenses: {
+            correctness: { model: 'user-gpt', reasoningEffort: 'medium' },
+            security: { model: 'user-claude' },
+          },
+        })
+      );
+
+      const cwd = path.join(tmpDir, 'project');
+      const projectGithubDir = path.join(cwd, '.github');
+      fs.mkdirSync(projectGithubDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(projectGithubDir, 'gem-pr-review.json'),
+        JSON.stringify({
+          lenses: {
+            correctness: { reasoningEffort: 'high' },
+            performance: { tier: 'light' },
+          },
+        })
+      );
+
+      const config = loadConfig({ homeDir, cwd });
+      assert.deepEqual(config.lenses, {
+        correctness: { model: 'user-gpt', reasoningEffort: 'high' },
+        security: { model: 'user-claude' },
+        performance: { tier: 'light' },
+      });
     });
 
     it('loads configuration from gem-pr-review.json with priority over pr-review.json', () => {

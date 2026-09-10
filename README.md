@@ -176,9 +176,19 @@ Configuration is optional and works out of the box with sensible defaults. You c
     "heavy": "claude-3.7-sonnet"
   },
   "reasoningEfforts": {
-    "deep": "high",
-    "balanced": "medium",
-    "quick": "low"
+    "light": "off",
+    "medium": "off",
+    "heavy": "medium"
+  },
+  "lenses": {
+    "correctness": {
+      "model": "claude-3.7-sonnet",
+      "reasoningEffort": "high"
+    },
+    "security": {
+      "model": "gpt-4o",
+      "reasoningEffort": "low"
+    }
   },
   "verification": {
     "defaultProfile": "node-test",
@@ -192,6 +202,14 @@ Configuration is optional and works out of the box with sensible defaults. You c
   }
 }
 ```
+
+### Configuration Options & Precedence
+
+- **`tiers`**: Base model mappings for `light`, `medium`, and `heavy` tiers.
+- **`reasoningEfforts`**: Reasoning effort levels (`off`, `low`, `medium`, `high`) configured per tier (`light`, `medium`, `heavy`).
+- **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models and reasoning profiles.
+- **Resolution Precedence**:
+  $$\text{lens override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
 
 ---
 
@@ -220,7 +238,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 151 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
+All 165 unit tests across 47 suites verify parser accuracy, host-gated security, subagent orchestration, and worktree lifecycles.
 
 ---
 
