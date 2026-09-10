@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `main` (clean, up to date with `origin/main`)
-* **Test Suite**: `npm test` runs and passes (151 tests across 47 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (155 tests across 47 suites, 0 failures)
 * **All Roadmap Increments Delivered & Merged**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -16,12 +16,19 @@
   - PR #8: `docs: add quick start and comprehensive usage guide to README`
   - PR #9: `docs: add copilot plugin install instructions and collision guidance`
   - PR #10: `feat: rename plugin, skill, and MCP tools to gem-pr-review`
+  - Commit 7bca149: `fix(publish): normalize double-escaped newlines and add safe publishing workflow to skill`
 
 ---
 
-## Status: ALL_INCREMENTS_COMPLETE
+## Status: PHASE_6_COMPLETE / PHASE_7_PLANNED
 
-All 7 roadmap increments specified in `docs/roadmap.md` and `TODO.md` are fully implemented, verified with test-first suites, reviewed via our dogfood AI reviewer, and merged into `main`.
+All 7 core roadmap increments specified in `docs/roadmap.md` and `TODO.md` are fully implemented, verified with test-first suites, reviewed via our dogfood AI reviewer, and merged into `main`.
+Phase 7 has been scoped and planned to capture next-generation features inspired by `pi-pr-review` (excluding artificial timeouts):
+- Increment 8: Large-diff file-backed transport (> 200 KB)
+- Increment 9: Interactive finding selection UI & cached publish-later
+- Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts)
+- Increment 11: One-shot coding-task self-review (`gem_self_review`)
+- Increment 12: Candidate finding recovery from degraded/malformed model outputs
 
 ---
 
