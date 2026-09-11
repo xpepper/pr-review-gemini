@@ -394,6 +394,30 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(res.exitCode, 1);
     });
 
+    it('catches formatErrorFn failures gracefully and falls back to plain error message', async () => {
+      const dummyFile = path.resolve('scripts/dummy-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+      let loggedError = '';
+
+      const res = await runIfDirect(
+        dummyUrl,
+        () => {
+          throw new Error('Fatal error');
+        },
+        {
+          argv: ['node', dummyFile],
+          formatError: () => {
+            throw new Error('Formatter broke');
+          },
+          io: { error: (msg) => { loggedError += msg; } },
+          exit: false,
+        }
+      );
+
+      assert.match(loggedError, /Fatal error/);
+      assert.equal(res.exitCode, 1);
+    });
+
     it('formats clean error message by default without exposing stack trace', async () => {
       const dummyFile = path.resolve('scripts/dummy-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
@@ -1426,6 +1450,7 @@ echo "prior test"
       assert.throws(() => parseCliArgs(['--command']), /Option --command requires an argument value/);
       assert.throws(() => parseCliArgs(['--command', '--install-hook']), /Option --command requires an argument value/);
       assert.throws(() => parseCliArgs(['--command=']), /Option --command requires a non-empty command string/);
+      assert.throws(() => parseCliArgs(['--command', '   ']), /Option --command requires a non-empty command string/);
     });
 
     it('validates option values in dogfood-review.mjs parseCliArgs using readOptionValue', async () => {

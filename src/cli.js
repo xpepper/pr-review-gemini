@@ -237,8 +237,12 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
   const isDebug = resolveDebugFlag({ argv, ...options });
 
   const printAndExit = (err) => {
-    const msg = formatErrorFn(err, { ...options, debug: isDebug });
-    (io.error || console.error)(msg);
+    try {
+      const msg = formatErrorFn(err, { ...options, debug: isDebug });
+      (io.error || console.error)(msg);
+    } catch {
+      (io.error || console.error)(String(err?.message || err));
+    }
     const code =
       typeof err?.exitCode === 'number' && err.exitCode > 0
         ? err.exitCode

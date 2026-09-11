@@ -76,6 +76,9 @@ export function parseCliArgs(args) {
     } else if (arg === '--command') {
       const { value, nextIndex } = readOptionValue(args, i, '--command');
       command = value.trim();
+      if (!command) {
+        throw new Error('Option --command requires a non-empty command string');
+      }
       i = nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
