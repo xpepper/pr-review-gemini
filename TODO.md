@@ -6,15 +6,24 @@
 
 ---
 
-## Active Next Task: Merge PR #28 (Increment 16 / Issue #27)
-- [x] Push branch `feat/reviewer-sensitivity-calibration` and open PR for Issue #27 (PR #28 opened: https://github.com/xpepper/pr-review-gemini/pull/28)
-- [x] Run dogfood review on PR #28: `npm run dogfood:pr 28`
-- [x] Addressed all 5 P2 review findings on calibration lens/severity matching, precision calculation, and uniform fallback semantics (commit `ffd9380`)
-- [x] Re-reviewed with `npm run dogfood:pr 28` (0 P0, 0 P1, 0 P2, 1 P3, 1 nit; all blocking defects resolved; CI review green)
-- [ ] Merge PR #28 into `main`
+## Active Next Task: Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation
+- [ ] **Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication**
+  - [ ] Implement centralized CLI helper module (`src/cli.js`):
+    - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections and proper exit codes.
+    - `handleCommonFlags(argv, options)`: Unified `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`) dispatch.
+    - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection replacing duplicate boilerplate.
+    - `formatCliError(err)`: Standardized terminal error presentation.
+  - [ ] Refactor sibling CLI entrypoints in `scripts/` to consume `src/cli.js`:
+    - `scripts/dogfood-pr.mjs`
+    - `scripts/dogfood-review.mjs`
+    - `scripts/self-review.mjs`
+    - `scripts/ci-action.mjs`
+    - `scripts/bump-version.mjs`
+  - [ ] Add pre-commit hook installer (`npm run install-hook` or `--install-hook` flag) to configure `.git/hooks/pre-commit` to execute `npm run self-review`.
+  - [ ] Add unit tests in `tests/cli.test.mjs` and verify all existing CLI test suites remain 100% green.
+  - [ ] Verify via dogfood review on the resulting PR.
 
 ### Backlog & Future Capabilities
-- [ ] Pre-commit hook installer (`npx gem-pr-review --install-hook`) for local self-review
 - [ ] PR comment reaction / interactive re-review commands (`/gem-review --quick`)
 - [ ] SARIF report export for GitHub Code Scanning integration
 

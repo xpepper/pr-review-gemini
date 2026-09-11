@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/reviewer-sensitivity-calibration` (PR #28 opened and reviewed)
+* **Current Branch**: `main` (clean, synchronized with `origin/main`)
 * **Test Suite**: `npm test` runs and passes (445 tests across 98 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -26,14 +26,14 @@
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
-  - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Open PR: https://github.com/xpepper/pr-review-gemini/pull/28)
+  - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
 
 ---
 
-## Status: READY_TO_MERGE (PR #28 / Increment 16 / Issue #27)
+## Status: READY_FOR_INCREMENT_17 (Issue #29)
 
-All deliverables for Increment 16 are implemented and verified test-first (445 passing tests across 98 suites, manifest version check green).
-Dogfood review loop executed against PR #28: all 5 P2 findings resolved and verified, CI review green.
+All 16 increments are fully implemented, verified test-first (445 passing tests across 98 suites, manifest version check green), dogfood-reviewed on GitHub PRs, and merged to `main`.
+Active next mission: **Increment 17 / Issue #29**: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -418,21 +418,47 @@ Possible future enhancements:
 
 ---
 
-## Next Steps: Merge PR #28
+---
 
-1. **Merge PR #28**:
-   - Merge PR #28 into `main` on GitHub via `gh pr merge 28 --squash` or `gh pr merge 28 --merge`.
-2. **Post-Merge**:
-   - Switch local repo back to `main` and pull latest commits: `git checkout main && git pull`.
-   - Delete feature branch `feat/reviewer-sensitivity-calibration`.
-   - Increment 16 will be fully closed.
+## Next Mission: Increment 17 — Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (Issue #29)
+
+- **GitHub Issue**: [#29: refactor(cli): centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Increment 17)](https://github.com/xpepper/pr-review-gemini/issues/29)
+- **Branch**: `feat/centralize-cli-infrastructure` (create from clean `main`)
+
+### Problem & Background
+During dogfood review on PR #28, the newly calibrated `conventions` specialist lens caught sibling CLI boilerplate duplication across entrypoint scripts:
+- **Direct invocation boilerplate**: The `isDirectRun` pattern (`process.argv[1] && path.resolve(process.argv[1]) === path.resolve(...)` followed by `main().catch(...)`) is repeated across multiple sibling scripts in `scripts/`.
+- **Flag parsing & banner boilerplate**: Common flag handling (`-v`/`--version`, `-h`/`--help`, usage printing, error formatting) is implemented independently across sibling CLI scripts (`scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`).
+
+This violates the **Single Source of Truth / DRY across sibling CLI entrypoints** design dimension established in Increment 16.
+
+### Proposed Objectives (Increment 17)
+1. **Centralized CLI Infrastructure Module (`src/cli.js`)**:
+   - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections and proper exit codes (`process.exit(1)`).
+   - `handleCommonFlags(argv, options)`: Centralized handler for `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`).
+   - `isDirectRun(importMetaUrl, argv)`: Centralized direct invocation detection.
+   - `formatCliError(err)`: Consistent error formatting for user-facing terminal output.
+2. **Refactor Sibling Entrypoints in `scripts/`**:
+   - Update `scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, and `scripts/bump-version.mjs` to consume `src/cli.js`.
+   - Maintain 100% backward compatibility of CLI interfaces, flag semantics, output formats, and exit codes.
+3. **Pre-Commit Hook Integration (`--install-hook`)**:
+   - Provide a zero-friction CLI installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook`) to configure `.git/hooks/pre-commit` to execute `npm run self-review` before commit.
+4. **Comprehensive Tests & Verification**:
+   - Add unit tests in `tests/cli.test.mjs` covering all functions in `src/cli.js`.
+   - Ensure all existing CLI test suites (`tests/dogfood.test.mjs`, `tests/version.test.mjs`, `tests/ci.test.mjs`, etc.) remain 100% green.
+   - Run dogfood review on the resulting PR.
+
+### Prompt for the Next Agent
+
+```text
+Please implement Increment 17: "Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication" addressing Issue #29 (https://github.com/xpepper/pr-review-gemini/issues/29) following HANDOFF.md, TODO.md, and AGENTS.md.
+```
 
 ---
 
 ## Future Opportunities / Phase 8 Ideas
 
-1. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
-2. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
-3. **SARIF Report Export**: Export structured findings to standard SARIF format for GitHub Code Scanning integration.
+1. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
+2. **SARIF Report Export**: Export structured findings to standard SARIF format for GitHub Code Scanning integration.
 
 
