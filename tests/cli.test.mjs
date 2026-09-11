@@ -23,7 +23,12 @@ import {
   generatePreCommitHookSnippet,
   isManagedHookSnippetLine,
   resolveDefaultHookCommand,
+  findTopLevelTerminalExitLine,
+  withHookLock,
+  atomicWriteFile,
+  hasActiveFailClosedHookCommandInLines,
   PRE_COMMIT_HOOK_MARKER,
+  PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
 } from '../src/cli.js';
 import { VERSION, PLUGIN_NAME } from '../src/version.js';
@@ -1242,6 +1247,132 @@ exit 0
         { cwd: tempDir }
       );
       assert.match(reinstallOut, /already installed/);
+    });
+
+    it('handles compact one-line if statements and correctly locates subsequent terminal exit', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const compactHook = `#!/bin/sh
+if [ -z "$STAGED" ]; then exit 0; fi
+npm test
+exit 0
+`;
+      fs.writeFileSync(hookFile, compactHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const compactIfIdx = content.indexOf('then exit 0; fi');
+      const terminalExitIdx = content.lastIndexOf('exit 0');
+
+      assert.ok(selfReviewIdx > compactIfIdx, 'self-review must be placed after compact if construct');
+      assert.ok(selfReviewIdx < terminalExitIdx, 'self-review must precede terminal exit 0');
+    });
+
+    it('does not insert inside function bodies with unindented exit statements', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const funcHook = `#!/bin/sh
+run_checks() {
+exit 0
+}
+run_checks
+exit 0
+`;
+      fs.writeFileSync(hookFile, funcHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const funcBodyIdx = content.indexOf('run_checks() {\nexit 0\n}');
+      const runChecksIdx = content.indexOf('run_checks\n');
+      const terminalExitIdx = content.lastIndexOf('exit 0');
+
+      assert.ok(selfReviewIdx > funcBodyIdx, 'self-review must not be placed inside function body');
+      assert.ok(selfReviewIdx > runChecksIdx, 'self-review must follow function invocation');
+      assert.ok(selfReviewIdx < terminalExitIdx, 'self-review must precede terminal exit 0');
+    });
+
+    it('does not treat commented-out hook command as already installed', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const commentedHook = `#!/bin/sh
+# npm run self-review || exit 1
+echo "other check"
+`;
+      fs.writeFileSync(hookFile, commentedHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.alreadyInstalled, undefined);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const lines = content.split('\n').map((l) => l.trim());
+      assert.ok(lines.includes('npm run self-review || exit 1'), 'Must append real active hook command');
+    });
+
+    it('removes custom hook command on uninstall without needing --command argument', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const existing = `#!/bin/sh
+echo "prior test"
+`;
+      fs.writeFileSync(hookFile, existing, { mode: 0o755 });
+
+      installPreCommitHook({ rootDir: tempDir, command: 'npx custom-review-tool' });
+      const contentAfterInstall = fs.readFileSync(hookFile, 'utf8');
+      assert.ok(contentAfterInstall.includes('npx custom-review-tool || exit 1'));
+
+      // Uninstall without --command flag (default command resolution)
+      const uninstRes = uninstallPreCommitHook({ rootDir: tempDir });
+      assert.equal(uninstRes.success, true);
+      assert.equal(uninstRes.cleaned, true);
+
+      const contentAfterUninstall = fs.readFileSync(hookFile, 'utf8');
+      assert.ok(!contentAfterUninstall.includes('npx custom-review-tool'), 'custom command must be removed');
+      assert.ok(!contentAfterUninstall.includes(PRE_COMMIT_HOOK_MARKER), 'marker must be removed');
+      assert.ok(contentAfterUninstall.includes('echo "prior test"'), 'user content must be preserved');
+    });
+
+    it('withHookLock and atomicWriteFile provide concurrency serialization and atomic writes', () => {
+      const testFile = path.join(tempDir, 'atomic-test.txt');
+      atomicWriteFile(testFile, 'initial content\n', { mode: 0o644 });
+      assert.equal(fs.readFileSync(testFile, 'utf8'), 'initial content\n');
+
+      let executed = false;
+      withHookLock(testFile, () => {
+        atomicWriteFile(testFile, 'updated content\n');
+        executed = true;
+      });
+      assert.equal(executed, true);
+      assert.equal(fs.readFileSync(testFile, 'utf8'), 'updated content\n');
+      assert.ok(!fs.existsSync(`${testFile}.lock`), 'lock must be cleaned up');
+    });
+
+    it('validates --command in parseCliArgs and rejects missing values or options as values', async () => {
+      const { parseCliArgs } = await import('../scripts/self-review.mjs');
+      assert.throws(() => parseCliArgs(['--command']), /Option --command requires a command string argument/);
+      assert.throws(() => parseCliArgs(['--command', '--install-hook']), /Option --command requires a command string argument/);
+      assert.throws(() => parseCliArgs(['--command=']), /Option --command requires a non-empty command string/);
     });
   });
 

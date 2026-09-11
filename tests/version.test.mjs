@@ -481,15 +481,11 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
   describe('scripts/bump-version.mjs CLI Utility', () => {
     const bumpScript = path.join(ROOT_DIR, 'scripts', 'bump-version.mjs');
 
-    it('parseCliArgs correctly parses flags and leaves target null on --version or --help', async () => {
+    it('parseCliArgs correctly parses flags and defaults target to auto when omitted', async () => {
       const { parseCliArgs } = await import('../scripts/bump-version.mjs');
-      const versionResult = parseCliArgs(['--version']);
-      assert.equal(versionResult.showVersion, true);
-      assert.equal(versionResult.target, null);
-
-      const helpResult = parseCliArgs(['--help']);
-      assert.equal(helpResult.showHelp, true);
-      assert.equal(helpResult.target, null);
+      const checkResult = parseCliArgs(['--check']);
+      assert.equal(checkResult.check, true);
+      assert.equal(checkResult.target, null);
 
       const autoResult = parseCliArgs([]);
       assert.equal(autoResult.target, 'auto');

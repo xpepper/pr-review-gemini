@@ -70,18 +70,12 @@ export function parseCliArgs(args) {
   let mockGh = process.env.MOCK_GH === '1';
   let self = false;
   let incremental = false;
-  let showHelp = false;
-  let showVersion = false;
   const roles = [];
   let replaceStandardRoles = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--help' || arg === '-h') {
-      showHelp = true;
-    } else if (arg === '--version' || arg === '-v') {
-      showVersion = true;
-    } else if (arg === '--self') {
+    if (arg === '--self') {
       self = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
@@ -150,8 +144,6 @@ export function parseCliArgs(args) {
     mock,
     mockGh,
     incremental,
-    showHelp,
-    showVersion,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };

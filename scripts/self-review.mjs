@@ -8,12 +8,11 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
+import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 import {
-  handleCommonFlags,
-  runIfDirect,
   installPreCommitHook,
   uninstallPreCommitHook,
-} from '../src/cli.js';
+} from '../src/pre-commit-hook.js';
 
 export function printUsage(output = console.log) {
   output(`
@@ -50,8 +49,6 @@ export function parseCliArgs(args) {
   let failOn = 'P1';
   let json = false;
   let mock = false;
-  let showHelp = false;
-  let showVersion = false;
   let installHook = false;
   let uninstallHook = false;
   let command;
@@ -60,24 +57,32 @@ export function parseCliArgs(args) {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--help' || arg === '-h') {
-      showHelp = true;
-    } else if (arg === '--version' || arg === '-v') {
-      showVersion = true;
-    } else if (arg === '--install-hook') {
+    if (arg === '--install-hook') {
       installHook = true;
     } else if (arg === '--uninstall-hook') {
       uninstallHook = true;
     } else if (arg.startsWith('--command=')) {
-      command = arg.slice('--command='.length);
+      const val = arg.slice('--command='.length).trim();
+      if (!val) {
+        throw new Error('Option --command requires a non-empty command string');
+      }
+      command = val;
     } else if (arg === '--command') {
-      command = args[++i] || command;
+      const next = args[++i];
+      if (!next || next.startsWith('-')) {
+        throw new Error('Option --command requires a command string argument');
+      }
+      command = next.trim();
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
       mode = arg.slice('--mode='.length);
     } else if (arg === '--mode') {
-      mode = args[++i] || 'balanced';
+      const next = args[++i];
+      if (!next || next.startsWith('-')) {
+        throw new Error('Option --mode requires a mode value');
+      }
+      mode = next;
     } else if (arg === '--staged') {
       scope = 'staged';
     } else if (arg === '--unstaged') {
@@ -91,13 +96,20 @@ export function parseCliArgs(args) {
     } else if (arg.startsWith('--fail-on=')) {
       failOn = arg.slice('--fail-on='.length);
     } else if (arg === '--fail-on') {
-      failOn = args[++i] || 'P1';
+      const next = args[++i];
+      if (!next || next.startsWith('-')) {
+        throw new Error('Option --fail-on requires a severity level (e.g. P1)');
+      }
+      failOn = next;
     } else if (arg.startsWith('--role=')) {
       const val = arg.slice('--role='.length);
       roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (arg === '--role') {
-      const val = args[++i] || '';
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+      const next = args[++i];
+      if (!next || next.startsWith('-')) {
+        throw new Error('Option --role requires a role name');
+      }
+      roles.push(...next.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg === '--json') {
@@ -114,8 +126,6 @@ export function parseCliArgs(args) {
     failOn,
     json,
     mock,
-    showHelp,
-    showVersion,
     installHook,
     uninstallHook,
     command,
