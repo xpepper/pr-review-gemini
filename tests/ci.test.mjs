@@ -18,6 +18,7 @@ import {
   formatUnauthorizedReply,
   formatHelpReply,
   formatCompletionReply,
+  isVerificationPassed,
 } from '../src/ci.js';
 import { runCiAction } from '../scripts/ci-action.mjs';
 
@@ -1044,6 +1045,59 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('detects cross-repository fork via headRepository.nameWithOwner even if owner matches', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-same-owner-fork-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 25,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/25' },
+        },
+        comment: {
+          id: 785,
+          body: '/gem-review --quick --verify=test',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const customExecGh = async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            return JSON.stringify({
+              headRefOid: 'same-owner-fork-sha',
+              headRepository: { nameWithOwner: 'org/forked-repo' },
+              headRepositoryOwner: { login: 'org' },
+            });
+          }
+          return JSON.stringify({ id: 1 });
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          execGhFn: customExecGh,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1, 'Must fail closed when head repo nameWithOwner differs');
+        assert.equal(verificationExecuted, false);
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /cross-repository\/fork/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
     it('fails closed and aborts verification if PR origin query encounters API error', async () => {
       const tmpEvent = path.join(os.tmpdir(), `event-origin-err-${Date.now()}.json`);
       fs.writeFileSync(tmpEvent, JSON.stringify({
@@ -1122,9 +1176,11 @@ describe('CI Event Payload & Environment Resolution', () => {
       try {
         let verificationExecuted = false;
         let executedProfile = null;
-        const mockVerification = async ({ profileName }) => {
+        let passedConfig = null;
+        const mockVerification = async ({ profileName, config }) => {
           verificationExecuted = true;
           executedProfile = profileName;
+          passedConfig = config;
           return { status: 'passed' };
         };
 
@@ -1143,6 +1199,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(result.exitCode, 0);
         assert.equal(verificationExecuted, true, 'Should execute custom profile defined in repo config');
         assert.equal(executedProfile, 'custom_deploy');
+        assert.deepEqual(passedConfig?.verificationProfiles?.custom_deploy, { command: 'npm run deploy:preview' });
         assert.equal(result.verificationResult?.status, 'passed');
       } finally {
         fs.unlinkSync(tmpEvent);
@@ -1574,6 +1631,22 @@ Hope that helps!
         assert.match(text, /FAIL/);
         assert.match(text, /Failed verification/);
         assert.match(text, /Test suite failed with exit code 1/);
+      });
+    });
+
+    describe('isVerificationPassed', () => {
+      it('returns true when verificationResult is null or undefined (no verification requested)', () => {
+        assert.equal(isVerificationPassed(null), true);
+        assert.equal(isVerificationPassed(undefined), true);
+      });
+
+      it('returns true when verification status is passed', () => {
+        assert.equal(isVerificationPassed({ status: 'passed', profile: 'test' }), true);
+      });
+
+      it('returns false when verification status is failed or skipped', () => {
+        assert.equal(isVerificationPassed({ status: 'failed', profile: 'test' }), false);
+        assert.equal(isVerificationPassed({ status: 'skipped', profile: 'test' }), false);
       });
     });
   });

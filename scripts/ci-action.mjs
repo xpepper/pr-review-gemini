@@ -17,9 +17,10 @@ import {
   formatUnauthorizedReply,
   formatHelpReply,
   formatCompletionReply,
+  isVerificationPassed,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
-import { runVerification, listVerificationProfiles, DEFAULT_VERIFICATION_PROFILES } from '../src/verify.js';
+import { runVerification, listVerificationProfiles } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -291,13 +292,17 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               'view',
               String(ciEnv.prNumber),
               '--json',
-              'isCrossRepository,headRepositoryOwner',
+              'isCrossRepository,headRepository,headRepositoryOwner',
             ],
             { cwd }
           );
           const parsedMeta = JSON.parse(prMetaStdout);
           if (typeof parsedMeta?.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
+          } else if (parsedMeta?.headRepository?.nameWithOwner && ciEnv.repo) {
+            isCrossRepo =
+              parsedMeta.headRepository.nameWithOwner.toLowerCase() !==
+              ciEnv.repo.toLowerCase();
           } else if (parsedMeta?.headRepositoryOwner?.login && ciEnv.repo) {
             const [baseOwner] = ciEnv.repo.split('/');
             isCrossRepo =
@@ -341,6 +346,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               profileName,
               repoPath: cwd,
               execGhFn,
+              config: options.config,
             });
             io.log(`Verification status: ${verificationResult.status}`);
           } catch (vErr) {
@@ -360,7 +366,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       failOn: ciEnv.failOn,
     });
 
-    const verificationPassed = !verificationResult || verificationResult.status === 'passed';
+    const verificationPassed = isVerificationPassed(verificationResult);
     const overallSuccess = qualityGate.passed && verificationPassed;
 
     // Write GitHub Action Step outputs

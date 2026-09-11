@@ -850,6 +850,16 @@ Trigger automated multi-lens AI code reviews directly from pull request comments
 }
 
 /**
+ * Determines if a verification result represents a successful pass.
+ *
+ * @param {object|null} verificationResult
+ * @returns {boolean}
+ */
+export function isVerificationPassed(verificationResult) {
+  return !verificationResult || verificationResult.status === 'passed';
+}
+
+/**
  * Formats a concise completion reply posted to the comment thread.
  *
  * @param {object} [params={}]
@@ -863,7 +873,7 @@ export function formatCompletionReply({
   ciEnv = {},
   verificationResult = null,
 } = {}) {
-  const verificationPassed = !verificationResult || verificationResult.status === 'passed';
+  const verificationPassed = isVerificationPassed(verificationResult);
   const qualityGatePassed = qualityGateResult.passed !== false;
   const passed = qualityGatePassed && verificationPassed;
   const icon = passed ? '✅' : '❌';
