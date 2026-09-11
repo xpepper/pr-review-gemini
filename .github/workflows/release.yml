@@ -28,8 +28,16 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Verify Manifest Synchronization
-        run: node scripts/bump-version.mjs --check
+      - name: Verify Manifest Synchronization & Tag Alignment
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          node scripts/bump-version.mjs --check
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_NAME" != "v$PKG_VERSION" ]; then
+            echo "::error::Release tag '$TAG_NAME' does not match manifest version 'v$PKG_VERSION'"
+            exit 1
+          fi
 
       - name: Run Test Suite
         run: npm test
