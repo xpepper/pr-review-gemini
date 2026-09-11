@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/semantic-versioning`
-* **Test Suite**: `npm test` runs and passes (402 tests across 91 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (407 tests across 91 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -31,7 +31,7 @@
 
 ## Status: INCREMENT_15_COMPLETED / PR_READY
 
-All 15 roadmap increments are fully implemented, verified test-first (402 passing tests across 91 suites), and dogfood-reviewed:
+All 15 roadmap increments are fully implemented, verified test-first (407 passing tests across 91 suites), and dogfood-reviewed:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -362,8 +362,8 @@ Possible future enhancements:
   - `skills/gem-pr-review/SKILL.md` & `README.md`:
     - Documented dynamic versioning, multi-manifest synchronization, CLI version flags, and release automation.
   - Tests:
-    - Added 31 new unit and integration tests across `tests/version.test.mjs` and `tests/skills.test.mjs`.
-    - Total **402 tests passing across 91 suites with 0 failures**.
+    - Added 36 new unit and integration tests across `tests/version.test.mjs` and `tests/skills.test.mjs`.
+    - Total **407 tests passing across 91 suites with 0 failures**.
 
 ---
 

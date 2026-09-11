@@ -426,7 +426,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 401 unit tests across 91 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, and atomic manifest synchronization.
+All 407 unit tests across 91 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, and atomic manifest synchronization.
 
 ---
 
