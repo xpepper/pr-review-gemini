@@ -124,5 +124,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Implemented zero-dependency atomic manifest bump utility (`scripts/bump-version.mjs`) synchronizing `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`.
   - Implemented conventional commit analyzer and SemVer calculation (`src/semver.js`): automatic major (breaking changes), minor (`feat:`), and patch (`fix:`, `perf:`, `chore:`) detection since latest tag with categorized Markdown changelog generation.
   - Created automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing GitHub releases.
-  - Added 36 new unit and integration tests across `tests/version.test.mjs` and `tests/skills.test.mjs` (407 total tests passing across 91 suites).
+  - Centralized CLI version banner printing (`formatVersionBanner`, `printVersionBanner`) in `src/version.js` and decoupled `runCiAction` from ambient `process.argv`.
+  - Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs` (414 total tests passing across 92 suites with 0 failures).
+  - Addressed all PR review comments and findings on PR #26 (16 total comments and threads resolved).
 

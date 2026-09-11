@@ -22,7 +22,8 @@
   - [x] Implemented conventional commit analyzer and SemVer calculation (`src/semver.js`): automatic major (breaking changes), minor (`feat:`), and patch (`fix:`, `perf:`, `chore:`) detection since latest git tag with categorized Markdown changelog generation.
   - [x] Added automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing GitHub releases.
   - [x] Added `"version:check"`, `"bump"`, and `"release"` npm scripts to `package.json`.
-  - [x] Added 36 new unit and integration tests across `tests/version.test.mjs` and `tests/skills.test.mjs` (407 total tests passing across 91 suites with 0 failures).
+  - [x] Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs` (414 total tests passing across 92 suites with 0 failures).
+  - [x] Addressed all PR review comments and findings on PR #26 across both review passes; all 16 review threads verified and resolved.
   - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 14: Pluggable Custom Review Roles & Specialist Lenses**
   - [x] Implemented layered configuration support in `src/config.js` for `custom_roles` (and alias `roles`), `replace_standard_roles`, and `enabled_roles` with prototype pollution guards and sanitizers.
