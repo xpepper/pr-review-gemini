@@ -81,6 +81,28 @@ export function resolveVerificationProfile(profileName = 'test', config = {}) {
 }
 
 /**
+ * Validates whether a verification profile command is safe for execution in CI.
+ * Rejects shell injection metacharacters, subshells, pipelines, and unapproved executables.
+ *
+ * @param {string} command
+ * @returns {{ safe: boolean, reason?: string }}
+ */
+export function validateCiVerificationCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) {
+    return { safe: false, reason: 'Command must be a non-empty string' };
+  }
+  const trimmed = command.trim();
+  if (/[;&|`$><\\]/.test(trimmed)) {
+    return { safe: false, reason: 'Command contains disallowed shell metacharacters or chaining' };
+  }
+  const SAFE_COMMAND_PATTERN = /^(npm\s+(test|run(\s+[\w:-]+)*)|npx(\s+[\w./:-]+)+|node(\s+[\w./:-]+)+)$/i;
+  if (!SAFE_COMMAND_PATTERN.test(trimmed)) {
+    return { safe: false, reason: 'Command executable must be npm, npx, or node without shell wrappers' };
+  }
+  return { safe: true };
+}
+
+/**
  * Default git runner via execFile.
  */
 async function defaultExecGit(args, options = {}) {

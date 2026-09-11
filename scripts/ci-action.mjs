@@ -20,7 +20,12 @@ import {
   isVerificationPassed,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
-import { runVerification, listVerificationProfiles } from '../src/verify.js';
+import {
+  runVerification,
+  listVerificationProfiles,
+  resolveVerificationProfile,
+  validateCiVerificationCommand,
+} from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -280,7 +285,25 @@ export async function runCiAction(options = {}, env = process.env, io = console)
           output: errorMsg,
         };
       } else {
-        // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
+        let resolvedProfile;
+        try {
+          resolvedProfile = resolveVerificationProfile(profileName, options.config);
+        } catch {
+          resolvedProfile = null;
+        }
+
+        const cmdValidation = validateCiVerificationCommand(resolvedProfile?.command || '');
+        if (!cmdValidation.safe) {
+          const errorMsg = `Security: Verification profile "${profileName}" rejected: ${cmdValidation.reason}.`;
+          io.warn(`[CI] ${errorMsg}`);
+          verificationResult = {
+            status: 'failed',
+            profile: profileName,
+            error: errorMsg,
+            output: errorMsg,
+          };
+        } else {
+          // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
         let isCrossRepo = true;
         let originCheckFailed = false;
         let originError = null;
@@ -361,6 +384,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         }
       }
     }
+  }
 
     const qualityGate = evaluateCiQualityGate(reviewResult.findings, {
       failOn: ciEnv.failOn,

