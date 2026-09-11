@@ -117,9 +117,14 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Extended MCP tools in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`) to accept `roles`, `replaceStandardRoles`, and `customRoles`.
   - Added CLI flags `--role <id>` and `--replace-standard-roles` in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`.
   - Added 27 new tests (371 total passing across 83 suites) and comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
-- [ ] **Increment 15: Automated Semantic Versioning, Release Management & Manifest Synchronization (#25)**
-  - Centralize version resolution in a runtime module (`src/version.js`) instead of hardcoding `0.1.0` in `server/index.js`.
-  - Add atomic manifest bump script (`scripts/bump-version.mjs`) synchronizing `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`.
-  - Calculate next SemVer bump automatically from conventional commits since latest tag (`feat:` -> minor, `fix:` -> patch, breaking -> major).
-  - Generate categorized release changelogs and automate GitHub releases and `vX.Y.Z` tagging (`.github/workflows/release.yml`).
-  - Add `-v` / `--version` CLI flag to runners and add automated drift-detection tests (`tests/version.test.mjs`).
+- [x] **Increment 15: Automated Semantic Versioning, Release Management & Manifest Synchronization (#25)**
+  - Centralized version resolution in canonical runtime module (`src/version.js`) dynamically resolving version from `package.json` without hardcoding.
+  - Wired canonical version into `server/index.js` MCP `serverInfo.version` and review summary headers (`src/reviewer.js`).
+  - Added `-v` and `--version` CLI flags across `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`.
+  - Implemented zero-dependency atomic manifest bump utility (`scripts/bump-version.mjs`) synchronizing `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`.
+  - Implemented conventional commit analyzer and SemVer calculation (`src/semver.js`): automatic major (breaking changes), minor (`feat:`), and patch (`fix:`, `perf:`, `chore:`) detection since latest tag with categorized Markdown changelog generation.
+  - Created automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing GitHub releases.
+  - Centralized CLI version banner printing (`formatVersionBanner`, `printVersionBanner`) in `src/version.js` and decoupled `runCiAction` from ambient `process.argv`.
+  - Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs` (414 total tests passing across 92 suites with 0 failures).
+  - Addressed all PR review comments and findings on PR #26 (16 total comments and threads resolved).
+

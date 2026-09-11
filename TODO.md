@@ -6,19 +6,25 @@
 
 ---
 
-## Active Next Task: Increment 15 — Automated Semantic Versioning, Release Management & Manifest Synchronization (Issue #25)
-- [ ] Create feature branch `feat/semantic-versioning`
-- [ ] Implement central runtime version module (`src/version.js`) and wire into `server/index.js` MCP server info and headers
-- [ ] Add `-v` / `--version` CLI flags to `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`
-- [ ] Implement atomic manifest bump utility (`scripts/bump-version.mjs`) for `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`
-- [ ] Implement conventional commit analyzer to determine next SemVer bump and generate changelogs
-- [ ] Create automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing releases
-- [ ] Add manifest drift-prevention and versioning test suite (`tests/version.test.mjs`)
-
+## Active Next Task: Backlog & Future Capabilities
+- [ ] Pre-commit hook installer (`npx gem-pr-review --install-hook`) for local self-review
+- [ ] PR comment reaction / interactive re-review commands (`/gem-review --quick`)
+- [ ] SARIF report export for GitHub Code Scanning integration
 
 ---
 
 ## Completed Increments
+- [x] **Increment 15 / Issue #25: Automated Semantic Versioning, Release Management & Manifest Synchronization**
+  - [x] Implemented canonical runtime version module (`src/version.js`) dynamically resolving version from `package.json` without hardcoding, with SemVer 2.0 validation (`isValidSemVer`, `parseSemVer`) and manifest sync inspection (`getManifestVersions`, `checkManifestSync`).
+  - [x] Wired dynamic version into `server/index.js` MCP `serverInfo.version` and PR review summary headers (`src/reviewer.js`).
+  - [x] Added `-v` and `--version` CLI flags across `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`.
+  - [x] Implemented zero-dependency atomic manifest bump utility (`scripts/bump-version.mjs`) synchronizing `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`.
+  - [x] Implemented conventional commit analyzer and SemVer calculation (`src/semver.js`): automatic major (breaking changes), minor (`feat:`), and patch (`fix:`, `perf:`, `chore:`) detection since latest git tag with categorized Markdown changelog generation.
+  - [x] Added automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing GitHub releases.
+  - [x] Added `"version:check"`, `"bump"`, and `"release"` npm scripts to `package.json`.
+  - [x] Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs` (414 total tests passing across 92 suites with 0 failures).
+  - [x] Addressed all PR review comments and findings on PR #26 across both review passes; all 16 review threads verified and resolved.
+  - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 14: Pluggable Custom Review Roles & Specialist Lenses**
   - [x] Implemented layered configuration support in `src/config.js` for `custom_roles` (and alias `roles`), `replace_standard_roles`, and `enabled_roles` with prototype pollution guards and sanitizers.
   - [x] Exported `getCustomRoles` and `formatDefaultRoleName` helpers with backward-compatible schemas.

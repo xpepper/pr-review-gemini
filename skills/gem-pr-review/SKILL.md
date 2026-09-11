@@ -527,6 +527,63 @@ jobs:
           action: publish
 ```
 
+---
+
+## Semantic Versioning, Release Management & Manifest Synchronization
+
+`gem-pr-review` adheres to the Agent Plugins 1.0 specification and enforces automated semantic versioning across all package declarations.
+
+### 1. Centralized Dynamic Version Resolution
+Canonical version information is dynamically resolved from `package.json` via `src/version.js` rather than hardcoded string literals:
+- **MCP Server**: Reports canonical version in `serverInfo.version` during JSON-RPC `initialize`.
+- **Review Summaries**: Review markdown summaries embed the runtime plugin version (e.g. `gem-pr-review v0.1.0`).
+- **CLI Runners**: Supported via `-v` and `--version` across all runners:
+  - `node scripts/dogfood-review.mjs --version`
+  - `node scripts/self-review.mjs --version`
+  - `node scripts/ci-action.mjs --version`
+  - `node scripts/bump-version.mjs --version`
+
+### 2. Multi-Manifest Atomic Synchronization
+The package manifest configuration spans 4 files required by Agent Plugins 1.0:
+1. `package.json` — Root package declaration
+2. `plugin.json` — Agent Plugins 1.0 manifest
+3. `mcp.json` — Model Context Protocol server definition
+4. `skills/gem-pr-review/SKILL.md` — Declarative skill frontmatter metadata
+
+The zero-dependency utility `scripts/bump-version.mjs` guarantees atomic synchronization across all 4 manifests:
+```bash
+# Verify all manifests are strictly synchronized
+npm run version:check
+# or: node scripts/bump-version.mjs --check
+
+# Preview version bump without modifying files
+node scripts/bump-version.mjs patch --dry-run
+node scripts/bump-version.mjs minor --dry-run
+node scripts/bump-version.mjs major --dry-run
+```
+
+### 3. Conventional Commit SemVer Calculation & Changelogs
+`scripts/bump-version.mjs` automatically inspects git commits since the previous release tag to calculate the next SemVer bump and generate categorized release notes:
+- **Breaking changes** (`feat!:`, `fix!:`, or `BREAKING CHANGE:` in body) -> **Major** bump (`1.0.0`)
+- **Features** (`feat:`) -> **Minor** bump (`0.2.0`)
+- **Fixes / Perf / Chores** (`fix:`, `perf:`, `refactor:`, `docs:`) -> **Patch** bump (`0.1.1`)
+
+```bash
+# Automatically calculate next bump from conventional commits and preview
+node scripts/bump-version.mjs auto --dry-run --changelog
+
+# Full release: bump manifests, update CHANGELOG.md, commit, and create git tag
+npm run release
+```
+
+### 4. Release Automation Workflow
+The GitHub Actions workflow at [`.github/workflows/release.yml`](.github/workflows/release.yml) triggers automatically on `v*` tag pushes:
+1. Verifies manifest synchronization (`node scripts/bump-version.mjs --check`).
+2. Runs the full test suite (`npm test`).
+3. Generates release changelog notes from conventional commits.
+4. Publishes an official GitHub Release via `gh release create`.
+
+
 
 
 

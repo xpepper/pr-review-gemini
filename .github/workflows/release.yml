@@ -1,0 +1,60 @@
+name: 'Release'
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing git tag to publish (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 'Verify & Publish GitHub Release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify Manifest Synchronization & Tag Alignment
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          node scripts/bump-version.mjs --check
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_NAME" != "v$PKG_VERSION" ]; then
+            echo "::error::Release tag '$TAG_NAME' does not match manifest version 'v$PKG_VERSION'"
+            exit 1
+          fi
+
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          node scripts/bump-version.mjs notes --notes-file RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Release $TAG_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag

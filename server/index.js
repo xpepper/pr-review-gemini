@@ -36,6 +36,7 @@ import {
   formatVerificationSummary,
 } from '../src/verify.js';
 import { runSelfReview } from '../src/self-review.js';
+import { PLUGIN_VERSION } from '../src/version.js';
 
 export const MCP_TOOLS = [
   {
@@ -459,7 +460,7 @@ export function createMcpHandler(options = {}) {
               },
               serverInfo: {
                 name: 'gem-pr-review',
-                version: '0.1.0',
+                version: PLUGIN_VERSION,
               },
             },
           };
