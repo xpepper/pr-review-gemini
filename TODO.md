@@ -6,14 +6,16 @@
 
 ---
 
-## Active Next Task: Increment 18 (Issue #31) — Interactive PR Comment Command Dispatcher (`/gem-review`)
-- [ ] Implement comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`)
-- [ ] Implement author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions
-- [ ] Implement GitHub reaction lifecycle management (`eyes` 👀 on start, `rocket` 🚀 while running, `+1` 👍 on success, `confused` 😕 on unauthorized/error)
-- [ ] Update `scripts/ci-action.mjs` to support `issue_comment` payloads, extracting PR number, head SHA, and executing target review
-- [ ] Update `.github/workflows/gem-pr-review.yml` with `issue_comment: types: [created]` trigger and head commit checkout
-- [ ] Add unit tests in `tests/ci.test.mjs` covering command extraction, authorization gates, and reactions
-- [ ] Run dogfood review on PR and merge to `main`
+## Active Mission: Increment 18 (Issue #31, PR #32) — Review Triage & Merge
+- [x] Implement comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`)
+- [x] Implement author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions
+- [x] Implement GitHub reaction lifecycle management (`eyes` 👀 on start, `rocket` 🚀 while running, `+1` 👍 on success, `confused` 😕 on unauthorized/error)
+- [x] Update `scripts/ci-action.mjs` to support `issue_comment` payloads, extracting PR number, head SHA, and executing target review
+- [x] Update `.github/workflows/gem-pr-review.yml` with `issue_comment: types: [created]` trigger, base branch checkout, and concurrency serialization
+- [x] Add unit tests in `tests/ci.test.mjs` covering command extraction, authorization gates, and reactions (603 tests passing across 117 suites)
+- [x] Open Pull Request #32 on GitHub (`feat/pr-comment-commands`) and run automated multi-lens dogfood reviews
+- [ ] Run `/pr-review-loop` triage on all open reviewer comments on PR #32 (verify against commits `73278d1`, `75f19bf`, `d9763f0`, `8d53b8c`, resolve threads)
+- [ ] Merge PR #32 into `main` and set up Increment 19
 
 ### Future Capabilities (Post-Increment 18 Roadmap)
 - [ ] Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)

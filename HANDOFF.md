@@ -3,8 +3,10 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (541 tests across 109 suites, 0 failures)
+* **Current Branch**: `feat/pr-comment-commands`
+* **Active PR**: [#32: feat(ci): interactive PR comment command dispatcher (/gem-review) (#31)](https://github.com/xpepper/pr-review-gemini/pull/32)
+* **Test Suite**: `npm test` runs and passes (603 tests across 117 suites, 0 failures)
+* **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -28,24 +30,23 @@
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
+  - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (In review, head commit `8d53b8c`)
 
 ---
 
-## Status: READY_FOR_INCREMENT_18 (Issue #31)
+## Status: INCREMENT_18_REVIEW_TRIAGE (Issue #31, PR #32)
 
-All 17 increments are fully implemented, verified test-first (541 passing tests across 109 suites, manifest version check green), dogfood-reviewed on GitHub PRs, and merged to `main`.
-Active next mission: **Increment 18 / Issue #31**: Interactive PR Comment Command Dispatcher (`/gem-review`).
-- [x] Increment 8: Large-diff file-backed transport (> 200 KB)
-- [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
-- [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
-- [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
-- [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
-- [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
-- [x] Increment 14: Pluggable custom review roles & specialist lenses
-- [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
-- [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
-- [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29, PR #30)
-- [ ] Increment 18: Interactive PR comment command dispatcher (`/gem-review`) (Issue #31)
+Increment 18 is fully implemented, verified test-first (603 passing tests across 117 suites, manifest version check green), dogfood-reviewed across multiple passes on GitHub PR #32.
+
+### Direct Action Item for the Incoming Agent:
+**Run a full `/pr-review-loop` triage on the open review comments on PR #32**:
+1. Run `gh pr status` and fetch open review threads via GraphQL.
+2. For each open inline review thread:
+   - Many of the earlier comments have already been fixed in commits `73278d1`, `75f19bf`, `d9763f0`, and `8d53b8c` (e.g., custom profile opt-in gating, eliminating duplicate metadata fetches, failing closed on missing head SHA, aligning `formatCiSummary` banner with verification results, fixing indentation).
+   - If already addressed: reply with the commit SHA and explanation, and call `resolveReviewThread`.
+   - If any finding requires code adjustment: write a test first, make the smallest passing change, verify green (`npm test`), commit with conventional message, reply, and resolve the thread.
+3. Run the full verification suite (`npm test`, `npm run version:check`).
+4. Once all review threads are resolved and clean, merge PR #32 into `main` (`gh pr merge 32 --squash --delete-branch`), pull `main`, and advance the roadmap to Increment 19.
 
 ---
 
@@ -471,34 +472,44 @@ Possible future enhancements:
 
 ---
 
-## Next Mission: Increment 18 — Interactive PR Comment Command Dispatcher (/gem-review) (Issue #31)
+## Completed Work: Increment 18 — Interactive PR Comment Command Dispatcher (/gem-review) (Issue #31)
 
 - **GitHub Issue**: [#31: feat(ci): interactive PR comment command dispatcher (/gem-review) (Increment 18)](https://github.com/xpepper/pr-review-gemini/issues/31)
-- **Branch**: `feat/pr-comment-commands` (create from clean `main`)
+- **Active PR**: [#32: feat(ci): interactive PR comment command dispatcher (/gem-review) (#31)](https://github.com/xpepper/pr-review-gemini/pull/32)
+- **Branch**: `feat/pr-comment-commands`
+- **Head Commit**: `885eef4`
 
-### Problem & Background
-Developers and reviewers collaborating on pull requests currently have to manually re-run GitHub Actions workflows or push empty commits to trigger a re-review or run a specialized lens. There is no way to request reviews or target specific roles directly within PR conversation threads.
-
-### Proposed Objectives (Increment 18)
+### Changes Delivered
 1. **Comment Parsing & Command Dispatch (`src/ci.js`)**:
-   - `parseCommentCommand(commentBody)`: Extracts command (`/gem-review` or `/gem-pr-review`) and arguments (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
-   - `isAuthorizedCommenter(payload)`: Enforces host-gated security checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions before execution to prevent untrusted CI execution or model token consumption.
-2. **Visual Lifecycle Management (GitHub Reactions & Replies)**:
-   - Immediate acknowledgment via `eyes` (👀) reaction.
-   - In-progress status via `rocket` (🚀) reaction.
-   - Success reaction (`+1` / `hooray`) and completion reply.
-   - Friendly denial notice on unauthorized comments without running subagents.
-3. **GitHub Action Workflow Update (`.github/workflows/gem-pr-review.yml`)**:
-   - Add `issue_comment: types: [created]` trigger.
-   - Extract PR metadata (PR number, head SHA) and checkout target head commit ref.
-4. **Testing & Verification**:
-   - Add unit tests in `tests/ci.test.mjs` verifying command extraction, whitespace tolerance, permission gating, and reaction handling.
-   - Run dogfood review on the resulting PR.
+   - `parseCommentCommand(commentBody)`: Robust tokenizer extracting commands (`/gem-review`, `/gem-pr-review`) and CLI flags (`--quick`, `--balanced`, `--full`, `--deep`, `--mode=<mode>`, `--incremental`, `--role=<id>`, `--replace-standard-roles`, `--verify`, `--fail-on`, `--action`, `--select`, `--help`).
+   - Ignores code fences and inline backticks; parses quoted argument values and handles arbitrary prose surrounding commands.
+2. **Host-Gated Security & Commenter Authorization (`src/ci.js`)**:
+   - `isAuthorizedCommenter` / `getCommenterAuthorization`: Strictly checks commenter `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowlists.
+   - Unauthorized commenters receive friendly denial notices and `confused` (😕) reactions without triggering subagent execution.
+3. **Visual Reaction Lifecycle & Replies (`src/ci.js`, `scripts/ci-action.mjs`)**:
+   - Manages visual reactions: `eyes` (👀) on start, `rocket` (🚀) on run, `+1` (👍) on pass, `confused` (😕) on denial/failure.
+   - Standardized formatting helpers for CI summaries, completions, and denials.
+4. **Runner Security & Worktree Execution Boundary (`scripts/ci-action.mjs`, `src/verify.js`)**:
+   - Trusted base checkout on `main`; diff inspected via GitHub API (preventing checkout pwn).
+   - Strict canonical profile gating (`test`, `build`, `lint`). Custom profiles require explicit opt-in via `enableCustomCiProfiles: true` (or `allowedCiVerificationProfiles`), plus shell metacharacter rejection.
+   - Origin check verifies PR is not a cross-repository fork and validates `headRefOid` before detached worktree execution.
+   - `formatCiSummary` banner accounts for `--verify` status, ensuring failing test runs never produce a false "Passed" banner.
+5. **Starter Workflow (`.github/workflows/gem-pr-review.yml`)**:
+   - Added `issue_comment: types: [created]` trigger with PR guard and concurrency serialization.
+6. **Tests & Verification**:
+   - Added unit tests in `tests/ci.test.mjs` verifying command extraction, authorization gates, summary formatting, and verification boundaries.
+   - Total **603 tests passing across 117 suites with 0 failures**.
+   - Synchronized all manifests at `0.1.0`.
 
-### Prompt for the Next Agent
+### Prompt for the Next Agent (PR Review Loop)
 
 ```text
-Please implement Increment 18: "Interactive PR Comment Command Dispatcher (/gem-review)" addressing Issue #31 (https://github.com/xpepper/pr-review-gemini/issues/31) following HANDOFF.md, TODO.md, and AGENTS.md.
+Please run a full /pr-review-loop triage on the open review comments on PR #32 (https://github.com/xpepper/pr-review-gemini/pull/32). Follow the /pr-review-loop skill in normal mode:
+1. Fetch and triage all open review threads and issue comments.
+2. Verify which comments have already been fixed in commits 73278d1, 75f19bf, d9763f0, and 8d53b8c, and note them.
+3. Present the triage table to the user for approval.
+4. Once approved, address remaining comments test-first, commit each fix with conventional messages, reply to threads, and resolve them.
+5. Verify green (`npm test` and `npm run version:check`), merge PR #32 into main, and set up Increment 19.
 ```
 
 ---

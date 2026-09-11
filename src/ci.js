@@ -12,6 +12,44 @@ import { resolveBlockingSeverities } from './self-review.js';
 const SEVERITY_LEVELS = ['P0', 'P1', 'P2', 'P3', 'nit'];
 
 /**
+ * Resolves PR context (isPr and prNumber) from GitHub event payload.
+ *
+ * @param {object} payload
+ * @returns {{ isPr: boolean, prNumber: number|null }}
+ */
+export function resolvePrContext(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { isPr: false, prNumber: null };
+  }
+
+  if (payload.pull_request) {
+    const prNumber =
+      typeof payload.pull_request.number === 'number'
+        ? payload.pull_request.number
+        : (typeof payload.number === 'number' ? payload.number : null);
+    return { isPr: true, prNumber };
+  }
+
+  if (payload.issue && payload.issue.pull_request) {
+    const prNumber =
+      typeof payload.issue.number === 'number'
+        ? payload.issue.number
+        : (typeof payload.number === 'number' ? payload.number : null);
+    return { isPr: true, prNumber };
+  }
+
+  if (
+    !payload.issue &&
+    typeof payload.number === 'number' &&
+    (payload.action === 'synchronize' || payload.action === 'opened' || payload.action === 'reopened')
+  ) {
+    return { isPr: true, prNumber: payload.number };
+  }
+
+  return { isPr: false, prNumber: null };
+}
+
+/**
  * Parses GitHub event payload from object, JSON string, or file path.
  *
  * @param {object|string} payloadOrPath
@@ -26,6 +64,13 @@ export function parseEventPayload(payloadOrPath) {
     headSha: null,
     baseSha: null,
     sender: null,
+    isComment: false,
+    commentId: null,
+    commentBody: null,
+    commentAuthorAssociation: null,
+    commentUser: null,
+    commandInfo: null,
+    rawPayload: null,
   };
 
   if (!payloadOrPath) {
@@ -57,17 +102,8 @@ export function parseEventPayload(payloadOrPath) {
     return emptyResult;
   }
 
-  const isPr = Boolean(
-    payload.pull_request ||
-    (payload.issue && payload.issue.pull_request) ||
-    payload.number && (payload.action === 'synchronize' || payload.action === 'opened' || payload.action === 'reopened')
-  );
-
-  const prNumber =
-    payload.pull_request?.number ||
-    payload.issue?.number ||
-    (isPr ? payload.number : null) ||
-    null;
+  const isComment = Boolean(payload.comment);
+  const { isPr, prNumber } = resolvePrContext(payload);
 
   const repo =
     payload.repository?.full_name ||
@@ -79,6 +115,15 @@ export function parseEventPayload(payloadOrPath) {
   const baseSha = payload.pull_request?.base?.sha || null;
   const sender = payload.sender?.login || null;
 
+  const commentId = payload.comment?.id || null;
+  const commentBody = payload.comment?.body || null;
+  const commentAuthorAssociation =
+    payload.comment?.author_association ||
+    payload.sender?.author_association ||
+    null;
+  const commentUser = payload.comment?.user?.login || payload.sender?.login || null;
+  const commandInfo = commentBody ? parseCommentCommand(commentBody) : null;
+
   return {
     isPullRequest: isPr,
     prNumber,
@@ -87,6 +132,13 @@ export function parseEventPayload(payloadOrPath) {
     headSha,
     baseSha,
     sender,
+    isComment,
+    commentId,
+    commentBody,
+    commentAuthorAssociation,
+    commentUser,
+    commandInfo,
+    rawPayload: payload,
   };
 }
 
@@ -107,11 +159,26 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     headSha: null,
     baseSha: null,
     sender: null,
+    isComment: false,
+    commentId: null,
+    commentBody: null,
+    commentAuthorAssociation: null,
+    commentUser: null,
+    commandInfo: null,
+    rawPayload: null,
   };
 
   if (env.GITHUB_EVENT_PATH) {
     eventInfo = parseEventPayload(env.GITHUB_EVENT_PATH);
+  } else if (options.eventPayload) {
+    eventInfo = parseEventPayload(options.eventPayload);
   }
+
+  const cmd = eventInfo.commandInfo;
+  const isCommentCommand = Boolean(eventInfo.isComment && cmd?.isCommand);
+  const isAuthorized = isCommentCommand
+    ? isAuthorizedCommenter(eventInfo)
+    : true;
 
   // 1. PR Number resolution
   let prNumber = null;
@@ -131,11 +198,11 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     env.GITHUB_REPOSITORY ||
     null;
 
-  // 3. Review Mode
-  const mode = options.mode || env.INPUT_MODE || 'balanced';
+  // 3. Review Mode (Command mode overrides action default if provided)
+  const mode = options.mode || cmd?.mode || env.INPUT_MODE || 'balanced';
 
   // 4. Quality Gate fail_on
-  let failOn = options.failOn || env.INPUT_FAIL_ON || 'none';
+  let failOn = options.failOn || cmd?.failOn || env.INPUT_FAIL_ON || 'none';
   if (typeof failOn === 'string') {
     const upper = failOn.trim().toUpperCase();
     if (upper === 'NONE' || upper === 'OFF' || upper === 'FALSE' || upper === '') {
@@ -146,9 +213,11 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
   }
 
   // 5. Incremental review resolution
-  let rawIncremental =
+  const rawIncremental =
     options.incremental !== undefined
       ? options.incremental
+      : cmd?.incremental !== null && cmd?.incremental !== undefined
+      ? cmd.incremental
       : env.INPUT_INCREMENTAL !== undefined
       ? env.INPUT_INCREMENTAL
       : 'auto';
@@ -164,12 +233,21 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
   }
 
   // 6. Review Action (publish vs dry-run)
-  const action = options.action || env.INPUT_ACTION || 'publish';
+  const action = options.action || cmd?.action || env.INPUT_ACTION || 'publish';
 
   // 7. Select filter
-  const select = options.select || env.INPUT_SELECT || null;
+  const select = options.select || cmd?.select || env.INPUT_SELECT || null;
 
-  // 8. GitHub Token
+  // 8. Specialist Roles & Composition
+  const roles = options.roles || options.enabledRoles || (cmd?.roles && cmd.roles.length > 0 ? cmd.roles : null) || null;
+  const replaceStandardRoles = Boolean(
+    options.replaceStandardRoles ?? cmd?.replaceStandardRoles ?? false
+  );
+
+  // 9. Worktree Verification
+  const verify = options.verify ?? cmd?.verify ?? null;
+
+  // 10. GitHub Token
   const githubToken =
     options.githubToken ||
     env.INPUT_GITHUB_TOKEN ||
@@ -185,7 +263,18 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     incremental,
     action,
     select,
+    roles,
+    replaceStandardRoles,
+    verify,
     githubToken,
+    isComment: eventInfo.isComment,
+    isCommentCommand,
+    isAuthorized,
+    commentId: eventInfo.commentId,
+    commentBody: eventInfo.commentBody,
+    commentAuthorAssociation: eventInfo.commentAuthorAssociation,
+    commentUser: eventInfo.commentUser,
+    commandInfo: cmd,
     eventInfo,
   };
 }
@@ -284,11 +373,22 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @param {object} params.reviewResult
  * @param {object} params.qualityGateResult
  * @param {object} params.ciEnv
+ * @param {object} [params.verificationResult]
  * @returns {string}
  */
-export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv }) {
-  const isPass = qualityGateResult.passed;
-  const banner = isPass ? '✅ AI Code Review Passed' : '❌ AI Code Review Failed Quality Gate';
+export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verificationResult = null }) {
+  const vPassed = isVerificationPassed(verificationResult);
+  const isPass = qualityGateResult.passed && vPassed;
+  let banner;
+  if (isPass) {
+    banner = '✅ AI Code Review Passed';
+  } else if (!qualityGateResult.passed && !vPassed) {
+    banner = '❌ AI Code Review and Verification Failed';
+  } else if (!vPassed) {
+    banner = '❌ Detached Worktree Verification Failed';
+  } else {
+    banner = '❌ AI Code Review Failed Quality Gate';
+  }
   const lines = [];
 
   lines.push(`## ${banner}\n`);
@@ -296,7 +396,12 @@ export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv }) {
   lines.push(`- **Mode**: \`${ciEnv.mode}\`${ciEnv.incremental ? ' *(incremental re-review)*' : ''}`);
   lines.push(`- **Findings Detected**: ${qualityGateResult.totalFindings}`);
   lines.push(`- **Blocking Defects**: ${qualityGateResult.blockingCount} *(Threshold: ${ciEnv.failOn})*`);
-  lines.push(`- **Action**: \`${ciEnv.action}\`\n`);
+  lines.push(`- **Action**: \`${ciEnv.action}\``);
+  if (verificationResult) {
+    const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
+    lines.push(`- **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`);
+  }
+  lines.push('');
 
   if (!isPass && qualityGateResult.blockingFindings.length > 0) {
     lines.push('### 🚫 Blocking Issues\n');
@@ -316,3 +421,529 @@ export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv }) {
 
   return lines.join('\n');
 }
+
+/**
+ * Parses a PR comment body to detect review commands (/gem-review or /gem-pr-review)
+ * and extracts command options and flags.
+ *
+ * @param {string} commentBody
+ * @returns {object}
+ */
+export function parseCommentCommand(commentBody) {
+  const emptyResult = {
+    isCommand: false,
+    command: null,
+    mode: null,
+    incremental: null,
+    roles: [],
+    replaceStandardRoles: false,
+    verify: null,
+    failOn: null,
+    action: null,
+    select: null,
+    help: false,
+    rawArgs: [],
+    unrecognizedArgs: [],
+  };
+
+  if (!commentBody || typeof commentBody !== 'string') {
+    return emptyResult;
+  }
+
+  // Strip code blocks to prevent triggering on examples or quoted instructions
+  const stripped = commentBody.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
+
+  const lines = stripped.split('\n');
+  let commandLine = null;
+  let commandName = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(\/(?:gem-review|gem-pr-review))\b(.*)$/i);
+    if (match) {
+      commandName = match[1].toLowerCase();
+      commandLine = match[2];
+      break;
+    }
+  }
+
+  if (!commandName) {
+    return emptyResult;
+  }
+
+  // Tokenize arguments with support for single and double quotes
+  const tokens = [];
+  const tokenRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+  let m;
+  while ((m = tokenRegex.exec(commandLine)) !== null) {
+    if (m[1] !== undefined) {
+      tokens.push(m[1]);
+    } else if (m[2] !== undefined) {
+      tokens.push(m[2]);
+    } else {
+      tokens.push(m[0]);
+    }
+  }
+
+  let mode = null;
+  let incremental = null;
+  const roles = [];
+  let replaceStandardRoles = false;
+  let verify = null;
+  let failOn = null;
+  let action = null;
+  let select = null;
+  let help = false;
+  const unrecognizedArgs = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+
+    if (token === '--help' || token === '-h' || token.toLowerCase() === 'help') {
+      help = true;
+    } else if (token === '--quick' || token === '--balanced' || token === '--full' || token === '--deep') {
+      mode = token.slice(2);
+    } else if (token.startsWith('--mode=')) {
+      mode = token.slice('--mode='.length);
+    } else if (token === '--mode' && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+      mode = tokens[++i];
+    } else if (token === '--incremental') {
+      if (i + 1 < tokens.length && (tokens[i + 1] === 'auto' || tokens[i + 1] === 'true' || tokens[i + 1] === 'false')) {
+        const nextVal = tokens[++i];
+        incremental = nextVal === 'auto' ? 'auto' : nextVal === 'true';
+      } else {
+        incremental = true;
+      }
+    } else if (token === '--no-incremental') {
+      incremental = false;
+    } else if (token.startsWith('--incremental=')) {
+      const val = token.slice('--incremental='.length).toLowerCase();
+      if (val === 'true' || val === '1') incremental = true;
+      else if (val === 'false' || val === '0') incremental = false;
+      else if (val === 'auto') incremental = 'auto';
+    } else if (token.startsWith('--role=')) {
+      const val = token.slice('--role='.length);
+      const splitRoles = val.split(',').map((r) => r.trim()).filter(Boolean);
+      roles.push(...splitRoles);
+    } else if (token === '--role' && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+      const val = tokens[++i];
+      const splitRoles = val.split(',').map((r) => r.trim()).filter(Boolean);
+      roles.push(...splitRoles);
+    } else if (token === '--replace-standard-roles') {
+      replaceStandardRoles = true;
+    } else if (token === '--verify') {
+      if (i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+        verify = tokens[++i];
+      } else {
+        verify = true;
+      }
+    } else if (token === '--no-verify') {
+      verify = false;
+    } else if (token.startsWith('--verify=')) {
+      verify = token.slice('--verify='.length);
+    } else if (token.startsWith('--fail-on=') || token.startsWith('--failOn=')) {
+      failOn = token.split('=')[1];
+    } else if ((token === '--fail-on' || token === '--failOn') && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+      failOn = tokens[++i];
+    } else if (token === '--dry-run') {
+      action = 'dry-run';
+    } else if (token === '--publish') {
+      action = 'publish';
+    } else if (token.startsWith('--action=')) {
+      action = token.slice('--action='.length);
+    } else if (token === '--action' && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+      action = tokens[++i];
+    } else if (token.startsWith('--select=')) {
+      select = token.slice('--select='.length);
+    } else if (token === '--select' && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
+      select = tokens[++i];
+    } else {
+      unrecognizedArgs.push(token);
+    }
+  }
+
+  return {
+    isCommand: true,
+    command: commandName,
+    mode,
+    incremental,
+    roles,
+    replaceStandardRoles,
+    verify,
+    failOn,
+    action,
+    select,
+    help,
+    rawArgs: tokens,
+    unrecognizedArgs,
+  };
+}
+
+const DEFAULT_ALLOWED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+
+/**
+ * Normalizes commenter identity and association from parsed eventInfo or raw GitHub webhook payload.
+ *
+ * @param {object} input - Parsed eventInfo object or raw GitHub webhook payload
+ * @returns {{ username: string, association: string | null }}
+ */
+export function extractCommenterIdentity(input) {
+  if (!input || typeof input !== 'object') {
+    return { username: 'unknown', association: null };
+  }
+
+  const normalizeUsername = (raw) => {
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : 'unknown';
+    }
+    if (raw && typeof raw === 'object' && typeof raw.login === 'string') {
+      const trimmed = raw.login.trim();
+      return trimmed.length > 0 ? trimmed : 'unknown';
+    }
+    if (raw != null) {
+      const str = String(raw).trim();
+      return str.length > 0 ? str : 'unknown';
+    }
+    return 'unknown';
+  };
+
+  // 1. Parsed eventInfo shape (preferred)
+  if (typeof input.commentUser === 'string' || input.commentAuthorAssociation !== undefined) {
+    const rawAssoc = input.commentAuthorAssociation || null;
+    return {
+      username: normalizeUsername(input.commentUser),
+      association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
+    };
+  }
+
+  // 2. Raw GitHub webhook payload shape
+  const rawUser =
+    input.comment?.user?.login ||
+    input.sender?.login ||
+    input.user ||
+    input.username ||
+    'unknown';
+
+  const rawAssoc =
+    input.comment?.author_association ||
+    input.sender?.author_association ||
+    input.author_association ||
+    input.authorAssociation ||
+    null;
+
+  return {
+    username: normalizeUsername(rawUser),
+    association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
+  };
+}
+
+/**
+ * Checks commenter authorization against GitHub author_association and optional allowed user lists.
+ * Accepts either a parsed eventInfo object or a raw GitHub webhook payload.
+ *
+ * @param {object} input - Parsed eventInfo or raw GitHub webhook payload
+ * @param {object} [options={}]
+ * @param {string[]} [options.allowedAssociations=['OWNER', 'MEMBER', 'COLLABORATOR']]
+ * @param {string[]} [options.allowedUsers=[]]
+ * @returns {{ authorized: boolean, association: string|null, username: string, reason: string }}
+ */
+export function getCommenterAuthorization(input, options = {}) {
+  const allowedAssociations = (options.allowedAssociations || DEFAULT_ALLOWED_ASSOCIATIONS).map((a) =>
+    String(a).toUpperCase()
+  );
+  const allowedUsers = (options.allowedUsers || []).map((u) => String(u).toLowerCase());
+
+  if (!input || typeof input !== 'object') {
+    return {
+      authorized: false,
+      association: null,
+      username: 'unknown',
+      reason: 'Empty or invalid event payload.',
+    };
+  }
+
+  const { username, association } = extractCommenterIdentity(input);
+
+  // 1. Explicit allowed users check
+  if (allowedUsers.includes(username.toLowerCase())) {
+    return {
+      authorized: true,
+      association,
+      username,
+      reason: `Commenter '${username}' is in explicitly allowed users list.`,
+    };
+  }
+
+  // 2. Author association check (GitHub sets OWNER, MEMBER, or COLLABORATOR for users with write/admin rights)
+  if (association && allowedAssociations.includes(association)) {
+    return {
+      authorized: true,
+      association,
+      username,
+      reason: `Author association '${association}' is authorized to trigger review commands.`,
+    };
+  }
+
+  return {
+    authorized: false,
+    association,
+    username,
+    reason: `Author association '${association || 'NONE'}' is not authorized to trigger review commands.`,
+  };
+}
+
+/**
+ * Returns boolean indicating whether commenter is authorized to trigger review commands.
+ *
+ * @param {object} payload
+ * @param {object} [options={}]
+ * @returns {boolean}
+ */
+export function isAuthorizedCommenter(payload, options = {}) {
+  return getCommenterAuthorization(payload, options).authorized;
+}
+
+const REACTION_MAP = {
+  '+1': '+1',
+  'thumbs_up': '+1',
+  '👍': '+1',
+  '-1': '-1',
+  'thumbs_down': '-1',
+  '👎': '-1',
+  'laugh': 'laugh',
+  'confused': 'confused',
+  '😕': 'confused',
+  'heart': 'heart',
+  '❤️': 'heart',
+  'hooray': 'hooray',
+  '🎉': 'hooray',
+  'rocket': 'rocket',
+  '🚀': 'rocket',
+  'eyes': 'eyes',
+  '👀': 'eyes',
+};
+
+/**
+ * Adds a reaction to a GitHub issue comment via GitHub API.
+ *
+ * @param {object} params
+ * @param {string} params.repo
+ * @param {number|string} params.commentId
+ * @param {string} params.reaction - '+1', 'eyes', 'rocket', 'confused', or emoji
+ * @param {Function} params.execGhFn
+ * @returns {Promise<{ success: boolean, reaction?: string, id?: number, error?: string }>}
+ */
+export async function addCommentReaction({
+  repo,
+  commentId,
+  reaction,
+  execGhFn,
+}) {
+  if (!commentId || !repo || !reaction) {
+    return { success: false, error: 'Missing repo, commentId, or reaction' };
+  }
+
+  if (!execGhFn) {
+    return { success: false, error: 'execGhFn is required' };
+  }
+
+  const normalized = REACTION_MAP[reaction] || reaction;
+
+  const args = [
+    'api',
+    '--method',
+    'POST',
+    `repos/${repo}/issues/comments/${commentId}/reactions`,
+    '-f',
+    `content=${normalized}`,
+  ];
+
+  try {
+    const stdout = await execGhFn(args);
+    let parsed = {};
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      // Non-JSON response
+    }
+    return { success: true, reaction: normalized, id: parsed.id };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Posts a comment to a GitHub PR or issue thread via GitHub API.
+ *
+ * @param {object} params
+ * @param {string} params.repo
+ * @param {number|string} [params.prNumber]
+ * @param {number|string} [params.issueNumber]
+ * @param {string} params.body
+ * @param {Function} params.execGhFn
+ * @returns {Promise<{ success: boolean, id?: number, error?: string }>}
+ */
+export async function postIssueComment({
+  repo,
+  prNumber,
+  issueNumber,
+  body,
+  execGhFn,
+}) {
+  const number = prNumber || issueNumber;
+  if (!number || !repo || !body) {
+    return { success: false, error: 'Missing repo, prNumber, or body' };
+  }
+
+  if (!execGhFn) {
+    return { success: false, error: 'execGhFn is required' };
+  }
+
+  const args = [
+    'api',
+    '--method',
+    'POST',
+    `repos/${repo}/issues/${number}/comments`,
+    '-f',
+    `body=${body}`,
+  ];
+
+  try {
+    const stdout = await execGhFn(args);
+    let parsed = {};
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      // Non-JSON response
+    }
+    return { success: true, id: parsed.id };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Formats a friendly denial reply when an unauthorized commenter attempts to run /gem-review.
+ *
+ * @param {object} [params={}]
+ * @param {string} [params.username='user']
+ * @param {string} [params.association='NONE']
+ * @param {string} [params.command='/gem-review']
+ * @returns {string}
+ */
+export function formatUnauthorizedReply({
+  username = 'user',
+  association = 'NONE',
+  command = '/gem-review',
+} = {}) {
+  const cleanAssoc = association || 'NONE';
+  return `> [!WARNING]
+> **Gem PR Review Command Not Authorized**
+>
+> @${username}, your author association is \`${cleanAssoc}\`.
+>
+> To protect CI runner capacity and model quota, \`${command}\` commands can only be triggered by repository collaborators, members, or owners.
+>
+> If you are a contributor, please ask a repository maintainer to run the review command for you.`;
+}
+
+/**
+ * Formats a comprehensive Markdown usage guide for PR comment review commands.
+ *
+ * @returns {string}
+ */
+export function formatHelpReply() {
+  return `### 💎 Gem PR Review — Comment Commands Guide
+
+Trigger automated multi-lens AI code reviews directly from pull request comments using \`/gem-review\` or \`/gem-pr-review\`.
+
+#### Usage
+\`\`\`
+/gem-review [options]
+/gem-pr-review [options]
+\`\`\`
+
+#### Review Modes
+- \`--quick\`: Fast 3-lens review (correctness, contracts, conventions)
+- \`--balanced\`: Standard 5-lens review (default)
+- \`--full\`: Comprehensive 6-lens review (includes security, performance, tests)
+- \`--deep\`: Focused deep-dive single lens review
+
+#### Options & Flags
+- \`--incremental\`: Only review changes introduced since the last review
+- \`--role=<role-id>\`: Run specific specialist review roles (e.g. \`--role=a11y\`, \`--role=perf\`)
+- \`--replace-standard-roles\`: Run only specified custom roles, skipping standard lenses
+- \`--verify\`: Run detached worktree test verification against PR head commit
+- \`--fail-on=<P0|P1|P2|P3|none>\`: Set CI quality gate failure threshold
+- \`--select=<filter>\`: Filter findings to publish (e.g. \`--select=p0,p1\`, \`--select="min:p2"\`)
+- \`--dry-run\`: Generate review summary without posting comments to the PR
+- \`--help\`, \`-h\`: Display this command usage guide
+
+#### Examples
+- \`/gem-review --quick\`
+- \`/gem-review --incremental\`
+- \`/gem-review --role=a11y --role=perf\`
+- \`/gem-review --full --fail-on=P1\``;
+}
+
+/**
+ * Determines if a verification result represents a successful pass.
+ *
+ * @param {object|null} verificationResult
+ * @returns {boolean}
+ */
+export function isVerificationPassed(verificationResult) {
+  return !verificationResult || verificationResult.status === 'passed';
+}
+
+/**
+ * Formats a concise completion reply posted to the comment thread.
+ *
+ * @param {object} [params={}]
+ * @param {object} [params.qualityGateResult={}]
+ * @param {object} [params.ciEnv={}]
+ * @param {object} [params.verificationResult]
+ * @returns {string}
+ */
+export function formatCompletionReply({
+  qualityGateResult = {},
+  ciEnv = {},
+  verificationResult = null,
+} = {}) {
+  const verificationPassed = isVerificationPassed(verificationResult);
+  const qualityGatePassed = qualityGateResult.passed !== false;
+  const passed = qualityGatePassed && verificationPassed;
+  const icon = passed ? '✅' : '❌';
+  const verdict = passed ? (qualityGateResult.verdict || 'PASS') : 'FAIL';
+  const findings = qualityGateResult.totalFindings ?? 0;
+  const blocking = qualityGateResult.blockingCount ?? 0;
+  const mode = ciEnv.mode || 'balanced';
+  const incremental = ciEnv.incremental ? ' *(incremental)*' : '';
+  const failOn = ciEnv.failOn || 'none';
+
+  let verifyLine = '';
+  if (verificationResult) {
+    const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
+    verifyLine = `\n> - **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`;
+    if (verificationResult.error) {
+      verifyLine += ` — ${verificationResult.error}`;
+    } else if (verificationResult.summary && verificationResult.status !== 'passed') {
+      verifyLine += ` — ${verificationResult.summary}`;
+    }
+  }
+
+  const reason = passed
+    ? 'Passed'
+    : !qualityGatePassed
+    ? 'Failed quality gate'
+    : 'Failed verification';
+
+  return `> ${icon} **Gem PR Review Complete**
+>
+> - **Verdict**: \`${verdict}\` (${reason})
+> - **Mode**: \`${mode}\`${incremental}
+> - **Findings**: ${findings} detected (${blocking} blocking)
+> - **Quality Gate (fail_on)**: \`${failOn}\`${verifyLine}`;
+}
+
