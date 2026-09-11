@@ -137,6 +137,54 @@ describe('Reviewer Sensitivity & Quality Calibration Benchmark (Increment 16)', 
       assert.equal(result.matched, false);
       assert.equal(result.reason, 'no_keyword_match');
     });
+
+    it('rejects finding if specialist lens does not match benchmark lens', () => {
+      const finding = {
+        file: 'scripts/ci-action.mjs',
+        line: 42,
+        lens: 'security', // Expected 'contracts'
+        severity: 'P1',
+        title: 'Coupling to ambient process state',
+        body: 'Function reads process.argv directly instead of taking explicit options parameter.',
+      };
+
+      const result = evaluateCalibrationFinding(finding, ambientBenchmark);
+      assert.equal(result.matched, false);
+      assert.equal(result.reason, 'lens_mismatch');
+    });
+
+    it('rejects finding if severity diverges significantly from expected severity', () => {
+      const finding = {
+        file: 'scripts/ci-action.mjs',
+        line: 42,
+        lens: 'contracts',
+        severity: 'nit', // Expected 'P1' (delta > 1)
+        title: 'Coupling to ambient process state',
+        body: 'Function reads process.argv directly instead of taking explicit options parameter.',
+      };
+
+      const result = evaluateCalibrationFinding(finding, ambientBenchmark);
+      assert.equal(result.matched, false);
+      assert.equal(result.reason, 'severity_mismatch');
+    });
+
+    it('supports exact severity matching when matchSeverity is exact', () => {
+      const finding = {
+        file: 'scripts/ci-action.mjs',
+        line: 42,
+        lens: 'contracts',
+        severity: 'P2', // Expected 'P1'
+        title: 'Coupling to ambient process state',
+        body: 'Function reads process.argv directly instead of taking explicit options parameter.',
+      };
+
+      const resultExact = evaluateCalibrationFinding(finding, ambientBenchmark, { matchSeverity: 'exact' });
+      assert.equal(resultExact.matched, false);
+      assert.equal(resultExact.reason, 'severity_mismatch');
+
+      const resultTolerant = evaluateCalibrationFinding(finding, ambientBenchmark, { matchSeverity: true, maxSeverityDelta: 1 });
+      assert.equal(resultTolerant.matched, true);
+    });
   });
 
   describe('evaluateCalibrationSuite', () => {
@@ -182,6 +230,64 @@ describe('Reviewer Sensitivity & Quality Calibration Benchmark (Increment 16)', 
         report.missed.map((m) => m.id),
         ['landing-surface-precondition', 'sibling-cli-duplication']
       );
+    });
+
+    it('calculates precision from distinct matched findings without double-counting across benchmarks', () => {
+      // Create a single broad finding that could match two benchmarks sharing a file
+      const customBenchmarks = [
+        {
+          id: 'b1',
+          dimension: 'dim1',
+          lens: 'contracts',
+          expectedSeverity: 'P1',
+          file: 'src/file.js',
+          line: 10,
+          keywords: ['shared'],
+        },
+        {
+          id: 'b2',
+          dimension: 'dim2',
+          lens: 'contracts',
+          expectedSeverity: 'P1',
+          file: 'src/file.js',
+          line: 12,
+          keywords: ['shared'],
+        },
+      ];
+
+      // Only 1 finding reported, which matches both b1 and b2
+      const findings = [
+        {
+          file: 'src/file.js',
+          line: 11,
+          lens: 'contracts',
+          severity: 'P1',
+          title: 'Shared defect finding',
+          body: 'Shared keywords for both benchmarks.',
+        },
+      ];
+
+      const report = evaluateCalibrationSuite(findings, customBenchmarks);
+      assert.equal(report.totalBenchmarks, 2);
+      assert.equal(report.matched.length, 2);
+      // Precision should be 1 distinct matched finding / 1 total finding = 1.0, not 2.0 clamped
+      assert.equal(report.precision, 1.0);
+
+      // Now add 1 completely unrelated finding: 1 distinct match / 2 total findings = 0.5
+      const findingsWithExtra = [
+        findings[0],
+        {
+          file: 'src/unrelated.js',
+          line: 100,
+          lens: 'security',
+          severity: 'P0',
+          title: 'Unrelated issue',
+          body: 'No keywords match.',
+        },
+      ];
+
+      const reportWithExtra = evaluateCalibrationSuite(findingsWithExtra, customBenchmarks);
+      assert.equal(reportWithExtra.precision, 0.5);
     });
   });
 });

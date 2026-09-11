@@ -776,7 +776,7 @@ Issue identified by ${lens.id} using ${model}.
       assert.equal(output.results[0].fallbackUsed, false);
     });
 
-    it('returns final error when all fallback models in chain fail with quota errors', async () => {
+    it('returns final error when all fallback models and auto fallback fail with quota errors', async () => {
       const plan = [
         {
           lensId: 'correctness',
@@ -784,6 +784,38 @@ Issue identified by ${lens.id} using ${model}.
           tier: 'heavy',
           model: 'primary-model',
           fallbacks: ['fallback-1', 'fallback-2'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        throw new Error(`Rate limit exceeded for ${model}`);
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['primary-model', 'fallback-1', 'fallback-2', 'auto']);
+      assert.equal(output.errors.length, 1);
+      assert.equal(output.errors[0].lensId, 'correctness');
+      assert.match(output.errors[0].error.message, /Rate limit exceeded for auto/);
+      assert.equal(output.results[0].attemptsCount, 4);
+      assert.equal(output.findings.length, 0);
+    });
+
+    it('stops at configured fallbacks when fallbackToAuto is explicitly disabled', async () => {
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'primary-model',
+          fallbacks: ['fallback-1', 'fallback-2'],
+          fallbackToAuto: false,
         },
       ];
 

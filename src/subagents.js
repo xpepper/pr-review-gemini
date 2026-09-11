@@ -617,7 +617,7 @@ export async function dispatchSubagentsParallel({
             continue;
           }
 
-          // Automatic fallback to 'auto' when configured models encounter errors
+          // Automatic fallback to 'auto' when configured models encounter retriable errors
           const fallbackToAuto =
             item.fallbackToAuto !== false &&
             item.fallback_to_auto !== false &&
@@ -631,8 +631,7 @@ export async function dispatchSubagentsParallel({
             !hasMoreFallbacks &&
             fallbackToAuto &&
             candidateModel !== 'auto' &&
-            !modelCandidates.includes('auto') &&
-            (isModelUnavailable || config?.fallback_to_auto === true || config?.fallbackToAuto === true)
+            !modelCandidates.includes('auto')
           ) {
             modelCandidates.push('auto');
             continue;

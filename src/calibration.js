@@ -121,13 +121,16 @@ function isMatchingFile(findingFile, benchmarkFile) {
  * @param {Object} benchmark - Benchmark defect definition
  * @param {Object} [options]
  * @param {number} [options.maxLineDistance=15] - Maximum acceptable line distance
+ * @param {boolean} [options.matchLens=true] - Whether to validate lens compatibility when finding.lens is present
+ * @param {boolean|string} [options.matchSeverity=true] - Whether to validate severity compatibility ('exact' or delta <= maxSeverityDelta)
+ * @param {number} [options.maxSeverityDelta=1] - Maximum acceptable severity difference (e.g. P1 vs P2)
  * @returns {{ matched: boolean, benchmarkId: string, reason?: string }}
  */
 export function evaluateCalibrationFinding(finding, benchmark, options = {}) {
   const maxLineDist = options.maxLineDistance ?? 15;
 
   if (!finding || typeof finding !== 'object') {
-    return { matched: false, benchmarkId: benchmark.id, reason: 'invalid_finding' };
+    return { matched: false, benchmarkId: benchmark?.id, reason: 'invalid_finding' };
   }
 
   const findingFile = finding.file || finding.filePath || '';
@@ -138,6 +141,38 @@ export function evaluateCalibrationFinding(finding, benchmark, options = {}) {
   const findingLine = Number(finding.line) || 0;
   if (Math.abs(findingLine - benchmark.line) > maxLineDist) {
     return { matched: false, benchmarkId: benchmark.id, reason: 'line_out_of_range' };
+  }
+
+  // Validate specialist lens compatibility if present
+  if (options.matchLens !== false && finding.lens && benchmark.lens) {
+    const findingLens = String(finding.lens).trim().toLowerCase();
+    const benchmarkLens = String(benchmark.lens).trim().toLowerCase();
+    if (findingLens !== benchmarkLens) {
+      return { matched: false, benchmarkId: benchmark.id, reason: 'lens_mismatch' };
+    }
+  }
+
+  // Validate severity compatibility if present
+  if (options.matchSeverity !== false && finding.severity && benchmark.expectedSeverity) {
+    const severityRanks = { p0: 0, p1: 1, p2: 2, p3: 3, nit: 4 };
+    const findingSev = String(finding.severity).trim().toLowerCase();
+    const benchmarkSev = String(benchmark.expectedSeverity).trim().toLowerCase();
+
+    if (options.matchSeverity === 'exact') {
+      if (findingSev !== benchmarkSev) {
+        return { matched: false, benchmarkId: benchmark.id, reason: 'severity_mismatch' };
+      }
+    } else {
+      const findingRank = severityRanks[findingSev];
+      const benchmarkRank = severityRanks[benchmarkSev];
+      const maxSeverityDelta = options.maxSeverityDelta ?? 1;
+
+      if (findingRank !== undefined && benchmarkRank !== undefined) {
+        if (Math.abs(findingRank - benchmarkRank) > maxSeverityDelta) {
+          return { matched: false, benchmarkId: benchmark.id, reason: 'severity_mismatch' };
+        }
+      }
+    }
   }
 
   // Check text keyword matches
@@ -172,20 +207,31 @@ export function evaluateCalibrationFinding(finding, benchmark, options = {}) {
  *
  * @param {Array<Object>} findings - Set of findings produced by reviewer
  * @param {Array<Object>} [benchmarks=CALIBRATION_BENCHMARKS] - Benchmark cases
+ * @param {Object} [options={}] - Options passed to evaluateCalibrationFinding
  * @returns {Object} Evaluation report including recall, precision, and match details
  */
-export function evaluateCalibrationSuite(findings = [], benchmarks = CALIBRATION_BENCHMARKS) {
+export function evaluateCalibrationSuite(findings = [], benchmarks = CALIBRATION_BENCHMARKS, options = {}) {
   const safeFindings = Array.isArray(findings) ? findings : [];
   const matched = [];
   const missed = [];
+  const matchedFindingIndices = new Set();
 
   for (const benchmark of benchmarks) {
-    const match = safeFindings.find((f) => evaluateCalibrationFinding(f, benchmark).matched);
-    if (match) {
+    let matchedIndex = -1;
+    for (let i = 0; i < safeFindings.length; i++) {
+      const evaluation = evaluateCalibrationFinding(safeFindings[i], benchmark, options);
+      if (evaluation.matched) {
+        matchedIndex = i;
+        break;
+      }
+    }
+
+    if (matchedIndex !== -1) {
       matched.push({
         benchmark,
-        finding: match,
+        finding: safeFindings[matchedIndex],
       });
+      matchedFindingIndices.add(matchedIndex);
     } else {
       missed.push(benchmark);
     }
@@ -193,7 +239,8 @@ export function evaluateCalibrationSuite(findings = [], benchmarks = CALIBRATION
 
   const totalBenchmarks = benchmarks.length;
   const recall = totalBenchmarks > 0 ? matched.length / totalBenchmarks : 1.0;
-  const precision = safeFindings.length > 0 ? Math.min(1.0, matched.length / safeFindings.length) : 0.0;
+  const precision =
+    safeFindings.length > 0 ? Math.min(1.0, matchedFindingIndices.size / safeFindings.length) : 0.0;
   const passed = recall >= 0.8;
 
   return {
