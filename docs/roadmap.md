@@ -145,5 +145,18 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Refactored sibling CLI entrypoints in `scripts/` (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`) to consume `src/cli.js`.
   - Added 79 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (541 total passing across 109 suites with 0 failures).
   - Executed dogfood review loop against PR #30, verified 0 blocking defects, and merged into `main` (commit `d92295c`).
+- [ ] **Increment 18: Interactive PR Comment Command Dispatcher (/gem-review) (#31)**
+  - Implement authorized PR comment command dispatching for `/gem-review` and `/gem-pr-review`.
+  - Support arguments (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
+  - Host-gated author authorization check (`author_association` / repo write permissions).
+  - Visual GitHub reaction lifecycles (👀 acknowledged, 🚀 in-progress, 👍 success, 😕 unauthorized/error).
+  - GitHub Actions `issue_comment` trigger and PR head ref checkout.
+- [ ] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
+  - Project-specific review checklists, architecture invariants, and conventions dynamically ingested by subagents.
+- [ ] **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution**
+  - Conversational multi-turn verification when authors reply to inline findings; automatic GitHub review thread resolution upon fix verification.
+- [ ] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
+  - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
+- [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 

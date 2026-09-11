@@ -31,9 +31,10 @@
 
 ---
 
-## Status: INCREMENT_17_COMPLETED (PR #30 Merged)
+## Status: READY_FOR_INCREMENT_18 (Issue #31)
 
-All 17 increments are fully implemented, verified test-first (541 passing tests across 109 suites, manifest version check green):
+All 17 increments are fully implemented, verified test-first (541 passing tests across 109 suites, manifest version check green), dogfood-reviewed on GitHub PRs, and merged to `main`.
+Active next mission: **Increment 18 / Issue #31**: Interactive PR Comment Command Dispatcher (`/gem-review`).
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -44,6 +45,7 @@ All 17 increments are fully implemented, verified test-first (541 passing tests 
 - [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
 - [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
 - [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29, PR #30)
+- [ ] Increment 18: Interactive PR comment command dispatcher (`/gem-review`) (Issue #31)
 
 ---
 
@@ -469,9 +471,49 @@ Possible future enhancements:
 
 ---
 
-## Future Opportunities / Phase 8 Ideas
+## Next Mission: Increment 18 — Interactive PR Comment Command Dispatcher (/gem-review) (Issue #31)
 
-1. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
-2. **SARIF Report Export**: Export structured findings to standard SARIF format for GitHub Code Scanning integration.
+- **GitHub Issue**: [#31: feat(ci): interactive PR comment command dispatcher (/gem-review) (Increment 18)](https://github.com/xpepper/pr-review-gemini/issues/31)
+- **Branch**: `feat/pr-comment-commands` (create from clean `main`)
+
+### Problem & Background
+Developers and reviewers collaborating on pull requests currently have to manually re-run GitHub Actions workflows or push empty commits to trigger a re-review or run a specialized lens. There is no way to request reviews or target specific roles directly within PR conversation threads.
+
+### Proposed Objectives (Increment 18)
+1. **Comment Parsing & Command Dispatch (`src/ci.js`)**:
+   - `parseCommentCommand(commentBody)`: Extracts command (`/gem-review` or `/gem-pr-review`) and arguments (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
+   - `isAuthorizedCommenter(payload)`: Enforces host-gated security checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions before execution to prevent untrusted CI execution or model token consumption.
+2. **Visual Lifecycle Management (GitHub Reactions & Replies)**:
+   - Immediate acknowledgment via `eyes` (👀) reaction.
+   - In-progress status via `rocket` (🚀) reaction.
+   - Success reaction (`+1` / `hooray`) and completion reply.
+   - Friendly denial notice on unauthorized comments without running subagents.
+3. **GitHub Action Workflow Update (`.github/workflows/gem-pr-review.yml`)**:
+   - Add `issue_comment: types: [created]` trigger.
+   - Extract PR metadata (PR number, head SHA) and checkout target head commit ref.
+4. **Testing & Verification**:
+   - Add unit tests in `tests/ci.test.mjs` verifying command extraction, whitespace tolerance, permission gating, and reaction handling.
+   - Run dogfood review on the resulting PR.
+
+### Prompt for the Next Agent
+
+```text
+Please implement Increment 18: "Interactive PR Comment Command Dispatcher (/gem-review)" addressing Issue #31 (https://github.com/xpepper/pr-review-gemini/issues/31) following HANDOFF.md, TODO.md, and AGENTS.md.
+```
+
+---
+
+## Future Strategic Roadmap (Post-Increment 18)
+
+Based on competitive landscape research and gap analysis across major AI code review systems (Copilot PR Reviewer, Claude Code / `pr-review-loop`, Pi, Antigravity, CodeRabbit, Qodo Merge):
+
+1. **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**:
+   - Project-specific review checklists, architecture invariants, and conventions dynamically ingested by subagents.
+2. **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution**:
+   - Conversational multi-turn verification when authors reply to inline findings; automatic GitHub review thread resolution upon fix verification.
+3. **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**:
+   - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
+4. **Backlog (De-prioritized)**:
+   - SARIF 2.1.0 report export for GitHub Code Scanning integration.
 
 

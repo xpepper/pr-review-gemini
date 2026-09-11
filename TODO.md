@@ -6,10 +6,20 @@
 
 ---
 
-## Active Next Task: Backlog & Future Capabilities
-- [x] Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication (PR #30 merged)
-- [ ] PR comment reaction / interactive re-review commands (`/gem-review --quick`)
-- [ ] SARIF report export for GitHub Code Scanning integration
+## Active Next Task: Increment 18 (Issue #31) — Interactive PR Comment Command Dispatcher (`/gem-review`)
+- [ ] Implement comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`)
+- [ ] Implement author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions
+- [ ] Implement GitHub reaction lifecycle management (`eyes` 👀 on start, `rocket` 🚀 while running, `+1` 👍 on success, `confused` 😕 on unauthorized/error)
+- [ ] Update `scripts/ci-action.mjs` to support `issue_comment` payloads, extracting PR number, head SHA, and executing target review
+- [ ] Update `.github/workflows/gem-pr-review.yml` with `issue_comment: types: [created]` trigger and head commit checkout
+- [ ] Add unit tests in `tests/ci.test.mjs` covering command extraction, authorization gates, and reactions
+- [ ] Run dogfood review on PR and merge to `main`
+
+### Future Capabilities (Post-Increment 18 Roadmap)
+- [ ] Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)
+- [ ] Increment 20: PR Review Thread Conversation Replies & Automated Resolution
+- [ ] Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
+- [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
 
