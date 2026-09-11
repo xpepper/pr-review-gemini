@@ -27,6 +27,7 @@ import {
   withHookLock,
   atomicWriteFile,
   hasActiveFailClosedHookCommandInLines,
+  readOptionValue,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
@@ -1368,11 +1369,63 @@ echo "prior test"
       assert.ok(!fs.existsSync(`${testFile}.lock`), 'lock must be cleaned up');
     });
 
+    it('withHookLock fails closed and throws when lock cannot be acquired within timeout', () => {
+      const testFile = path.join(tempDir, 'lock-timeout-test.txt');
+      const lockFile = `${testFile}.lock`;
+      fs.writeFileSync(lockFile, 'active-lock\n');
+
+      assert.throws(
+        () => {
+          withHookLock(testFile, () => {
+            assert.fail('Locked function must not execute when lock acquisition fails');
+          });
+        },
+        /Failed to acquire exclusive hook lock/
+      );
+
+      // Clean up manually created lock
+      fs.unlinkSync(lockFile);
+    });
+
+    it('resolveGitHooksDir rejects .git files pointing to non-git directories lacking git metadata', () => {
+      const fakeDir = path.join(tempDir, 'fake-repo');
+      fs.mkdirSync(fakeDir, { recursive: true });
+      const nonGitTarget = path.join(tempDir, 'non-git-dir');
+      fs.mkdirSync(nonGitTarget, { recursive: true });
+
+      // Create a .git file pointing to non-git directory
+      fs.writeFileSync(path.join(fakeDir, '.git'), `gitdir: ${nonGitTarget}\n`);
+
+      const hooksDir = resolveGitHooksDir(fakeDir);
+      assert.equal(hooksDir, null, 'Must reject .git pointer to directory without git metadata');
+    });
+
     it('validates --command in parseCliArgs and rejects missing values or options as values', async () => {
       const { parseCliArgs } = await import('../scripts/self-review.mjs');
-      assert.throws(() => parseCliArgs(['--command']), /Option --command requires a command string argument/);
-      assert.throws(() => parseCliArgs(['--command', '--install-hook']), /Option --command requires a command string argument/);
+      assert.throws(() => parseCliArgs(['--command']), /Option --command requires an argument value/);
+      assert.throws(() => parseCliArgs(['--command', '--install-hook']), /Option --command requires an argument value/);
       assert.throws(() => parseCliArgs(['--command=']), /Option --command requires a non-empty command string/);
+    });
+
+    it('validates option values in dogfood-review.mjs parseCliArgs using readOptionValue', async () => {
+      const { parseCliArgs } = await import('../scripts/dogfood-review.mjs');
+      assert.throws(() => parseCliArgs(['--mode']), /Option --mode requires an argument value/);
+      assert.throws(() => parseCliArgs(['--mode', '--self']), /Option --mode requires an argument value/);
+      assert.throws(() => parseCliArgs(['--role']), /Option --role requires an argument value/);
+
+      const parsed = parseCliArgs(['--help']);
+      assert.equal(parsed.showHelp, true);
+      const parsedVer = parseCliArgs(['--version']);
+      assert.equal(parsedVer.showVersion, true);
+    });
+
+    it('readOptionValue extracts argument value and throws on missing or flag-like values', () => {
+      const res = readOptionValue(['--mode', 'quick'], 0, '--mode');
+      assert.equal(res.value, 'quick');
+      assert.equal(res.nextIndex, 1);
+
+      assert.throws(() => readOptionValue(['--mode'], 0, '--mode'), /Option --mode requires an argument value/);
+      assert.throws(() => readOptionValue(['--mode', '--other'], 0, '--mode'), /Option --mode requires an argument value/);
     });
   });
 

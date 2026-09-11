@@ -12,6 +12,15 @@ export const PRE_COMMIT_HOOK_MARKER = '# gem-pr-review self-review pre-commit ho
 export const PRE_COMMIT_HOOK_END_MARKER = '# end gem-pr-review self-review pre-commit hook';
 export const PRE_COMMIT_HOOK_MANAGED_FILE_MARKER = '# gem-pr-review managed-file (auto-created)';
 
+function sleepSync(ms = 25) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  } catch {
+    const waitTill = Date.now() + ms;
+    while (Date.now() < waitTill) {}
+  }
+}
+
 /**
  * Executes a function with an exclusive file lock on the target hook path.
  * Protects concurrent install/uninstall operations from race conditions.
@@ -21,6 +30,12 @@ export const PRE_COMMIT_HOOK_MANAGED_FILE_MARKER = '# gem-pr-review managed-file
  * @returns {any}
  */
 export function withHookLock(hookPath, fn) {
+  const dir = path.dirname(hookPath);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {
+    // Ignore mkdir error
+  }
   const lockPath = `${hookPath}.lock`;
   const maxWaitMs = 2000;
   const startTime = Date.now();
@@ -43,24 +58,25 @@ export function withHookLock(hookPath, fn) {
         } catch {
           // Ignore stat/unlink race error
         }
-        // Brief pause before retry
-        const waitTill = Date.now() + 10;
-        while (Date.now() < waitTill) {}
+        // Yield execution without spinning CPU
+        sleepSync(25);
       } else {
-        break;
+        throw err;
       }
     }
+  }
+
+  if (!acquired) {
+    throw new Error(`Failed to acquire exclusive hook lock on ${hookPath} within ${maxWaitMs}ms`);
   }
 
   try {
     return fn();
   } finally {
-    if (acquired) {
-      try {
-        fs.unlinkSync(lockPath);
-      } catch {
-        // Ignore unlink error
-      }
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // Ignore unlink error
     }
   }
 }
@@ -190,8 +206,17 @@ export function resolveGitHooksDir(rootDir = process.cwd(), options = {}) {
         gitDir = path.resolve(resolvedRoot, gitDir);
       }
 
-      // Validate resolved git directory exists and is a directory
+      // Validate resolved git directory exists, is a directory, and contains git metadata
       if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
+        return null;
+      }
+      const hasGitMetadata =
+        fs.existsSync(path.join(gitDir, 'commondir')) ||
+        fs.existsSync(path.join(gitDir, 'HEAD')) ||
+        fs.existsSync(path.join(gitDir, 'config')) ||
+        fs.existsSync(path.join(gitDir, 'gitdir')) ||
+        fs.existsSync(path.join(gitDir, 'hooks'));
+      if (!hasGitMetadata) {
         return null;
       }
 
@@ -200,7 +225,14 @@ export function resolveGitHooksDir(rootDir = process.cwd(), options = {}) {
       if (fs.existsSync(commonDirFile)) {
         const relCommon = fs.readFileSync(commonDirFile, 'utf8').trim();
         const commonDir = path.resolve(gitDir, relCommon);
-        if (fs.existsSync(commonDir) && fs.statSync(commonDir).isDirectory()) {
+        if (
+          fs.existsSync(commonDir) &&
+          fs.statSync(commonDir).isDirectory() &&
+          (fs.existsSync(path.join(commonDir, 'config')) ||
+            fs.existsSync(path.join(commonDir, 'HEAD')) ||
+            fs.existsSync(path.join(commonDir, 'hooks')) ||
+            fs.existsSync(path.join(commonDir, 'objects')))
+        ) {
           return path.join(commonDir, 'hooks');
         }
       }
@@ -506,62 +538,70 @@ export function installPreCommitHook(options = {}) {
   const hookPath = path.join(hooksDir, 'pre-commit');
   const command = resolveDefaultHookCommand(rootDir, options.command);
 
-  return withHookLock(hookPath, () => {
-    try {
-      fs.mkdirSync(hooksDir, { recursive: true });
-      if (fs.existsSync(hookPath)) {
-        const existing = fs.readFileSync(hookPath, 'utf8');
-        const lines = existing.split(/\r?\n/);
+  try {
+    return withHookLock(hookPath, () => {
+      try {
+        fs.mkdirSync(hooksDir, { recursive: true });
+        if (fs.existsSync(hookPath)) {
+          const existing = fs.readFileSync(hookPath, 'utf8');
+          const lines = existing.split(/\r?\n/);
 
-        // Only treat as already installed if an active fail-closed invocation is present
-        const isAlreadyFailClosed = hasActiveFailClosedHookCommandInLines(lines, command);
+          // Only treat as already installed if an active fail-closed invocation is present
+          const isAlreadyFailClosed = hasActiveFailClosedHookCommandInLines(lines, command);
 
-        if (isAlreadyFailClosed) {
-          try {
-            fs.chmodSync(hookPath, 0o755);
-          } catch {
-            // Ignore chmod error if not permitted
+          if (isAlreadyFailClosed) {
+            try {
+              fs.chmodSync(hookPath, 0o755);
+            } catch {
+              // Ignore chmod error if not permitted
+            }
+            return {
+              success: true,
+              alreadyInstalled: true,
+              hookPath,
+            };
+          }
+
+          const exitIdx = findTopLevelTerminalExitLine(existing);
+          const hookBlock = generatePreCommitHookSnippet(command);
+
+          if (exitIdx !== -1) {
+            lines.splice(exitIdx, 0, ...hookBlock, '');
+            atomicWriteFile(hookPath, lines.join('\n'), { mode: 0o755 });
+          } else {
+            const separator = existing.endsWith('\n') ? '' : '\n';
+            const addition = `\n${hookBlock.join('\n')}\n`;
+            atomicWriteFile(hookPath, existing + separator + addition, { mode: 0o755 });
           }
           return {
             success: true,
-            alreadyInstalled: true,
+            appended: true,
             hookPath,
           };
         }
 
-        const exitIdx = findTopLevelTerminalExitLine(existing);
-        const hookBlock = generatePreCommitHookSnippet(command);
-
-        if (exitIdx !== -1) {
-          lines.splice(exitIdx, 0, ...hookBlock, '');
-          atomicWriteFile(hookPath, lines.join('\n'), { mode: 0o755 });
-        } else {
-          const separator = existing.endsWith('\n') ? '' : '\n';
-          const addition = `\n${hookBlock.join('\n')}\n`;
-          atomicWriteFile(hookPath, existing + separator + addition, { mode: 0o755 });
-        }
+        const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MANAGED_FILE_MARKER}\n${generatePreCommitHookSnippet(command).join('\n')}\n`;
+        atomicWriteFile(hookPath, content, { mode: 0o755 });
         return {
           success: true,
-          appended: true,
+          created: true,
+          hookPath,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          error: err.message,
           hookPath,
         };
       }
-
-      const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MANAGED_FILE_MARKER}\n${generatePreCommitHookSnippet(command).join('\n')}\n`;
-      atomicWriteFile(hookPath, content, { mode: 0o755 });
-      return {
-        success: true,
-        created: true,
-        hookPath,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        error: err.message,
-        hookPath,
-      };
-    }
-  });
+    });
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message,
+      hookPath,
+    };
+  }
 }
 
 /**
@@ -588,66 +628,70 @@ export function uninstallPreCommitHook(options = {}) {
     return { success: true, removed: false, hookPath };
   }
 
-  return withHookLock(hookPath, () => {
-    try {
-      const statBefore = fs.statSync(hookPath);
-      const content = fs.readFileSync(hookPath, 'utf8');
-      // Only uninstall if it contains our managed marker
-      if (!content.includes(PRE_COMMIT_HOOK_MARKER)) {
-        return { success: true, removed: false, hookPath };
-      }
-
-      const lines = content.split(/\r?\n/);
-      const hasManagedFileMarker = content.includes(PRE_COMMIT_HOOK_MANAGED_FILE_MARKER);
-
-      // Clean managed lines (bounded by start/end markers or legacy snippet lines)
-      const cleaned = [];
-      let insideManagedBlock = false;
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-
-        if (trimmed === PRE_COMMIT_HOOK_MARKER) {
-          insideManagedBlock = true;
-          continue;
+  try {
+    return withHookLock(hookPath, () => {
+      try {
+        const statBefore = fs.statSync(hookPath);
+        const content = fs.readFileSync(hookPath, 'utf8');
+        // Only uninstall if it contains our managed marker
+        if (!content.includes(PRE_COMMIT_HOOK_MARKER)) {
+          return { success: true, removed: false, hookPath };
         }
 
-        if (insideManagedBlock) {
-          if (trimmed === PRE_COMMIT_HOOK_END_MARKER) {
-            insideManagedBlock = false;
+        const lines = content.split(/\r?\n/);
+        const hasManagedFileMarker = content.includes(PRE_COMMIT_HOOK_MANAGED_FILE_MARKER);
+
+        // Clean managed lines (bounded by start/end markers or legacy snippet lines)
+        const cleaned = [];
+        let insideManagedBlock = false;
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmed = line.trim();
+
+          if (trimmed === PRE_COMMIT_HOOK_MARKER) {
+            insideManagedBlock = true;
             continue;
           }
-          // Legacy support: if no end marker, stop skipping when reaching non-managed line
-          if (!isManagedHookSnippetLine(line, command) && !/\|\|\s*exit/.test(line)) {
-            insideManagedBlock = false;
-            cleaned.push(line);
+
+          if (insideManagedBlock) {
+            if (trimmed === PRE_COMMIT_HOOK_END_MARKER) {
+              insideManagedBlock = false;
+              continue;
+            }
+            // Legacy support: if no end marker, stop skipping when reaching non-managed line
+            if (!isManagedHookSnippetLine(line, command) && !/\|\|\s*exit/.test(line)) {
+              insideManagedBlock = false;
+              cleaned.push(line);
+            }
+            continue;
           }
-          continue;
+
+          if (trimmed === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER) {
+            continue;
+          }
+
+          cleaned.push(line);
         }
 
-        if (trimmed === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER) {
-          continue;
+        // Check if cleaned content contains third-party commands
+        const thirdPartyLines = cleaned
+          .map((l) => l.trim())
+          .filter((l) => Boolean(l) && !l.startsWith('#'));
+
+        // If file was auto-created by us AND contains no third-party commands, delete it completely
+        if (hasManagedFileMarker && thirdPartyLines.length === 0) {
+          fs.unlinkSync(hookPath);
+          return { success: true, removed: true, hookPath };
         }
 
-        cleaned.push(line);
+        atomicWriteFile(hookPath, cleaned.join('\n'), { mode: statBefore.mode & 0o777 });
+        return { success: true, cleaned: true, hookPath };
+      } catch (err) {
+        return { success: false, error: err.message, hookPath };
       }
-
-      // Check if cleaned content contains third-party commands
-      const thirdPartyLines = cleaned
-        .map((l) => l.trim())
-        .filter((l) => Boolean(l) && !l.startsWith('#'));
-
-      // If file was auto-created by us AND contains no third-party commands, delete it completely
-      if (hasManagedFileMarker && thirdPartyLines.length === 0) {
-        fs.unlinkSync(hookPath);
-        return { success: true, removed: true, hookPath };
-      }
-
-      atomicWriteFile(hookPath, cleaned.join('\n'), { mode: statBefore.mode & 0o777 });
-      return { success: true, cleaned: true, hookPath };
-    } catch (err) {
-      return { success: false, error: err.message, hookPath };
-    }
-  });
+    });
+  } catch (err) {
+    return { success: false, error: err.message, hookPath };
+  }
 }

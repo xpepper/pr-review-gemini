@@ -20,7 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -70,19 +70,27 @@ export function parseCliArgs(args) {
   let mockGh = process.env.MOCK_GH === '1';
   let self = false;
   let incremental = false;
+  let showHelp = false;
+  let showVersion = false;
   const roles = [];
   let replaceStandardRoles = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--self') {
+    if (arg === '--help' || arg === '-h') {
+      showHelp = true;
+    } else if (arg === '--version' || arg === '-v') {
+      showVersion = true;
+    } else if (arg === '--self') {
       self = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
       mode = arg.slice('--mode='.length);
     } else if (arg === '--mode') {
-      mode = args[++i] || 'balanced';
+      const { value, nextIndex } = readOptionValue(args, i, '--mode');
+      mode = value;
+      i = nextIndex;
     } else if (arg === '--incremental') {
       incremental = true;
     } else if (arg === '--dry-run' || arg === '--no-comment') {
@@ -98,27 +106,36 @@ export function parseCliArgs(args) {
     } else if (arg.startsWith('--select=')) {
       select = arg.slice('--select='.length);
     } else if (arg === '--select') {
-      select = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--select');
+      select = value;
+      i = nextIndex;
     } else if (arg.startsWith('--role=')) {
       const val = arg.slice('--role='.length);
       roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (arg === '--role') {
-      const val = args[++i] || '';
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+      const { value, nextIndex } = readOptionValue(args, i, '--role');
+      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
+      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg.startsWith('--cache-dir=')) {
       cacheDir = arg.slice('--cache-dir='.length);
     } else if (arg === '--cache-dir') {
-      cacheDir = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--cache-dir');
+      cacheDir = value;
+      i = nextIndex;
     } else if (arg.startsWith('--repo=')) {
       repo = arg.slice('--repo='.length);
     } else if (arg === '--repo') {
-      repo = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--repo');
+      repo = value;
+      i = nextIndex;
     } else if (arg.startsWith('--model=')) {
       model = arg.slice('--model='.length);
     } else if (arg === '--model') {
-      model = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--model');
+      model = value;
+      i = nextIndex;
     } else if (arg === '--mock') {
       mock = true;
     } else if (arg === '--mock-gh') {
@@ -144,6 +161,8 @@ export function parseCliArgs(args) {
     mock,
     mockGh,
     incremental,
+    showHelp,
+    showVersion,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };

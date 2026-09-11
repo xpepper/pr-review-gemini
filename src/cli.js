@@ -189,32 +189,21 @@ export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
   return { handled: false };
 }
 
-export const PRE_COMMIT_HOOK_MARKER = '# gem-pr-review self-review pre-commit hook';
-export const PRE_COMMIT_HOOK_MANAGED_FILE_MARKER = '# gem-pr-review managed-file (auto-created)';
-
 /**
- * Searches upward from startDir for the nearest directory containing a .git directory or file.
+ * Safely extracts an argument value following a CLI option flag.
+ * Throws an informative Error if the argument is missing or is another option flag.
  *
- * @param {string} [startDir=process.cwd()]
- * @returns {string|null} Directory containing .git, or null if filesystem root reached without match
+ * @param {string[]} args - Argument list
+ * @param {number} index - Index of option flag
+ * @param {string} optionName - Option name for error messages (e.g. '--mode')
+ * @returns {{ value: string, nextIndex: number }}
  */
-export function findGitRootDir(startDir = process.cwd()) {
-  let current = path.resolve(startDir);
-  while (true) {
-    const gitCandidate = path.join(current, '.git');
-    try {
-      if (fs.existsSync(gitCandidate)) {
-        return current;
-      }
-    } catch {
-      // Ignore filesystem read errors
-    }
-    const parent = path.dirname(current);
-    if (parent === current) {
-      return null;
-    }
-    current = parent;
+export function readOptionValue(args, index, optionName) {
+  const next = args[index + 1];
+  if (!next || next.startsWith('-')) {
+    throw new Error(`Option ${optionName} requires an argument value`);
   }
+  return { value: next, nextIndex: index + 1 };
 }
 
 /**
