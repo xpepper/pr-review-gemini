@@ -541,7 +541,7 @@ jobs:
 ```
 
 > [!NOTE]
-> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace. Detached worktree test verification (`--verify`) is restricted to same-repository branches and safe predefined profiles (`test`, `build`, `lint`, `typecheck`), automatically skipping execution on cross-repository/fork PRs to ensure untrusted code is never executed.
+> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace. Detached worktree test verification (`--verify`) is restricted to same-repository branches and safe predefined built-in profiles (`test`, `build`, `lint`), automatically skipping execution on cross-repository/fork PRs to ensure untrusted code is never executed.
 
 ---
 

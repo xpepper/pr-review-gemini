@@ -1043,6 +1043,109 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.unlinkSync(tmpEvent);
       }
     });
+
+    it('fails closed and aborts verification if PR origin query encounters API error', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-origin-err-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 21,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/21' },
+        },
+        comment: {
+          id: 780,
+          body: '/gem-review --quick --verify=test',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const customExecGh = async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            if (args.includes('isCrossRepository')) {
+              throw new Error('API rate limit exceeded');
+            }
+            return JSON.stringify({
+              headRefOid: 'ci-mock-head-sha',
+              author: { login: 'ci-author' },
+              state: 'OPEN',
+              title: 'CI PR #21',
+            });
+          }
+          return JSON.stringify({ id: 1 });
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          execGhFn: customExecGh,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 0);
+        assert.equal(verificationExecuted, false, 'Must not execute verification when origin cannot be confirmed');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /Unable to verify PR repository origin/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('rejects custom profiles from config and restricts execution to canonical safe profiles in CI', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-custom-prof-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 22,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/22' },
+        },
+        comment: {
+          id: 781,
+          body: '/gem-review --quick --verify=custom_deploy',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          config: {
+            verificationProfiles: {
+              custom_deploy: { command: 'npm run deploy:preview' },
+            },
+          },
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 0);
+        assert.equal(verificationExecuted, false, 'Should reject custom profile in CI');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /disallowed verification profile "custom_deploy"/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
   });
 });
 

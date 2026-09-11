@@ -19,7 +19,7 @@ import {
   formatCompletionReply,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
-import { runVerification, listVerificationProfiles } from '../src/verify.js';
+import { runVerification, DEFAULT_VERIFICATION_PROFILES } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -89,6 +89,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               author: { login: 'ci-author' },
               state: 'OPEN',
               title: `CI PR #${ciEnv.prNumber || 0}`,
+              isCrossRepository: false,
             })
           );
         }
@@ -264,8 +265,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     let verificationResult = null;
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
-      const registered = listVerificationProfiles(options.config);
-      const SAFE_PROFILES = new Set([...Object.keys(registered), 'typecheck', 'unit']);
+      const SAFE_PROFILES = new Set(Object.keys(DEFAULT_VERIFICATION_PROFILES));
 
       if (!SAFE_PROFILES.has(profileName)) {
         const errorMsg = `Security: Unrecognized or disallowed verification profile "${profileName}". Allowed safe profiles: ${[...SAFE_PROFILES].join(', ')}.`;
@@ -278,7 +278,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         };
       } else {
         // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
-        let isCrossRepo = false;
+        let isCrossRepo = true;
         let originCheckFailed = false;
         let originError = null;
 
@@ -288,14 +288,15 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             { cwd }
           );
           const parsedMeta = JSON.parse(prMetaStdout);
-          if (typeof parsedMeta.isCrossRepository === 'boolean') {
+          if (typeof parsedMeta?.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
+          } else {
+            originCheckFailed = true;
+            originError = 'GitHub API response missing boolean isCrossRepository property';
           }
         } catch (metaErr) {
-          if (!isMock) {
-            originCheckFailed = true;
-            originError = metaErr.message;
-          }
+          originCheckFailed = true;
+          originError = metaErr.message;
         }
 
         if (originCheckFailed) {
