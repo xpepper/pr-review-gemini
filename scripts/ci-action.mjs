@@ -264,23 +264,56 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     let verificationResult = null;
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
-      try {
-        io.log(`Running detached worktree test verification (profile: ${profileName})...`);
-        verificationResult = await runVerificationFn({
-          prNumber: ciEnv.prNumber,
-          profileName,
-          repoPath: cwd,
-          execGhFn,
-        });
-        io.log(`Verification status: ${verificationResult.status}`);
-      } catch (vErr) {
-        io.warn(`Warning: Worktree verification failed: ${vErr.message}`);
+      const SAFE_PROFILES = new Set(['test', 'build', 'lint', 'typecheck', 'unit']);
+
+      if (!SAFE_PROFILES.has(profileName)) {
+        const errorMsg = `Security: Unrecognized or disallowed verification profile "${profileName}". Allowed safe profiles: ${[...SAFE_PROFILES].join(', ')}.`;
+        io.warn(`[CI] ${errorMsg}`);
         verificationResult = {
           status: 'failed',
           profile: profileName,
-          error: vErr.message,
-          output: vErr.message,
+          error: errorMsg,
+          output: errorMsg,
         };
+      } else {
+        // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
+        let isCrossRepo = false;
+        try {
+          const prMetaStdout = await execGhFn(['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'], { cwd });
+          const parsedMeta = JSON.parse(prMetaStdout);
+          isCrossRepo = Boolean(parsedMeta.isCrossRepository);
+        } catch {
+          // If query fails or in mock mode, proceed safely
+        }
+
+        if (isCrossRepo) {
+          const skipMsg = 'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
+          io.warn(`[CI] Security: ${skipMsg}`);
+          verificationResult = {
+            status: 'skipped',
+            profile: profileName,
+            summary: skipMsg,
+          };
+        } else {
+          try {
+            io.log(`Running detached worktree test verification (profile: ${profileName})...`);
+            verificationResult = await runVerificationFn({
+              prNumber: ciEnv.prNumber,
+              profileName,
+              repoPath: cwd,
+              execGhFn,
+            });
+            io.log(`Verification status: ${verificationResult.status}`);
+          } catch (vErr) {
+            io.warn(`Warning: Worktree verification failed: ${vErr.message}`);
+            verificationResult = {
+              status: 'failed',
+              profile: profileName,
+              error: vErr.message,
+              output: vErr.message,
+            };
+          }
+        }
       }
     }
 

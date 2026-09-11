@@ -26,6 +26,13 @@ export function parseEventPayload(payloadOrPath) {
     headSha: null,
     baseSha: null,
     sender: null,
+    isComment: false,
+    commentId: null,
+    commentBody: null,
+    commentAuthorAssociation: null,
+    commentUser: null,
+    commandInfo: null,
+    rawPayload: null,
   };
 
   if (!payloadOrPath) {
@@ -142,7 +149,7 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
   const cmd = eventInfo.commandInfo;
   const isCommentCommand = Boolean(eventInfo.isComment && cmd?.isCommand);
   const isAuthorized = isCommentCommand
-    ? isAuthorizedCommenter(eventInfo.rawPayload || eventInfo)
+    ? isAuthorizedCommenter(eventInfo)
     : true;
 
   // 1. PR Number resolution
@@ -562,6 +569,7 @@ export function getCommenterAuthorization(payload, options = {}) {
   }
 
   const username =
+    payload.commentUser ||
     payload.comment?.user?.login ||
     payload.sender?.login ||
     payload.user ||
@@ -569,6 +577,7 @@ export function getCommenterAuthorization(payload, options = {}) {
     'unknown';
 
   const rawAssoc =
+    payload.commentAuthorAssociation ||
     payload.comment?.author_association ||
     payload.sender?.author_association ||
     payload.author_association ||
@@ -587,30 +596,13 @@ export function getCommenterAuthorization(payload, options = {}) {
     };
   }
 
-  // 2. Author association check
+  // 2. Author association check (GitHub sets OWNER, MEMBER, or COLLABORATOR for users with write/admin rights)
   if (association && allowedAssociations.includes(association)) {
     return {
       authorized: true,
       association,
       username,
       reason: `Author association '${association}' is authorized to trigger review commands.`,
-    };
-  }
-
-  // 3. User write permissions check (scoped to comment author / sender only)
-  const hasPush = Boolean(
-    payload.comment?.user?.permissions?.push ||
-    payload.comment?.user?.permissions?.admin ||
-    payload.sender?.permissions?.push ||
-    payload.sender?.permissions?.admin
-  );
-
-  if (hasPush) {
-    return {
-      authorized: true,
-      association,
-      username,
-      reason: `Commenter '${username}' has explicit write permissions.`,
     };
   }
 

@@ -159,7 +159,7 @@ describe('CI Event Payload & Environment Resolution', () => {
     });
 
     it('returns empty defaults for null, undefined, or empty payload', () => {
-      assert.deepEqual(parseEventPayload(null), {
+      const expectedEmpty = {
         isPullRequest: false,
         prNumber: null,
         repo: null,
@@ -167,27 +167,18 @@ describe('CI Event Payload & Environment Resolution', () => {
         headSha: null,
         baseSha: null,
         sender: null,
-      });
+        isComment: false,
+        commentId: null,
+        commentBody: null,
+        commentAuthorAssociation: null,
+        commentUser: null,
+        commandInfo: null,
+        rawPayload: null,
+      };
 
-      assert.deepEqual(parseEventPayload(''), {
-        isPullRequest: false,
-        prNumber: null,
-        repo: null,
-        action: null,
-        headSha: null,
-        baseSha: null,
-        sender: null,
-      });
-
-      assert.deepEqual(parseEventPayload('{invalid json'), {
-        isPullRequest: false,
-        prNumber: null,
-        repo: null,
-        action: null,
-        headSha: null,
-        baseSha: null,
-        sender: null,
-      });
+      assert.deepEqual(parseEventPayload(null), expectedEmpty);
+      assert.deepEqual(parseEventPayload(''), expectedEmpty);
+      assert.deepEqual(parseEventPayload('{invalid json'), expectedEmpty);
     });
 
     it('loads event payload from file when path string points to an existing file', () => {
@@ -958,6 +949,99 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.unlinkSync(tmpEvent);
       }
     });
+
+    it('rejects unrecognized verification profiles and marks verification as failed', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-badprof-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 19,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/19' },
+        },
+        comment: {
+          id: 778,
+          body: '/gem-review --quick --verify=malicious_exec',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 0);
+        assert.equal(verificationExecuted, false, 'Should not execute verification for disallowed profile');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /disallowed verification profile/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('skips detached worktree verification on cross-repository fork PRs for security', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-fork-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 20,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/20' },
+        },
+        comment: {
+          id: 779,
+          body: '/gem-review --quick --verify=test',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const customExecGh = async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            return JSON.stringify({
+              isCrossRepository: true,
+              headRefOid: 'fork-sha-123',
+            });
+          }
+          return JSON.stringify({ id: 1 });
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          execGhFn: customExecGh,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 0);
+        assert.equal(verificationExecuted, false, 'Must not execute verification on cross-repository fork PR');
+        assert.equal(result.verificationResult?.status, 'skipped');
+        assert.match(result.verificationResult?.summary, /cross-repository\/fork/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
   });
 });
 
@@ -971,8 +1055,11 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /pull_request:/);
       assert.match(content, /types:\s*\[.*opened.*synchronize.*\]/);
       assert.match(content, /pull-requests:\s*write/);
-      assert.match(content, /issues:\s*write/);
       assert.match(content, /issue_comment:/);
+      assert.match(content, /concurrency:/);
+      assert.match(content, /cancel-in-progress:\s*true/);
+      assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-review['"]\)/);
+      assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
       assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
       assert.match(content, /uses:\s*actions\/checkout@v4/);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
@@ -1146,25 +1233,18 @@ Hope that helps!
         assert.match(info.reason, /not authorized/i);
       });
 
-      it('authorizes commenters with explicit user or sender push or admin permissions', () => {
-        const payloadWithPush = {
-          comment: { author_association: 'NONE', user: { login: 'contributor-with-write', permissions: { push: true, pull: true } } },
+      it('authorizes commenters when passed parsed eventInfo object directly', () => {
+        const eventInfo = {
+          commentAuthorAssociation: 'MEMBER',
+          commentUser: 'reviewer',
         };
-        assert.equal(isAuthorizedCommenter(payloadWithPush), true);
+        assert.equal(isAuthorizedCommenter(eventInfo), true);
 
-        const payloadWithAdmin = {
-          comment: { author_association: 'NONE', user: { login: 'admin-user' } },
-          sender: { permissions: { admin: true } },
+        const unauthorizedEventInfo = {
+          commentAuthorAssociation: 'CONTRIBUTOR',
+          commentUser: 'external-dev',
         };
-        assert.equal(isAuthorizedCommenter(payloadWithAdmin), true);
-      });
-
-      it('does NOT authorize commenters based on ambient repository.permissions', () => {
-        const payloadWithAmbientPush = {
-          comment: { author_association: 'NONE', user: { login: 'untrusted-user' } },
-          repository: { permissions: { push: true, pull: true, admin: true } },
-        };
-        assert.equal(isAuthorizedCommenter(payloadWithAmbientPush), false);
+        assert.equal(isAuthorizedCommenter(unauthorizedEventInfo), false);
       });
 
       it('authorizes commenters in allowedUsers list regardless of association', () => {

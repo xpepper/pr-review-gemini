@@ -511,12 +511,20 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     name: AI PR Code Review
     if: |
       github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/gem-'))
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        (contains(github.event.comment.body, '/gem-review') || contains(github.event.comment.body, '/gem-pr-review'))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -533,7 +541,7 @@ jobs:
 ```
 
 > [!NOTE]
-> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace or executed.
+> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace. Detached worktree test verification (`--verify`) is restricted to same-repository branches and safe predefined profiles (`test`, `build`, `lint`, `typecheck`), automatically skipping execution on cross-repository/fork PRs to ensure untrusted code is never executed.
 
 ---
 
@@ -566,7 +574,7 @@ jobs:
 ### 2. Host-Gated Security & Authorization
 
 To protect CI runner minutes and model quota from unauthorized consumption, comment commands are strictly host-gated:
-- **Authorized Users**: Only commenters with `author_association` equal to `OWNER`, `MEMBER`, or `COLLABORATOR`, or users with explicit repository write permissions (`push` or `admin`), can trigger review runs.
+- **Authorized Users**: Only commenters with `author_association` equal to `OWNER`, `MEMBER`, or `COLLABORATOR`, or explicitly configured allowed users, can trigger review runs.
 - **Friendly Denial**: If an unauthorized user (such as an outside contributor with association `FIRST_TIME_CONTRIBUTOR` or `NONE`) writes `/gem-review`, the action immediately adds a 😕 (`confused`) reaction and posts a friendly denial explanation without running subagents.
 
 ### 3. Visual Lifecycle Management

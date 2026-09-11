@@ -221,7 +221,7 @@ Eliminates duplicated boilerplate across sibling CLI entrypoints through a singl
 ### 12. Interactive PR Comment Command Dispatcher (`/gem-review`)
 Trigger AI-assisted code reviews directly from pull request comments using `/gem-review` or `/gem-pr-review`:
 - **Interactive Review Dispatch**: Run targeted review passes on demand with custom flags (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--fail-on=<sev>`, `--dry-run`, `--help`).
-- **Host-Gated Security**: Gating based on `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repository write permissions prevents unauthorized runner minutes or model quota consumption.
+- **Host-Gated Security**: Gating based on `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowed users prevents unauthorized runner minutes or model quota consumption.
 - **Visual Reaction Lifecycle**: Immediate feedback directly on invoking comments: 👀 (`eyes`) acknowledgment, 🚀 (`rocket`) execution, 👍 (`+1`) completion with a markdown reply summary, and 😕 (`confused`) denial/error notices.
 
 ---
@@ -392,12 +392,20 @@ permissions:
   pull-requests: write
   issues: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     name: AI PR Code Review
     if: |
       github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/gem-'))
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        (contains(github.event.comment.body, '/gem-review') || contains(github.event.comment.body, '/gem-pr-review'))
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -414,7 +422,7 @@ jobs:
 ```
 
 > [!NOTE]
-> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace or executed.
+> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace. Detached worktree test verification (`--verify`) is restricted to same-repository branches and safe predefined profiles (`test`, `build`, `lint`, `typecheck`), automatically skipping execution on cross-repository/fork PRs to ensure untrusted code is never executed.
 
 ---
 
