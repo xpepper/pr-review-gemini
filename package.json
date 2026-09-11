@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test 'tests/**/*.test.mjs' 'tests/**/*.test.js'",
     "review": "node scripts/dogfood-review.mjs",
+    "dogfood:pr": "node scripts/dogfood-pr.mjs",
     "self-review": "node scripts/self-review.mjs",
     "ci-review": "node scripts/ci-action.mjs",
     "version:check": "node scripts/bump-version.mjs --check",

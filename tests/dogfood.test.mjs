@@ -184,5 +184,58 @@ describe('Dogfood Review Script CLI', () => {
     assert.equal(data.verdict, 'PASS');
     assert.equal(data.blockingCount, 0);
   });
+
+  describe('Streamlined dogfood-pr.mjs CLI Helper (Increment 16)', () => {
+    const dogfoodPrScriptPath = path.resolve('scripts/dogfood-pr.mjs');
+
+    it('displays usage information when invoked with --help or -h', async () => {
+      const { stdout } = await execFileAsync(process.execPath, [dogfoodPrScriptPath, '--help']);
+      assert.match(stdout, /Usage: npm run dogfood:pr <PR_NUMBER>/);
+      assert.match(stdout, /--model auto/);
+      assert.match(stdout, /--balanced/);
+      assert.match(stdout, /--quick/);
+      assert.match(stdout, /--deep/);
+    });
+
+    it('displays version banner when invoked with --version or -v', async () => {
+      const { stdout } = await execFileAsync(process.execPath, [dogfoodPrScriptPath, '--version']);
+      assert.match(stdout, /gem-pr-review v/i);
+    });
+
+    it('fails with helpful message when PR number is missing', async () => {
+      try {
+        await execFileAsync(process.execPath, [dogfoodPrScriptPath]);
+        assert.fail('Should fail without PR number');
+      } catch (err) {
+        assert.match(err.stderr || err.stdout, /Usage: npm run dogfood:pr/);
+      }
+    });
+
+    it('buildDogfoodArgs automatically injects --model auto if not specified', async () => {
+      const { buildDogfoodArgs } = await import('../scripts/dogfood-pr.mjs');
+      assert.equal(typeof buildDogfoodArgs, 'function');
+
+      const argsWithoutModel = buildDogfoodArgs(['42', '--quick']);
+      assert.deepEqual(argsWithoutModel, ['42', '--quick', '--model', 'auto']);
+
+      const argsWithExplicitModel = buildDogfoodArgs(['42', '--model', 'custom-model']);
+      assert.deepEqual(argsWithExplicitModel, ['42', '--model', 'custom-model']);
+
+      const argsWithModelEq = buildDogfoodArgs(['42', '--model=claude-3.7-sonnet']);
+      assert.deepEqual(argsWithModelEq, ['42', '--model=claude-3.7-sonnet']);
+    });
+
+    it('runs dogfood-pr.mjs dry-run review with mock runner', async () => {
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [dogfoodPrScriptPath, '1', '--mock', '--quick', '--dry-run'],
+        { env: { ...process.env, NODE_ENV: 'test' } }
+      );
+
+      assert.match(stdout, /Starting Gem PR Review on PR #1/);
+      assert.match(stdout, /Mode: quick/);
+      assert.match(stdout, /Dry-run complete: no review published to GitHub/);
+    });
+  });
 });
 
