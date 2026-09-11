@@ -394,6 +394,47 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
         /Invalid SemVer version string/
       );
     });
+
+    it('rolls back modified files if writing a subsequent manifest fails', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-manifest-rollback-'));
+      try {
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.1.0"\n---\n# Skill'
+        );
+
+        const customFs = {
+          ...fs,
+          writeFileSync(filePath, content, encoding) {
+            if (filePath.endsWith('mcp.json')) {
+              throw new Error('ENOSPC: no space left on device');
+            }
+            return fs.writeFileSync(filePath, content, encoding);
+          },
+        };
+
+        assert.throws(
+          () =>
+            bumpManifestVersions({
+              newVersion: '0.2.0',
+              rootDir: tempDir,
+              fsImpl: customFs,
+            }),
+          /Failed to bump manifest versions atomically.*ENOSPC/
+        );
+
+        const pkg = JSON.parse(fs.readFileSync(path.join(tempDir, 'package.json'), 'utf8'));
+        const plugin = JSON.parse(fs.readFileSync(path.join(tempDir, 'plugin.json'), 'utf8'));
+        assert.equal(pkg.version, '0.1.0');
+        assert.equal(plugin.version, '0.1.0');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('scripts/bump-version.mjs CLI Utility', () => {

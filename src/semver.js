@@ -362,6 +362,7 @@ export function bumpManifestVersions({
   newVersion,
   rootDir = DEFAULT_ROOT_DIR,
   dryRun = false,
+  fsImpl = fs,
 }) {
   if (!isValidSemVer(newVersion)) {
     throw new Error(
@@ -378,32 +379,32 @@ export function bumpManifestVersions({
 
   // Verify all files exist
   for (const [name, filePath] of Object.entries(files)) {
-    if (!fs.existsSync(filePath)) {
+    if (!fsImpl.existsSync(filePath)) {
       throw new Error(`Cannot bump version: required manifest "${name}" not found at ${filePath}`);
     }
   }
 
   // 1. package.json
-  const packageContent = fs.readFileSync(files.packageJson, 'utf8');
+  const packageContent = fsImpl.readFileSync(files.packageJson, 'utf8');
   const packageData = JSON.parse(packageContent);
   const previousVersion = packageData.version || '0.1.0';
   packageData.version = newVersion;
   const newPackageContent = JSON.stringify(packageData, null, 2) + '\n';
 
   // 2. plugin.json
-  const pluginContent = fs.readFileSync(files.pluginJson, 'utf8');
+  const pluginContent = fsImpl.readFileSync(files.pluginJson, 'utf8');
   const pluginData = JSON.parse(pluginContent);
   pluginData.version = newVersion;
   const newPluginContent = JSON.stringify(pluginData, null, 2) + '\n';
 
   // 3. mcp.json
-  const mcpContent = fs.readFileSync(files.mcpJson, 'utf8');
+  const mcpContent = fsImpl.readFileSync(files.mcpJson, 'utf8');
   const mcpData = JSON.parse(mcpContent);
   mcpData.version = newVersion;
   const newMcpContent = JSON.stringify(mcpData, null, 2) + '\n';
 
   // 4. skills/gem-pr-review/SKILL.md
-  const skillContent = fs.readFileSync(files.skillMd, 'utf8');
+  const skillContent = fsImpl.readFileSync(files.skillMd, 'utf8');
   if (!/version:\s*["']?[^"'\r\n]+["']?/.test(skillContent)) {
     throw new Error(
       `Cannot bump version: metadata.version not found in ${files.skillMd}`
@@ -417,10 +418,31 @@ export function bumpManifestVersions({
   const updatedFiles = Object.values(files);
 
   if (!dryRun) {
-    fs.writeFileSync(files.packageJson, newPackageContent, 'utf8');
-    fs.writeFileSync(files.pluginJson, newPluginContent, 'utf8');
-    fs.writeFileSync(files.mcpJson, newMcpContent, 'utf8');
-    fs.writeFileSync(files.skillMd, newSkillContent, 'utf8');
+    const stagedWrites = [
+      { path: files.packageJson, content: newPackageContent, original: packageContent },
+      { path: files.pluginJson, content: newPluginContent, original: pluginContent },
+      { path: files.mcpJson, content: newMcpContent, original: mcpContent },
+      { path: files.skillMd, content: newSkillContent, original: skillContent },
+    ];
+
+    const written = [];
+    try {
+      for (const item of stagedWrites) {
+        fsImpl.writeFileSync(item.path, item.content, 'utf8');
+        written.push(item);
+      }
+    } catch (err) {
+      for (const item of written) {
+        try {
+          fsImpl.writeFileSync(item.path, item.original, 'utf8');
+        } catch {
+          // ignore secondary errors during rollback
+        }
+      }
+      throw new Error(
+        `Failed to bump manifest versions atomically: ${err.message}. Rolled back changes.`
+      );
+    }
   }
 
   return {
