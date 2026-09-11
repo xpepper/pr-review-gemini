@@ -21,6 +21,7 @@ import {
   calculateNextVersion,
   generateChangelog,
   bumpManifestVersions,
+  getGitCommitsSinceTag,
 } from '../src/semver.js';
 
 const execFileAsync = promisify(execFile);
@@ -297,6 +298,20 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.match(changelog, /### 📝 Documentation/);
       assert.match(changelog, /support custom reviewer roles/);
       assert.match(changelog, /normalize double-escaped newlines/);
+    });
+
+    it('propagates git log failure from getGitCommitsSinceTag', async () => {
+      const failingGit = async (args) => {
+        if (args[0] === 'log') {
+          throw new Error('fatal: ambiguous argument HEAD');
+        }
+        return '';
+      };
+
+      await assert.rejects(
+        () => getGitCommitsSinceTag({ execGitFn: failingGit }),
+        /fatal: ambiguous argument HEAD/
+      );
     });
   });
 

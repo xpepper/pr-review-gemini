@@ -322,12 +322,7 @@ export async function getGitCommitsSinceTag(options = {}) {
   // Format: Hash, delimiter (0x1f), Subject, delimiter (0x1f), Body, record separator (0x1e)
   logArgs.push('--pretty=format:%H%x1f%s%x1f%b%x1e');
 
-  let rawLog = '';
-  try {
-    rawLog = await execGit(logArgs);
-  } catch {
-    rawLog = '';
-  }
+  const rawLog = await execGit(logArgs);
 
   if (!rawLog) {
     return { latestTag: tag, commits: [] };
