@@ -6,9 +6,15 @@
 
 ---
 
-## Active Next Task: Backlog / Increment 15 Planning
-- [ ] Determine next feature focus or maintenance items (e.g. batch multi-PR reviews, enhanced SARIF output, custom rule linters)
-- [ ] Monitor dogfood review metrics and user feedback
+## Active Next Task: Increment 15 — Automated Semantic Versioning, Release Management & Manifest Synchronization (Issue #25)
+- [ ] Create feature branch `feat/semantic-versioning`
+- [ ] Implement central runtime version module (`src/version.js`) and wire into `server/index.js` MCP server info and headers
+- [ ] Add `-v` / `--version` CLI flags to `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`
+- [ ] Implement atomic manifest bump utility (`scripts/bump-version.mjs`) for `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`
+- [ ] Implement conventional commit analyzer to determine next SemVer bump and generate changelogs
+- [ ] Create automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing releases
+- [ ] Add manifest drift-prevention and versioning test suite (`tests/version.test.mjs`)
+
 
 ---
 

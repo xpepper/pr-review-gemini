@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/custom-review-roles`
+* **Current Branch**: `main`
 * **Test Suite**: `npm test` runs and passes (371 tests across 83 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -24,13 +24,13 @@
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
-  - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Branch `feat/custom-review-roles`)
+  - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
 
 ---
 
-## Status: INCREMENT_14_COMPLETE / PHASE_8_ADVANCED
+## Status: INCREMENT_14_MERGED / READY_FOR_INCREMENT_15
 
-All 14 roadmap increments are fully implemented, verified test-first (361 passing tests across 83 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+All 14 roadmap increments are fully implemented, verified test-first (371 passing tests across 83 suites), dogfood-reviewed, and merged into `main`.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -332,13 +332,55 @@ Possible future enhancements:
 
 ---
 
-## Next Session Mission: Future Backlog Planning
+## Next Session Mission: Increment 15 — Automated Semantic Versioning, Release Management & Manifest Synchronization (Issue #25)
 
-- **Target Branch**: `main`
-- **Goal**:
-  Evaluate user feedback on pluggable review roles, dogfood in production CI/CD workflows, and select the next increment (e.g. SARIF export or pre-commit hook integration).
+- **GitHub Issue**: [#25: feat: automated semantic versioning, release management, and manifest synchronization (Increment 15)](https://github.com/xpepper/pr-review-gemini/issues/25)
+- **Target Branch**: `feat/semantic-versioning`
 
+### Goal
+Implement automated semantic versioning, release management, and manifest synchronization so that the package version is no longer hardcoded to `0.1.0` and releases are systematically tagged and tracked from conventional commits.
 
+### Requirements & Architecture
+1. **Centralized Version Module (`src/version.js`)**:
+   - Provide a canonical module exporting the plugin version dynamically resolved from `package.json`.
+   - Update `server/index.js` MCP server info (`serverInfo.version`) and review summary headers to read from `src/version.js` rather than hardcoding `'0.1.0'`.
+   - Add `-v` / `--version` CLI flag to `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`.
 
+2. **Atomic Manifest Bump Script (`scripts/bump-version.mjs`)**:
+   - Provide a CLI utility to bump version atomically across:
+     - `package.json`
+     - `plugin.json`
+     - `mcp.json`
+     - `skills/gem-pr-review/SKILL.md`
+   - Support explicit bump types: `patch`, `minor`, `major`, or explicit semver string (e.g. `1.0.0`).
+   - Automatically analyze conventional commits since the latest git tag (`feat:` -> minor, `fix:` -> patch, breaking change -> major) to recommend or apply the next SemVer bump.
 
+3. **Changelog Generation & GitHub Release Workflow**:
+   - Extract conventional commit messages since the previous release tag to generate categorized release notes (`### Features`, `### Bug Fixes`, `### Documentation`, `### Refactoring`).
+   - Add automated GitHub release workflow (`.github/workflows/release.yml`) or release helper (`npm run release`) that tags `vX.Y.Z` and creates a GitHub Release.
+
+4. **Manifest Consistency & Drift Detection Tests (`tests/version.test.mjs`)**:
+   - Automated test suite verifying that all manifest files (`package.json`, `plugin.json`, `mcp.json`, `skills/gem-pr-review/SKILL.md`) have matching SemVer strings and valid formats.
+   - Test CLI `--version` outputs and dynamic MCP server info reporting.
+
+---
+
+## Ready-to-Use Prompt for the Next Session
+
+```text
+Please implement Increment 15 on this repository: "Automated Semantic Versioning, Release Management & Manifest Synchronization" (addressing Issue #25: https://github.com/xpepper/pr-review-gemini/issues/25).
+
+Before writing code:
+1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/semantic-versioning.
+
+Implementation requirements:
+- Central Version Module: Implement src/version.js to dynamically export the canonical version from package.json without hardcoding. Wire it into server/index.js (MCP serverInfo.version) and review summaries.
+- CLI Version Support: Add -v and --version flags to scripts/dogfood-review.mjs, scripts/self-review.mjs, and scripts/ci-action.mjs.
+- Atomic Manifest Synchronization: Implement scripts/bump-version.mjs to bump version atomically across package.json, plugin.json, mcp.json, and skills/gem-pr-review/SKILL.md.
+- Conventional Commit SemVer Calculation: Automatically determine patch, minor, or major version bump from conventional commits since the latest git tag and generate clean categorized changelogs.
+- Release Automation: Add release workflow or script (.github/workflows/release.yml / npm run release) to tag vX.Y.Z and create GitHub releases.
+- Test-First Verification: Add unit tests in tests/version.test.mjs ensuring manifest versions remain synchronized, adhere to SemVer, and CLI flags output expected version info, keeping all 371+ existing tests passing.
+- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
+```
 

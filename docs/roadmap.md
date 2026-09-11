@@ -116,8 +116,10 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Integrated custom role options into `runSelfReview` (`src/self-review.js`), displaying custom role names in the evaluated lenses summary and fail-closed quality gate.
   - Extended MCP tools in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`) to accept `roles`, `replaceStandardRoles`, and `customRoles`.
   - Added CLI flags `--role <id>` and `--replace-standard-roles` in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`.
-  - Added 27 new tests (361 total passing across 83 suites) and comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
-
-
-
-
+  - Added 27 new tests (371 total passing across 83 suites) and comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
+- [ ] **Increment 15: Automated Semantic Versioning, Release Management & Manifest Synchronization (#25)**
+  - Centralize version resolution in a runtime module (`src/version.js`) instead of hardcoding `0.1.0` in `server/index.js`.
+  - Add atomic manifest bump script (`scripts/bump-version.mjs`) synchronizing `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md`.
+  - Calculate next SemVer bump automatically from conventional commits since latest tag (`feat:` -> minor, `fix:` -> patch, breaking -> major).
+  - Generate categorized release changelogs and automate GitHub releases and `vX.Y.Z` tagging (`.github/workflows/release.yml`).
+  - Add `-v` / `--version` CLI flag to runners and add automated drift-detection tests (`tests/version.test.mjs`).
