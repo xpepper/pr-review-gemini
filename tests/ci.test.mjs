@@ -502,3 +502,17 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /fail_on:\s*P1/);
     });
   });
+
+  describe('Release Workflow Template (.github/workflows/release.yml)', () => {
+    it('verifies release workflow exists, handles tags & workflow_dispatch, and clarifies existing tag input', () => {
+      const workflowPath = path.resolve('.github/workflows/release.yml');
+      assert.equal(fs.existsSync(workflowPath), true, 'release.yml workflow must exist');
+
+      const content = fs.readFileSync(workflowPath, 'utf8');
+      assert.match(content, /name:\s*['"]?Release['"]?/);
+      assert.match(content, /workflow_dispatch:/);
+      assert.match(content, /description:\s*['"]Existing git tag to publish \(e\.g\. v0\.2\.0\)['"]/);
+      assert.match(content, /push:\s*\n\s*tags:\s*\n\s*-\s*['"]v\*['"]/);
+      assert.match(content, /ref:\s*\${{\s*github\.event\.inputs\.tag \|\| github\.ref\s*}}/);
+    });
+  });
