@@ -64,6 +64,7 @@ export function parseCliArgs(args = []) {
   let writeChangelog = false;
   let createTag = false;
   let notesFile = null;
+  let rootDir = null;
   let showVersion = false;
   let showHelp = false;
 
@@ -81,6 +82,8 @@ export function parseCliArgs(args = []) {
       printChangelog = true;
     } else if (arg === '--notes-file' && args[i + 1]) {
       notesFile = args[++i];
+    } else if (arg === '--cwd' && args[i + 1]) {
+      rootDir = path.resolve(args[++i]);
     } else if (arg === '--write-changelog') {
       writeChangelog = true;
     } else if (arg === '--tag') {
@@ -101,6 +104,7 @@ export function parseCliArgs(args = []) {
     writeChangelog,
     createTag,
     notesFile,
+    rootDir,
     showVersion,
     showHelp,
   };

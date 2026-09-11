@@ -498,15 +498,37 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.equal(pkg.version, '0.1.0');
     });
 
-    it('supports auto SemVer calculation with --dry-run', async () => {
-      const { stdout } = await execFileAsync(process.execPath, [
-        bumpScript,
-        'auto',
-        '--dry-run',
-      ]);
-      assert.match(stdout, /Analyzed \d+ commit\(s\)/);
-      assert.match(stdout, /Determined bump:/);
-      assert.match(stdout, /Dry-run completed/);
+    it('supports auto SemVer calculation with --dry-run in isolated git repository', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-git-auto-'));
+      try {
+        await execFileAsync('git', ['init'], { cwd: tempDir });
+        await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: tempDir });
+        await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: tempDir });
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.1.0"\n---\n# Skill'
+        );
+        await execFileAsync('git', ['add', '.'], { cwd: tempDir });
+        await execFileAsync('git', ['commit', '-m', 'feat: add first feature'], { cwd: tempDir });
+
+        const { stdout } = await execFileAsync(process.execPath, [
+          bumpScript,
+          'auto',
+          '--dry-run',
+          '--cwd',
+          tempDir,
+        ]);
+        assert.match(stdout, /Analyzed 1 commit\(s\)/);
+        assert.match(stdout, /Determined bump: MINOR/);
+        assert.match(stdout, /Bumping version: 0\.1\.0 -> 0\.2\.0 \(DRY-RUN\)/);
+        assert.match(stdout, /Dry-run completed/);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it('returns exitCode 1 and success false when git commit or tag fails', async () => {
