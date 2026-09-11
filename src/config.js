@@ -45,6 +45,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   heavy_fallbacks: Object.freeze([]),
   medium_fallbacks: Object.freeze([]),
   light_fallbacks: Object.freeze([]),
+  fallback_to_auto: true,
   lenses: Object.freeze({}),
   custom_roles: Object.freeze({}),
   replace_standard_roles: false,
@@ -203,6 +204,7 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     heavy_fallbacks: [...DEFAULT_CONFIG.heavy_fallbacks],
     medium_fallbacks: [...DEFAULT_CONFIG.medium_fallbacks],
     light_fallbacks: [...DEFAULT_CONFIG.light_fallbacks],
+    fallback_to_auto: DEFAULT_CONFIG.fallback_to_auto,
     lenses: { ...DEFAULT_CONFIG.lenses },
     custom_roles: { ...DEFAULT_CONFIG.custom_roles },
     replace_standard_roles: DEFAULT_CONFIG.replace_standard_roles,
@@ -214,6 +216,16 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
   for (const src of sources) {
     if (typeof src.defaultReviewMode === 'string' && VALID_REVIEW_MODES.includes(src.defaultReviewMode)) {
       resolved.defaultReviewMode = src.defaultReviewMode;
+    }
+
+    if (typeof src.fallback_to_auto === 'boolean') {
+      resolved.fallback_to_auto = src.fallback_to_auto;
+    } else if (typeof src.fallbackToAuto === 'boolean') {
+      resolved.fallback_to_auto = src.fallbackToAuto;
+    } else if (typeof src.auto_fallback === 'boolean') {
+      resolved.fallback_to_auto = src.auto_fallback;
+    } else if (typeof src.autoFallback === 'boolean') {
+      resolved.fallback_to_auto = src.autoFallback;
     }
 
     if (typeof src.autoPostReviews === 'boolean') {

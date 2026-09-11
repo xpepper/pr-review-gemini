@@ -29,6 +29,8 @@ import {
   DEFAULT_LENS_TIERS,
   isQuotaOrCapacityError,
   isQuotaError,
+  isModelUnavailableError,
+  isRetriableModelError,
 } from './subagents.js';
 import {
   fetchPriorReviews,
@@ -95,6 +97,8 @@ export {
   promptFindingSelection,
   isQuotaOrCapacityError,
   isQuotaError,
+  isModelUnavailableError,
+  isRetriableModelError,
   runSelfReview,
   evaluateSelfReviewVerdict,
   formatSelfReviewSummary,

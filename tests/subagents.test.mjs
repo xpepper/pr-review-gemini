@@ -1104,4 +1104,184 @@ index 1111111..2222222 100644
       assert.equal(isQuotaError, isQuotaOrCapacityError);
     });
   });
+
+  describe('Model Catalog & Auto Fallback Resilience (Increment 16)', () => {
+    it('detects model catalog unavailability, unsupported model, and permission errors with isModelUnavailableError', async () => {
+      const { isModelUnavailableError } = await import('../src/subagents.js');
+      assert.equal(typeof isModelUnavailableError, 'function');
+
+      assert.equal(isModelUnavailableError(new Error('Model "claude-3.5-haiku" is not available')), true);
+      assert.equal(isModelUnavailableError(new Error('Unknown model: gpt-5.6-turbo')), true);
+      assert.equal(isModelUnavailableError(new Error('The model is not supported in this environment')), true);
+      assert.equal(isModelUnavailableError(new Error('Model capability error: model does not support reasoning')), true);
+      assert.equal(isModelUnavailableError(new Error('Not authorized to use model claude-3.7-sonnet')), true);
+      assert.equal(isModelUnavailableError(new Error('Model access denied for user catalog')), true);
+      assert.equal(isModelUnavailableError(new Error('Catalog error: model claude-3.5-haiku not found')), true);
+      assert.equal(isModelUnavailableError({ code: 'MODEL_NOT_FOUND', message: 'model not found' }), true);
+      assert.equal(isModelUnavailableError({ code: 'UNSUPPORTED_MODEL', message: 'unsupported' }), true);
+      assert.equal(isModelUnavailableError({ code: 'MODEL_UNAVAILABLE', message: 'unavailable' }), true);
+      assert.equal(isModelUnavailableError({ status: 404, message: 'Model claude-3.5-haiku was not found' }), true);
+      assert.equal(isModelUnavailableError({ status: 403, message: 'Not authorized for model access' }), true);
+
+      // Rejects non-model errors
+      assert.equal(isModelUnavailableError(new TypeError('Cannot read property undefined')), false);
+      assert.equal(isModelUnavailableError(new SyntaxError('Unexpected token')), false);
+      assert.equal(isModelUnavailableError(new Error('Network connection reset by peer')), false);
+      assert.equal(isModelUnavailableError(new Error('HTTP 500 Internal Server Error')), false);
+      assert.equal(isModelUnavailableError(null), false);
+    });
+
+    it('isRetriableModelError combines quota and model unavailability while rejecting syntax/type errors', async () => {
+      const { isRetriableModelError } = await import('../src/subagents.js');
+      assert.equal(typeof isRetriableModelError, 'function');
+
+      // Quota errors are retriable
+      assert.equal(isRetriableModelError(new Error('HTTP 429: Too Many Requests')), true);
+      assert.equal(isRetriableModelError({ code: 'RESOURCE_EXHAUSTED' }), true);
+
+      // Model unavailable errors are retriable
+      assert.equal(isRetriableModelError(new Error('Model "claude-3.5-haiku" is not available')), true);
+      assert.equal(isRetriableModelError(new Error('Unknown model: custom-tier-model')), true);
+
+      // Unrelated runtime errors are NOT retriable
+      assert.equal(isRetriableModelError(new TypeError('foo is not a function')), false);
+      assert.equal(isRetriableModelError(new SyntaxError('Unexpected end of JSON input')), false);
+      assert.equal(isRetriableModelError(new Error('ETIMEDOUT: connect timed out')), false);
+    });
+
+    it('dispatchSubagentsParallel retries failing lens on fallback model when encountering model unavailable error', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'unavailable-primary',
+          fallbacks: ['available-fallback'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        if (model === 'unavailable-primary') {
+          throw new Error('Model "unavailable-primary" is not available in catalog');
+        }
+        return `### [P2] Note\n- **File**: \`src/index.js:1\`\n- **Side**: RIGHT\n- **Confidence**: 0.8\n\nFound on fallback.`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['unavailable-primary', 'available-fallback']);
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.results[0].fallbackUsed, true);
+      assert.equal(output.results[0].model, 'available-fallback');
+    });
+
+    it('gracefully falls back to auto model when primary model is unavailable and no fallbacks are configured', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'claude-3.5-haiku',
+          fallbacks: [],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        if (model === 'claude-3.5-haiku') {
+          throw new Error('Model "claude-3.5-haiku" is not available in host catalog');
+        }
+        return `### [P1] Correctness Defect\n- **File**: \`src/index.js:1\`\n- **Side**: RIGHT\n- **Confidence**: 0.9\n\nDiscovered via auto fallback.`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['claude-3.5-haiku', 'auto']);
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.results[0].fallbackUsed, true);
+      assert.equal(output.results[0].model, 'auto');
+      assert.deepEqual(output.results[0].fallbackModelsTried, ['auto']);
+    });
+
+    it('gracefully falls back to auto model when all configured fallbacks also fail with model unavailable errors', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'contracts',
+          lensDef: LENS_DEFINITIONS.contracts,
+          tier: 'medium',
+          model: 'primary-unavailable',
+          fallbacks: ['fallback-unavailable-1', 'fallback-unavailable-2'],
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        if (model !== 'auto') {
+          throw new Error(`Model "${model}" is not supported or not found`);
+        }
+        return `### [P2] Ambient State Coupling\n- **File**: \`src/index.js:1\`\n- **Side**: RIGHT\n- **Confidence**: 0.85\n\nDiscovered via final auto fallback.`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.deepEqual(calls, ['primary-unavailable', 'fallback-unavailable-1', 'fallback-unavailable-2', 'auto']);
+      assert.equal(output.errors.length, 0);
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.results[0].fallbackUsed, true);
+      assert.equal(output.results[0].model, 'auto');
+    });
+
+    it('does not fall back to auto if fallbackToAuto is explicitly disabled', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'correctness',
+          lensDef: LENS_DEFINITIONS.correctness,
+          tier: 'heavy',
+          model: 'claude-3.5-haiku',
+          fallbacks: [],
+          fallbackToAuto: false,
+        },
+      ];
+
+      const calls = [];
+      const runnerFn = async ({ model }) => {
+        calls.push(model);
+        throw new Error('Model "claude-3.5-haiku" is not available');
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+        config: { fallback_to_auto: false },
+      });
+
+      assert.deepEqual(calls, ['claude-3.5-haiku']);
+      assert.equal(output.errors.length, 1);
+      assert.equal(output.errors[0].lensId, 'correctness');
+      assert.match(output.errors[0].error.message, /not available/);
+    });
+  });
 });
