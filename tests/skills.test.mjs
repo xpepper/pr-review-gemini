@@ -201,6 +201,30 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
     assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
   });
+
+  it('documents interactive PR comment command dispatcher in SKILL.md (Increment 18)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Interactive PR Comment Command Dispatcher/i, 'Should document Interactive PR Comment Command Dispatcher');
+    assert.match(content, /\/gem-review/i, 'Should mention /gem-review');
+    assert.match(content, /\/gem-pr-review/i, 'Should mention /gem-pr-review');
+    assert.match(content, /author_association/i, 'Should mention author_association');
+    assert.match(content, /COLLABORATOR/i, 'Should mention COLLABORATOR');
+    assert.match(content, /eyes/i, 'Should document eyes reaction');
+    assert.match(content, /rocket/i, 'Should document rocket reaction');
+    assert.match(content, /confused/i, 'Should document confused reaction');
+  });
+
+  it('documents interactive PR comment command dispatcher in README.md (Increment 18)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Interactive PR Comment Command Dispatcher/i, 'README should document Interactive PR Comment Command Dispatcher');
+    assert.match(readmeContent, /\/gem-review/i, 'README should document /gem-review');
+    assert.match(readmeContent, /author_association/i, 'README should document author_association');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
 
 

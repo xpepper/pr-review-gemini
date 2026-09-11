@@ -503,18 +503,30 @@ name: 'Gem PR Review'
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
   pull-requests: write
+  issues: write
 
 jobs:
   review:
     name: AI PR Code Review
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/gem-'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Checkout PR head
+        if: github.event_name == 'issue_comment' && github.event.issue.pull_request != null
+        run: gh pr checkout ${{ github.event.issue.number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@main
@@ -525,6 +537,48 @@ jobs:
           incremental: auto
           action: publish
 ```
+
+---
+
+## Interactive PR Comment Command Dispatcher (`/gem-review`)
+
+`gem-pr-review` includes an interactive pull request comment command dispatcher allowing reviewers and authors to trigger reviews directly from PR conversation threads using `/gem-review` or `/gem-pr-review`.
+
+### 1. Command Syntax & Supported Flags
+
+```
+/gem-review [options]
+/gem-pr-review [options]
+```
+
+| Flag | Description |
+| :--- | :--- |
+| `--quick` | Fast 3-lens review (Correctness, Contracts, Conventions) |
+| `--balanced` | Standard 5-lens review (default) |
+| `--full` | Exhaustive 6-lens review (includes Security, Performance, and Test Quality) |
+| `--deep` | Focused single-lens review with high reasoning effort |
+| `--incremental` | Review only changes since last review and revalidate prior findings |
+| `--role=<id>` | Run specific specialist review roles (e.g. `--role=a11y`, `--role=perf`) |
+| `--replace-standard-roles` | Run only specified custom roles, skipping standard lenses |
+| `--verify` | Execute detached worktree test verification against PR head commit |
+| `--fail-on=<sev>` | Set CI quality gate threshold (`P0`, `P1`, `P2`, `P3`, or `none`) |
+| `--select=<filter>` | Filter published findings (e.g. `--select="p0,p1"`, `--select="min:p2"`) |
+| `--dry-run` | Generate review summary without posting review comments to the PR |
+| `--help`, `-h` | Display usage guide in PR comment thread |
+
+### 2. Host-Gated Security & Authorization
+
+To protect CI runner minutes and model quota from unauthorized consumption, comment commands are strictly host-gated:
+- **Authorized Users**: Only commenters with `author_association` equal to `OWNER`, `MEMBER`, or `COLLABORATOR`, or users with explicit repository write permissions (`push` or `admin`), can trigger review runs.
+- **Friendly Denial**: If an unauthorized user (such as an outside contributor with association `FIRST_TIME_CONTRIBUTOR` or `NONE`) writes `/gem-review`, the action immediately adds a 😕 (`confused`) reaction and posts a friendly denial explanation without running subagents.
+
+### 3. Visual Lifecycle Management
+
+The dispatcher provides immediate visual feedback directly on the invoking comment:
+- **👀 Acknowledgment (`eyes`)**: Reacted immediately upon detecting a `/gem-review` command.
+- **🚀 In-Progress (`rocket`)**: Reacted when subagents start running.
+- **👍 Success (`+1`)**: Reacted when the review finishes successfully, accompanied by a concise completion reply comment.
+- **😕 Denial or Error (`confused`)**: Reacted if the commenter lacks permissions or if an execution error occurs.
 
 ---
 
