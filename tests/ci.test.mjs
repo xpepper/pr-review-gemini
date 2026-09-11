@@ -870,6 +870,94 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.unlinkSync(tmpEvent);
       }
     });
+
+    it('executes detached worktree verification when --verify is passed in comment command', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-verify-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 18,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/18' },
+        },
+        comment: {
+          id: 777,
+          body: '/gem-review --quick --verify=unit',
+          author_association: 'MEMBER',
+          user: { login: 'verified-member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'verified-member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        let verifiedProfile = null;
+        const mockVerification = async ({ prNumber, profileName }) => {
+          verificationExecuted = true;
+          verifiedProfile = profileName;
+          return {
+            status: 'passed',
+            profile: profileName,
+            summary: 'Verification passed cleanly',
+          };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 0);
+        assert.equal(verificationExecuted, true);
+        assert.equal(verifiedProfile, 'unit');
+        assert.equal(result.verificationResult?.status, 'passed');
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('reacts with confused and fails when prNumber is missing on comment command', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-nopr-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {},
+        comment: {
+          id: 888,
+          body: '/gem-review --quick',
+          author_association: 'MEMBER',
+          user: { login: 'some-member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'some-member' },
+      }));
+
+      try {
+        const ghCalls = [];
+        const customExecGh = async (args) => {
+          ghCalls.push(args);
+          return JSON.stringify({ id: 1 });
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          execGhFn: customExecGh,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        assert.match(result.error, /PR number/);
+
+        // Verify confused reaction was added to comment
+        const reactionCalls = ghCalls.filter(call => call.some(a => String(a).includes('reactions')));
+        assert.ok(reactionCalls.length > 0);
+        assert.ok(reactionCalls[0].includes('content=confused'));
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
   });
 });
 
@@ -885,7 +973,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /pull-requests:\s*write/);
       assert.match(content, /issues:\s*write/);
       assert.match(content, /issue_comment:/);
-      assert.match(content, /gh pr checkout/);
+      assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
       assert.match(content, /uses:\s*actions\/checkout@v4/);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
@@ -1058,18 +1146,25 @@ Hope that helps!
         assert.match(info.reason, /not authorized/i);
       });
 
-      it('authorizes commenters with explicit repository push or admin permissions', () => {
+      it('authorizes commenters with explicit user or sender push or admin permissions', () => {
         const payloadWithPush = {
-          comment: { author_association: 'NONE', user: { login: 'contributor-with-write' } },
-          repository: { permissions: { push: true, pull: true } },
+          comment: { author_association: 'NONE', user: { login: 'contributor-with-write', permissions: { push: true, pull: true } } },
         };
         assert.equal(isAuthorizedCommenter(payloadWithPush), true);
 
         const payloadWithAdmin = {
           comment: { author_association: 'NONE', user: { login: 'admin-user' } },
-          repository: { permissions: { admin: true } },
+          sender: { permissions: { admin: true } },
         };
         assert.equal(isAuthorizedCommenter(payloadWithAdmin), true);
+      });
+
+      it('does NOT authorize commenters based on ambient repository.permissions', () => {
+        const payloadWithAmbientPush = {
+          comment: { author_association: 'NONE', user: { login: 'untrusted-user' } },
+          repository: { permissions: { push: true, pull: true, admin: true } },
+        };
+        assert.equal(isAuthorizedCommenter(payloadWithAmbientPush), false);
       });
 
       it('authorizes commenters in allowedUsers list regardless of association', () => {

@@ -338,9 +338,10 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @param {object} params.reviewResult
  * @param {object} params.qualityGateResult
  * @param {object} params.ciEnv
+ * @param {object} [params.verificationResult]
  * @returns {string}
  */
-export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv }) {
+export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verificationResult = null }) {
   const isPass = qualityGateResult.passed;
   const banner = isPass ? '✅ AI Code Review Passed' : '❌ AI Code Review Failed Quality Gate';
   const lines = [];
@@ -350,7 +351,12 @@ export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv }) {
   lines.push(`- **Mode**: \`${ciEnv.mode}\`${ciEnv.incremental ? ' *(incremental re-review)*' : ''}`);
   lines.push(`- **Findings Detected**: ${qualityGateResult.totalFindings}`);
   lines.push(`- **Blocking Defects**: ${qualityGateResult.blockingCount} *(Threshold: ${ciEnv.failOn})*`);
-  lines.push(`- **Action**: \`${ciEnv.action}\`\n`);
+  lines.push(`- **Action**: \`${ciEnv.action}\``);
+  if (verificationResult) {
+    const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
+    lines.push(`- **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`);
+  }
+  lines.push('');
 
   if (!isPass && qualityGateResult.blockingFindings.length > 0) {
     lines.push('### 🚫 Blocking Issues\n');
@@ -591,12 +597,12 @@ export function getCommenterAuthorization(payload, options = {}) {
     };
   }
 
-  // 3. Repository write permissions check
+  // 3. User write permissions check (scoped to comment author / sender only)
   const hasPush = Boolean(
     payload.comment?.user?.permissions?.push ||
+    payload.comment?.user?.permissions?.admin ||
     payload.sender?.permissions?.push ||
-    payload.repository?.permissions?.push ||
-    payload.repository?.permissions?.admin
+    payload.sender?.permissions?.admin
   );
 
   if (hasPush) {
@@ -604,7 +610,7 @@ export function getCommenterAuthorization(payload, options = {}) {
       authorized: true,
       association,
       username,
-      reason: `Commenter '${username}' has repository write permissions.`,
+      reason: `Commenter '${username}' has explicit write permissions.`,
     };
   }
 
@@ -655,7 +661,6 @@ const REACTION_MAP = {
  * @param {number|string} params.commentId
  * @param {string} params.reaction - '+1', 'eyes', 'rocket', 'confused', or emoji
  * @param {Function} params.execGhFn
- * @param {string} [params.githubToken]
  * @returns {Promise<{ success: boolean, reaction?: string, id?: number, error?: string }>}
  */
 export async function addCommentReaction({
@@ -663,7 +668,6 @@ export async function addCommentReaction({
   commentId,
   reaction,
   execGhFn,
-  githubToken,
 }) {
   if (!commentId || !repo || !reaction) {
     return { success: false, error: 'Missing repo, commentId, or reaction' };
@@ -707,7 +711,6 @@ export async function addCommentReaction({
  * @param {number|string} [params.issueNumber]
  * @param {string} params.body
  * @param {Function} params.execGhFn
- * @param {string} [params.githubToken]
  * @returns {Promise<{ success: boolean, id?: number, error?: string }>}
  */
 export async function postIssueComment({
@@ -716,7 +719,6 @@ export async function postIssueComment({
   issueNumber,
   body,
   execGhFn,
-  githubToken,
 }) {
   const number = prNumber || issueNumber;
   if (!number || !repo || !body) {
@@ -820,11 +822,13 @@ Trigger automated multi-lens AI code reviews directly from pull request comments
  * @param {object} [params={}]
  * @param {object} [params.qualityGateResult={}]
  * @param {object} [params.ciEnv={}]
+ * @param {object} [params.verificationResult]
  * @returns {string}
  */
 export function formatCompletionReply({
   qualityGateResult = {},
   ciEnv = {},
+  verificationResult = null,
 } = {}) {
   const verdict = qualityGateResult.verdict || 'PASS';
   const passed = qualityGateResult.passed !== false;
@@ -835,11 +839,17 @@ export function formatCompletionReply({
   const incremental = ciEnv.incremental ? ' *(incremental)*' : '';
   const failOn = ciEnv.failOn || 'none';
 
+  let verifyLine = '';
+  if (verificationResult) {
+    const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
+    verifyLine = `\n> - **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`;
+  }
+
   return `> ${icon} **Gem PR Review Complete**
 >
 > - **Verdict**: \`${verdict}\` (${passed ? 'Passed' : 'Failed quality gate'})
 > - **Mode**: \`${mode}\`${incremental}
 > - **Findings**: ${findings} detected (${blocking} blocking)
-> - **Quality Gate (fail_on)**: \`${failOn}\``;
+> - **Quality Gate (fail_on)**: \`${failOn}\`${verifyLine}`;
 }
 

@@ -403,12 +403,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Checkout PR head
-        if: github.event_name == 'issue_comment' && github.event.issue.pull_request != null
-        run: gh pr checkout ${{ github.event.issue.number }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@main
         with:
@@ -418,6 +412,9 @@ jobs:
           incremental: auto
           action: publish
 ```
+
+> [!NOTE]
+> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace or executed.
 
 ---
 

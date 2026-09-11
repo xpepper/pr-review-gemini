@@ -19,6 +19,7 @@ import {
   formatCompletionReply,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
+import { runVerification } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -72,24 +73,9 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     return { exitCode: 0, skipped: true, reason: 'not_a_command', ciEnv };
   }
 
-  if (!ciEnv.prNumber) {
-    const errorMsg =
-      'Error: Unable to determine PR number. Ensure workflow is triggered by pull_request or specify pr_number input.';
-    io.error(errorMsg);
-    writeGitHubStepOutputs(
-      {
-        verdict: 'FAIL',
-        findings_count: '0',
-        blocking_count: '0',
-        summary: errorMsg,
-      },
-      { outputFile: env.GITHUB_OUTPUT }
-    );
-    return { exitCode: 1, error: errorMsg, ciEnv };
-  }
-
   const cwd = options.cwd || process.cwd();
   const isMock = Boolean(options.mock || env.MOCK_CI === '1');
+  const runVerificationFn = options.runVerificationFn || runVerification;
 
   // GitHub CLI wrapper
   const execGhFn =
@@ -102,7 +88,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               headRefOid: 'ci-mock-head-sha',
               author: { login: 'ci-author' },
               state: 'OPEN',
-              title: `CI PR #${ciEnv.prNumber}`,
+              title: `CI PR #${ciEnv.prNumber || 0}`,
             })
           );
         }
@@ -141,42 +127,72 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       });
     });
 
+  // Safe reaction & comment helpers that catch/log API errors
+  const safeReact = async (reaction) => {
+    if (!ciEnv.commentId) return { success: false, skipped: true };
+    const res = await addCommentReaction({
+      repo: ciEnv.repo,
+      commentId: ciEnv.commentId,
+      reaction,
+      execGhFn,
+    });
+    if (!res.success && res.error) {
+      io.warn(`[CI] Warning: Failed to add '${reaction}' reaction to comment #${ciEnv.commentId}: ${res.error}`);
+    }
+    return res;
+  };
+
+  const safePostComment = async (body) => {
+    if (!ciEnv.prNumber) return { success: false, skipped: true };
+    const res = await postIssueComment({
+      repo: ciEnv.repo,
+      prNumber: ciEnv.prNumber,
+      body,
+      execGhFn,
+    });
+    if (!res.success && res.error) {
+      io.warn(`[CI] Warning: Failed to post comment reply to PR #${ciEnv.prNumber}: ${res.error}`);
+    }
+    return res;
+  };
+
+  if (!ciEnv.prNumber) {
+    const errorMsg =
+      'Error: Unable to determine PR number. Ensure workflow is triggered by pull_request or specify pr_number input.';
+    io.error(errorMsg);
+    if (ciEnv.isCommentCommand && ciEnv.commentId) {
+      await safeReact('confused');
+    }
+    writeGitHubStepOutputs(
+      {
+        verdict: 'FAIL',
+        findings_count: '0',
+        blocking_count: '0',
+        summary: errorMsg,
+      },
+      { outputFile: env.GITHUB_OUTPUT }
+    );
+    return { exitCode: 1, error: errorMsg, ciEnv };
+  }
+
   // Handle PR comment command dispatcher lifecycle
   if (ciEnv.isCommentCommand && ciEnv.commentId) {
     // 1. Immediate acknowledgment (eyes 👀)
-    await addCommentReaction({
-      repo: ciEnv.repo,
-      commentId: ciEnv.commentId,
-      reaction: 'eyes',
-      execGhFn,
-      githubToken: ciEnv.githubToken,
-    });
+    await safeReact('eyes');
 
     // 2. Authorization check
     if (!ciEnv.isAuthorized) {
       io.warn(
         `[CI] Unauthorized comment command from @${ciEnv.commentUser} (${ciEnv.commentAuthorAssociation}).`
       );
-      await addCommentReaction({
-        repo: ciEnv.repo,
-        commentId: ciEnv.commentId,
-        reaction: 'confused',
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safeReact('confused');
 
       const denialReply = formatUnauthorizedReply({
         username: ciEnv.commentUser,
         association: ciEnv.commentAuthorAssociation,
         command: ciEnv.commandInfo?.command || '/gem-review',
       });
-      await postIssueComment({
-        repo: ciEnv.repo,
-        prNumber: ciEnv.prNumber,
-        body: denialReply,
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safePostComment(denialReply);
 
       return { exitCode: 0, unauthorized: true, ciEnv };
     }
@@ -184,34 +200,16 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     // 3. Help check
     if (ciEnv.commandInfo?.help) {
       io.log(`[CI] Providing /gem-review help guide to @${ciEnv.commentUser}.`);
-      await addCommentReaction({
-        repo: ciEnv.repo,
-        commentId: ciEnv.commentId,
-        reaction: '+1',
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safeReact('+1');
 
       const helpReply = formatHelpReply();
-      await postIssueComment({
-        repo: ciEnv.repo,
-        prNumber: ciEnv.prNumber,
-        body: helpReply,
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safePostComment(helpReply);
 
       return { exitCode: 0, help: true, ciEnv };
     }
 
     // 4. In-progress status reaction (rocket 🚀)
-    await addCommentReaction({
-      repo: ciEnv.repo,
-      commentId: ciEnv.commentId,
-      reaction: 'rocket',
-      execGhFn,
-      githubToken: ciEnv.githubToken,
-    });
+    await safeReact('rocket');
   }
 
   io.log('========================================================');
@@ -263,6 +261,29 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       replaceStandardRoles: ciEnv.replaceStandardRoles,
     });
 
+    let verificationResult = null;
+    if (ciEnv.verify) {
+      const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
+      try {
+        io.log(`Running detached worktree test verification (profile: ${profileName})...`);
+        verificationResult = await runVerificationFn({
+          prNumber: ciEnv.prNumber,
+          profileName,
+          repoPath: cwd,
+          execGhFn,
+        });
+        io.log(`Verification status: ${verificationResult.status}`);
+      } catch (vErr) {
+        io.warn(`Warning: Worktree verification failed: ${vErr.message}`);
+        verificationResult = {
+          status: 'failed',
+          profile: profileName,
+          error: vErr.message,
+          output: vErr.message,
+        };
+      }
+    }
+
     const qualityGate = evaluateCiQualityGate(reviewResult.findings, {
       failOn: ciEnv.failOn,
     });
@@ -280,7 +301,12 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
     // Write GITHUB_STEP_SUMMARY if configured
     if (env.GITHUB_STEP_SUMMARY) {
-      const ciSummary = formatCiSummary({ reviewResult, qualityGateResult: qualityGate, ciEnv });
+      const ciSummary = formatCiSummary({
+        reviewResult,
+        qualityGateResult: qualityGate,
+        ciEnv,
+        verificationResult,
+      });
       try {
         fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${ciSummary}\n`, 'utf8');
       } catch (summaryErr) {
@@ -290,26 +316,15 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
     // PR comment command completion lifecycle (success reaction + completion reply)
     if (ciEnv.isCommentCommand && ciEnv.commentId) {
-      await addCommentReaction({
-        repo: ciEnv.repo,
-        commentId: ciEnv.commentId,
-        reaction: '+1',
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safeReact('+1');
 
       const completionReply = formatCompletionReply({
         reviewResult,
         qualityGateResult: qualityGate,
         ciEnv,
+        verificationResult,
       });
-      await postIssueComment({
-        repo: ciEnv.repo,
-        prNumber: ciEnv.prNumber,
-        body: completionReply,
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      });
+      await safePostComment(completionReply);
     }
 
     io.log('\n────────────────────────────────────────────────────────');
@@ -324,6 +339,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         exitCode: 1,
         qualityGate,
         reviewResult,
+        verificationResult,
         ciEnv,
       };
     }
@@ -333,17 +349,12 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       exitCode: 0,
       qualityGate,
       reviewResult,
+      verificationResult,
       ciEnv,
     };
   } catch (err) {
     if (ciEnv.isCommentCommand && ciEnv.commentId) {
-      await addCommentReaction({
-        repo: ciEnv.repo,
-        commentId: ciEnv.commentId,
-        reaction: 'confused',
-        execGhFn,
-        githubToken: ciEnv.githubToken,
-      }).catch(() => {});
+      await safeReact('confused');
     }
 
     const errorMsg = `CI Review execution failed: ${err.message}`;
