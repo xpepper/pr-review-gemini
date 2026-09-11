@@ -132,14 +132,18 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Added automated benchmark evaluation suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking recall, precision, and sensitivity against real PR defect patterns.
   - Added streamlined dogfood reviewer runner (`scripts/dogfood-pr.mjs`, `npm run dogfood:pr <PR_NUMBER>`).
   - Added 31 new tests (445 total passing across 98 suites) and comprehensive documentation.
-- [x] **Increment 17: Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (#29)**
+- [x] **Increment 17: Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (#29, PR #30)**
   - Created centralized CLI infrastructure module (`src/cli.js`):
-    - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`).
+    - `runIfDirect(importMetaUrl, mainFn, options)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`), with formatter error isolation and `exit: false` suppression support.
     - `handleCommonFlags(argv, options)`: Centralized handler for `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`).
     - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection supporting symlinks, relative paths, and extensionless invocations.
+    - `readOptionValue(args, index, optionName)`: Centralized CLI option argument parsing and fail-fast validation.
     - `formatCliError(err)`: Consistent error formatting for user-facing terminal output.
+  - Created dedicated pre-commit hook module (`src/pre-commit-hook.js`):
+    - Pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) with atomic file updates, file-locking concurrency serialization (`withHookLock`) with non-spinning sleep, and fail-closed shell execution (`npm run self-review || exit 1`).
+    - Git hooks directory resolution supporting linked worktrees and custom `core.hooksPath` with git metadata traversal validation.
   - Refactored sibling CLI entrypoints in `scripts/` (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`) to consume `src/cli.js`.
-  - Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) with atomic file updates, concurrency locking, and fail-closed shell execution.
-  - Added unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (535 total passing across 109 suites with 0 failures).
+  - Added 79 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (541 total passing across 109 suites with 0 failures).
+  - Executed dogfood review loop against PR #30, verified 0 blocking defects, and merged into `main` (commit `d92295c`).
 
 

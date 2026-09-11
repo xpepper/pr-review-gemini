@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/centralize-cli-infrastructure`
-* **Test Suite**: `npm test` runs and passes (535 tests across 109 suites, 0 failures)
+* **Current Branch**: `main`
+* **Test Suite**: `npm test` runs and passes (541 tests across 109 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -27,13 +27,13 @@
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
-  - Increment 17 (Issue #29): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication`
+  - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
 
 ---
 
-## Status: READY_FOR_PR_AND_DOGFOOD (Issue #29)
+## Status: INCREMENT_17_COMPLETED (PR #30 Merged)
 
-All 17 increments are fully implemented, verified test-first (535 passing tests across 109 suites, manifest version check green):
+All 17 increments are fully implemented, verified test-first (541 passing tests across 109 suites, manifest version check green):
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -43,7 +43,7 @@ All 17 increments are fully implemented, verified test-first (535 passing tests 
 - [x] Increment 14: Pluggable custom review roles & specialist lenses
 - [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
 - [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
-- [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29)
+- [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29, PR #30)
 
 ---
 
@@ -423,42 +423,49 @@ Possible future enhancements:
 
 ## Completed Work: Increment 17 — Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (Issue #29)
 
-- **GitHub Issue**: [#29: refactor(cli): centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Increment 17)](https://github.com/xpepper/pr-review-gemini/issues/29)
-- **Branch**: `feat/centralize-cli-infrastructure`
+- **GitHub Issue**: [#29: refactor(cli): centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Increment 17)](https://github.com/xpepper/pr-review-gemini/issues/29) (Closed)
+- **GitHub PR**: [#30: feat(cli): centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (#29)](https://github.com/xpepper/pr-review-gemini/pull/30) (Merged, commit `d92295c`)
+- **Branch**: `feat/centralize-cli-infrastructure` (deleted)
 - **Changes Delivered**:
   - `src/cli.js` — Centralized CLI Infrastructure Module:
     - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection supporting symlinks, relative paths, and extensionless invocations (e.g. `node scripts/self-review`).
     - `formatCliError(err, options)`: Consistent, human-friendly terminal error presentation with customizable prefixes and optional stack traces.
     - `handleCommonFlags(argv, options)`: Unified `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`) dispatch, with exit code 0 or suppression options.
-    - `runIfDirect(importMetaUrl, mainFn, options)`: Standardized top-level execution wrapper trapping synchronous throws and asynchronous promise rejections, printing formatted errors and exiting with code 1.
+    - `readOptionValue(args, index, optionName)`: Centralized CLI option argument extractor with fail-fast validation against omitted arguments or adjacent option flags.
+    - `runIfDirect(importMetaUrl, mainFn, options)`: Standardized top-level execution wrapper trapping synchronous throws and asynchronous promise rejections, printing formatted errors, clamping exit codes, isolating formatter crashes, and supporting `exit: false` suppression for test harnesses.
+  - `src/pre-commit-hook.js` — Dedicated Pre-Commit Hook Lifecycle Module:
+    - `withHookLock(hookPath, fn)`: Concurrency serialization using atomic lockfiles with non-spinning sleep (`Atomics.wait`), directory creation, stale lock recovery, and fail-closed timeout error propagation.
     - `installPreCommitHook(options)`: Automated git pre-commit hook installer ensuring `.git/hooks/pre-commit` exists, is executable (`0o755`), and invokes `npm run self-review || exit 1` with a prior exit status guard (`__gem_prev=$?`). Preserves existing third-party hooks by inserting before terminal exits or appending safely.
     - `uninstallPreCommitHook(options)`: Cleans up self-review hook using file provenance tracking (`PRE_COMMIT_HOOK_MANAGED_FILE_MARKER`), unlinking the file only if auto-generated without third-party commands, or surgically stripping managed lines to preserve user commands.
     - `isPreCommitHookInstalled(options)`: Inspects git hooks directory for existing self-review configuration.
     - `findGitRootDir(startDir)`: Upward filesystem traversal resolving the enclosing repository root from subdirectories.
-    - `resolveGitHooksDir(rootDir)`: Robustly resolves hook directory for standard repositories and linked worktrees, with path-traversal validation for `.git` gitdir and commondir pointers.
-    - `hasActiveHookCommandInLines(lines, command)`: Single-split line scanner matching active command invocations with arguments, pipes, or compound operators while ignoring comments.
+    - `resolveGitHooksDir(rootDir)`: Robustly resolves hook directory for standard repositories and linked worktrees, with git metadata verification (`commondir`, `HEAD`, `config`, `gitdir`, `hooks`) to prevent path traversal.
+    - `hasActiveFailClosedHookCommandInLines(lines, command)`: Single-split line scanner matching active command invocations with arguments, pipes, or compound operators while ignoring comments.
   - Sibling CLI Entrypoints Refactored in `scripts/`:
     - `scripts/dogfood-pr.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
-    - `scripts/dogfood-review.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
-    - `scripts/self-review.mjs`: Uses `handleCommonFlags`, `runIfDirect`, and adds `--install-hook` / `--uninstall-hook` CLI options.
+    - `scripts/dogfood-review.mjs`: Uses `handleCommonFlags`, `readOptionValue`, and `runIfDirect`.
+    - `scripts/self-review.mjs`: Uses `handleCommonFlags`, `readOptionValue`, `runIfDirect`, and adds `--install-hook` / `--uninstall-hook` CLI options with trimmed command validation.
     - `scripts/ci-action.mjs`: Uses `runIfDirect`.
     - `scripts/bump-version.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
   - `package.json`:
     - Added npm script `"install-hook": "node scripts/self-review.mjs --install-hook"`.
-  - Architecture & Module Isolation:
-    - Dedicated CLI infrastructure housed exclusively in `src/cli.js` without polluting core `src/reviewer.js` domain surface.
-    - Linked Git worktree hook resolution via `resolveGitHooksDir` parsing `.git` gitdir and commondir indirections with path traversal validation.
-    - Fail-closed execution in pre-commit hooks via `__gem_prev` guard and `${command} || exit 1`.
-    - Hardened heredoc scanning ignoring comment lines and here-strings (`<<<`).
-    - Clamped error exit codes in `runIfDirect` ensuring failures terminate strictly with code >= 1.
-    - Scoped ambient debug flag sniffing (`GEM_PR_REVIEW_DEBUG === '1'` / `DEBUG === '1'`).
   - Documentation & Skill:
     - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
+  - Dogfood Review & PR Quality Verification:
+    - Opened PR #30 and ran multi-lens dogfood review via `scripts/dogfood-pr.mjs 30 --publish`.
+    - Addressed review findings across multiple iterations:
+      - Isolated pre-commit hook module into `src/pre-commit-hook.js` and re-exported from `src/cli.js`.
+      - Non-spinning `sleepSync` using `Atomics.wait` for `withHookLock`.
+      - Git metadata containment check in `resolveGitHooksDir`.
+      - Centralized `readOptionValue` argument extraction across sibling entrypoints.
+      - Supported `exit: false` suppression option in `runIfDirect`.
+      - Safe isolation of formatter errors in `runIfDirect`.
+    - Automated dogfood review and GitHub Actions CI both passed with 0 blocking defects (0 P0, 0 P1).
+    - Squash-merged into `main` (commit `d92295c`).
   - Tests & Verification:
-    - Added 73 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
-    - Total **535 tests passing across 109 suites with 0 failures**.
+    - Added 79 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
+    - Total **541 tests passing across 109 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
-    - Verified `npm run install-hook`, subdirectory resolution, worktree hook resolution, idempotency, shell fail-closed execution, and `--uninstall-hook` end-to-end.
 
 ---
 
