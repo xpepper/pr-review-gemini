@@ -454,6 +454,36 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.equal(result.exitCode, 1);
       assert.match(result.error, /PR number/i);
     });
+
+    it('handles version option and INPUT_VERSION env variable', async () => {
+      let logged = '';
+      const mockIo = {
+        log: (msg) => { logged += msg; },
+        error: () => {},
+        warn: () => {},
+      };
+
+      const res1 = await runCiAction({ version: true }, {}, mockIo);
+      assert.equal(res1.exitCode, 0);
+      assert.match(logged, /gem-pr-review v\d+\.\d+\.\d+/);
+
+      logged = '';
+      const res2 = await runCiAction({}, { INPUT_VERSION: 'true' }, mockIo);
+      assert.equal(res2.exitCode, 0);
+      assert.match(logged, /gem-pr-review v\d+\.\d+\.\d+/);
+    });
+
+    it('does not trigger version short-circuit when ambient process.argv contains -v if options.version is not set', async () => {
+      const origArgv = [...process.argv];
+      process.argv.push('-v', '--version');
+      try {
+        const result = await runCiAction({}, {}, silentIo);
+        assert.equal(result.exitCode, 1);
+        assert.match(result.error, /PR number/i);
+      } finally {
+        process.argv = origArgv;
+      }
+    });
   });
 });
 
