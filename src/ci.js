@@ -349,8 +349,18 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @returns {string}
  */
 export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verificationResult = null }) {
-  const isPass = qualityGateResult.passed;
-  const banner = isPass ? '✅ AI Code Review Passed' : '❌ AI Code Review Failed Quality Gate';
+  const vPassed = isVerificationPassed(verificationResult);
+  const isPass = qualityGateResult.passed && vPassed;
+  let banner;
+  if (isPass) {
+    banner = '✅ AI Code Review Passed';
+  } else if (!qualityGateResult.passed && !vPassed) {
+    banner = '❌ AI Code Review and Verification Failed';
+  } else if (!vPassed) {
+    banner = '❌ Detached Worktree Verification Failed';
+  } else {
+    banner = '❌ AI Code Review Failed Quality Gate';
+  }
   const lines = [];
 
   lines.push(`## ${banner}\n`);

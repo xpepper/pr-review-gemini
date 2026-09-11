@@ -318,98 +318,98 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               output: errorMsg,
             };
           } else {
-          // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
-        let isCrossRepo = true;
-        let originCheckFailed = false;
-        let originError = null;
-        let headSha = null;
+            // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
+            let isCrossRepo = true;
+            let originCheckFailed = false;
+            let originError = null;
+            let headSha = null;
 
-        try {
-          const prMetaStdout = await execGhFn(
-            [
-              'pr',
-              'view',
-              String(ciEnv.prNumber),
-              '--json',
-              'isCrossRepository,headRepository,headRepositoryOwner,headRefOid',
-            ],
-            { cwd }
-          );
-          const parsedMeta = JSON.parse(prMetaStdout);
-          headSha =
-            typeof parsedMeta?.headRefOid === 'string' && parsedMeta.headRefOid.trim()
-              ? parsedMeta.headRefOid.trim()
-              : null;
-          if (!headSha) {
-            originCheckFailed = true;
-            originError = 'GitHub API response missing or empty headRefOid commit SHA';
-          } else if (typeof parsedMeta?.isCrossRepository === 'boolean') {
-            isCrossRepo = parsedMeta.isCrossRepository;
-          } else if (parsedMeta?.headRepository?.nameWithOwner && ciEnv.repo) {
-            isCrossRepo =
-              parsedMeta.headRepository.nameWithOwner.toLowerCase() !==
-              ciEnv.repo.toLowerCase();
-          } else if (parsedMeta?.headRepositoryOwner?.login && ciEnv.repo) {
-            const [baseOwner] = ciEnv.repo.split('/');
-            isCrossRepo =
-              parsedMeta.headRepositoryOwner.login.toLowerCase() !==
-              baseOwner.toLowerCase();
-          } else if (isMock && !options.simulateForkPr && !options.simulateOriginError) {
-            isCrossRepo = false;
-          } else {
-            originCheckFailed = true;
-            originError = 'GitHub API response missing repository origin indicators';
-          }
-        } catch (metaErr) {
-          originCheckFailed = true;
-          originError = metaErr.message;
-        }
+            try {
+              const prMetaStdout = await execGhFn(
+                [
+                  'pr',
+                  'view',
+                  String(ciEnv.prNumber),
+                  '--json',
+                  'isCrossRepository,headRepository,headRepositoryOwner,headRefOid',
+                ],
+                { cwd }
+              );
+              const parsedMeta = JSON.parse(prMetaStdout);
+              headSha =
+                typeof parsedMeta?.headRefOid === 'string' && parsedMeta.headRefOid.trim()
+                  ? parsedMeta.headRefOid.trim()
+                  : null;
+              if (!headSha) {
+                originCheckFailed = true;
+                originError = 'GitHub API response missing or empty headRefOid commit SHA';
+              } else if (typeof parsedMeta?.isCrossRepository === 'boolean') {
+                isCrossRepo = parsedMeta.isCrossRepository;
+              } else if (parsedMeta?.headRepository?.nameWithOwner && ciEnv.repo) {
+                isCrossRepo =
+                  parsedMeta.headRepository.nameWithOwner.toLowerCase() !==
+                  ciEnv.repo.toLowerCase();
+              } else if (parsedMeta?.headRepositoryOwner?.login && ciEnv.repo) {
+                const [baseOwner] = ciEnv.repo.split('/');
+                isCrossRepo =
+                  parsedMeta.headRepositoryOwner.login.toLowerCase() !==
+                  baseOwner.toLowerCase();
+              } else if (isMock && !options.simulateForkPr && !options.simulateOriginError) {
+                isCrossRepo = false;
+              } else {
+                originCheckFailed = true;
+                originError = 'GitHub API response missing repository origin indicators';
+              }
+            } catch (metaErr) {
+              originCheckFailed = true;
+              originError = metaErr.message;
+            }
 
-        if (originCheckFailed) {
-          const errorMsg = `Unable to verify PR repository origin due to GitHub API error: ${originError}. Detached execution aborted.`;
-          io.warn(`[CI] Security: ${errorMsg}`);
-          verificationResult = {
-            status: 'failed',
-            profile: profileName,
-            error: errorMsg,
-            output: errorMsg,
-          };
-        } else if (isCrossRepo) {
-          const skipMsg =
-            'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
-          io.warn(`[CI] Security: ${skipMsg}`);
-          verificationResult = {
-            status: 'failed',
-            profile: profileName,
-            error: skipMsg,
-            output: skipMsg,
-          };
-        } else {
-          try {
-            io.log(`Running detached worktree test verification (profile: ${profileName})...`);
-            verificationResult = await runVerificationFn({
-              prNumber: ciEnv.prNumber,
-              headSha,
-              profileName,
-              repoPath: cwd,
-              execGhFn,
-              config: options.config,
-            });
-            io.log(`Verification status: ${verificationResult.status}`);
-          } catch (vErr) {
-            io.warn(`Warning: Worktree verification failed: ${vErr.message}`);
-            verificationResult = {
-              status: 'failed',
-              profile: profileName,
-              error: vErr.message,
-              output: vErr.message,
-            };
+            if (originCheckFailed) {
+              const errorMsg = `Unable to verify PR repository origin due to GitHub API error: ${originError}. Detached execution aborted.`;
+              io.warn(`[CI] Security: ${errorMsg}`);
+              verificationResult = {
+                status: 'failed',
+                profile: profileName,
+                error: errorMsg,
+                output: errorMsg,
+              };
+            } else if (isCrossRepo) {
+              const skipMsg =
+                'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
+              io.warn(`[CI] Security: ${skipMsg}`);
+              verificationResult = {
+                status: 'failed',
+                profile: profileName,
+                error: skipMsg,
+                output: skipMsg,
+              };
+            } else {
+              try {
+                io.log(`Running detached worktree test verification (profile: ${profileName})...`);
+                verificationResult = await runVerificationFn({
+                  prNumber: ciEnv.prNumber,
+                  headSha,
+                  profileName,
+                  repoPath: cwd,
+                  execGhFn,
+                  config: options.config,
+                });
+                io.log(`Verification status: ${verificationResult.status}`);
+              } catch (vErr) {
+                io.warn(`Warning: Worktree verification failed: ${vErr.message}`);
+                verificationResult = {
+                  status: 'failed',
+                  profile: profileName,
+                  error: vErr.message,
+                  output: vErr.message,
+                };
+              }
+            }
           }
         }
       }
     }
-  }
-}
 
     const qualityGate = evaluateCiQualityGate(reviewResult.findings, {
       failOn: ciEnv.failOn,

@@ -1831,6 +1831,63 @@ Hope that helps!
       });
     });
 
+    describe('formatCiSummary', () => {
+      const mockQualityPass = { verdict: 'PASS', passed: true, totalFindings: 0, blockingCount: 0, blockingFindings: [] };
+      const mockQualityFail = {
+        verdict: 'FAIL',
+        passed: false,
+        totalFindings: 1,
+        blockingCount: 1,
+        blockingFindings: [{ severity: 'P1', filePath: 'src/index.js', line: 10, title: 'Bug' }],
+      };
+      const ciEnv = { mode: 'balanced', incremental: false, failOn: 'P1', action: 'publish' };
+
+      it('displays passing banner when quality gate passes and no verification requested', () => {
+        const summary = formatCiSummary({ qualityGateResult: mockQualityPass, ciEnv });
+        assert.match(summary, /## ✅ AI Code Review Passed/);
+        assert.match(summary, /- \*\*Verdict\*\*: `PASS`/);
+      });
+
+      it('displays passing banner when both quality gate and verification pass', () => {
+        const summary = formatCiSummary({
+          qualityGateResult: mockQualityPass,
+          ciEnv,
+          verificationResult: { status: 'passed', profile: 'test' },
+        });
+        assert.match(summary, /## ✅ AI Code Review Passed/);
+        assert.match(summary, /- \*\*Detached Verification \(test\)\*\*: `PASSED`/);
+      });
+
+      it('displays verification failed banner when quality gate passes but verification fails', () => {
+        const summary = formatCiSummary({
+          qualityGateResult: mockQualityPass,
+          ciEnv,
+          verificationResult: { status: 'failed', profile: 'test' },
+        });
+        assert.match(summary, /## ❌ Detached Worktree Verification Failed/);
+        assert.match(summary, /- \*\*Detached Verification \(test\)\*\*: `FAILED`/);
+      });
+
+      it('displays quality gate failed banner when review fails but verification passes', () => {
+        const summary = formatCiSummary({
+          qualityGateResult: mockQualityFail,
+          ciEnv,
+          verificationResult: { status: 'passed', profile: 'test' },
+        });
+        assert.match(summary, /## ❌ AI Code Review Failed Quality Gate/);
+        assert.match(summary, /### 🚫 Blocking Issues/);
+      });
+
+      it('displays combined failure banner when both quality gate and verification fail', () => {
+        const summary = formatCiSummary({
+          qualityGateResult: mockQualityFail,
+          ciEnv,
+          verificationResult: { status: 'failed', profile: 'test' },
+        });
+        assert.match(summary, /## ❌ AI Code Review and Verification Failed/);
+      });
+    });
+
     describe('isVerificationPassed', () => {
       it('returns true when verificationResult is null or undefined (no verification requested)', () => {
         assert.equal(isVerificationPassed(null), true);
