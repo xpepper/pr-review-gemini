@@ -8,6 +8,7 @@
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
+import { PLUGIN_VERSION } from '../src/version.js';
 
 export function printUsage(output = console.log) {
   output(`
@@ -29,6 +30,7 @@ Options:
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --json              Output machine-readable JSON result
   --mock              Use synthetic runner for testing without LLM inference
+  -v, --version       Display version information
   --help, -h          Display this help message
 `);
 }
@@ -41,6 +43,7 @@ export function parseCliArgs(args) {
   let json = false;
   let mock = false;
   let showHelp = false;
+  let showVersion = false;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -48,6 +51,8 @@ export function parseCliArgs(args) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') {
       showHelp = true;
+    } else if (arg === '--version' || arg === '-v') {
+      showVersion = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
@@ -91,6 +96,7 @@ export function parseCliArgs(args) {
     json,
     mock,
     showHelp,
+    showVersion,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
@@ -98,6 +104,11 @@ export function parseCliArgs(args) {
 
 export async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
+
+  if (parsed.showVersion) {
+    console.log(`gem-pr-review v${PLUGIN_VERSION}`);
+    process.exit(0);
+  }
 
   if (parsed.showHelp) {
     printUsage();

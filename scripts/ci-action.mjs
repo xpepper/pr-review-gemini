@@ -16,6 +16,7 @@ import {
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
+import { PLUGIN_VERSION } from '../src/version.js';
 
 const MOCK_DIFF = `diff --git a/src/sample.js b/src/sample.js
 index 1111111..2222222 100644
@@ -37,6 +38,16 @@ index 1111111..2222222 100644
  * @returns {Promise<{ exitCode: number, qualityGate?: object, reviewResult?: object, ciEnv?: object, error?: string }>}
  */
 export async function runCiAction(options = {}, env = process.env, io = console) {
+  if (
+    options.version ||
+    env.INPUT_VERSION === 'true' ||
+    process.argv.includes('-v') ||
+    process.argv.includes('--version')
+  ) {
+    io.log(`gem-pr-review v${PLUGIN_VERSION}`);
+    return { exitCode: 0, version: PLUGIN_VERSION };
+  }
+
   const ciEnv = resolveCiEnvironment(options, env);
 
   if (!ciEnv.prNumber) {

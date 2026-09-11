@@ -22,6 +22,7 @@ import {
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
+import { PLUGIN_VERSION } from '../src/version.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -50,6 +51,7 @@ Options:
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
   --mock            Use synthetic runner for testing without inference
+  -v, --version     Display version information
   --help, -h        Display this help message
 `);
 }
@@ -71,6 +73,7 @@ export function parseCliArgs(args) {
   let self = false;
   let incremental = false;
   let showHelp = false;
+  let showVersion = false;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -78,6 +81,8 @@ export function parseCliArgs(args) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') {
       showHelp = true;
+    } else if (arg === '--version' || arg === '-v') {
+      showVersion = true;
     } else if (arg === '--self') {
       self = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
@@ -148,6 +153,7 @@ export function parseCliArgs(args) {
     mockGh,
     incremental,
     showHelp,
+    showVersion,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
@@ -158,9 +164,9 @@ index 1111111..2222222 100644
 --- a/src/index.js
 +++ b/src/index.js
 @@ -1,3 +1,4 @@
- function main() {
-+  console.log("hello mock");
-    return 0;
+ function calculate() {
++  console.log("debug");
+   return 42;
  }
 `;
 
@@ -182,9 +188,15 @@ export async function main() {
     mockGh,
     incremental,
     showHelp,
+    showVersion,
     roles,
     replaceStandardRoles,
   } = parseCliArgs(process.argv.slice(2));
+
+  if (showVersion) {
+    console.log(`gem-pr-review v${PLUGIN_VERSION}`);
+    process.exit(0);
+  }
 
   if (showHelp) {
     printUsage();
