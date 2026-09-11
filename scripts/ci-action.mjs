@@ -19,7 +19,7 @@ import {
   formatCompletionReply,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
-import { runVerification } from '../src/verify.js';
+import { runVerification, listVerificationProfiles } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -264,7 +264,8 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     let verificationResult = null;
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
-      const SAFE_PROFILES = new Set(['test', 'build', 'lint']);
+      const registered = listVerificationProfiles(options.config);
+      const SAFE_PROFILES = new Set([...Object.keys(registered), 'typecheck', 'unit']);
 
       if (!SAFE_PROFILES.has(profileName)) {
         const errorMsg = `Security: Unrecognized or disallowed verification profile "${profileName}". Allowed safe profiles: ${[...SAFE_PROFILES].join(', ')}.`;
@@ -277,8 +278,10 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         };
       } else {
         // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
-        // Fail closed: block execution unless explicitly verified to be a same-repository branch
-        let isCrossRepo = true;
+        let isCrossRepo = false;
+        let originCheckFailed = false;
+        let originError = null;
+
         try {
           const prMetaStdout = await execGhFn(
             ['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'],
@@ -287,21 +290,24 @@ export async function runCiAction(options = {}, env = process.env, io = console)
           const parsedMeta = JSON.parse(prMetaStdout);
           if (typeof parsedMeta.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
-          } else if (isMock) {
-            isCrossRepo = false;
           }
         } catch (metaErr) {
-          if (isMock) {
-            isCrossRepo = false;
-          } else {
-            io.warn(
-              `[CI] Security: Unable to verify PR repository origin: ${metaErr.message}. Failing closed.`
-            );
-            isCrossRepo = true;
+          if (!isMock) {
+            originCheckFailed = true;
+            originError = metaErr.message;
           }
         }
 
-        if (isCrossRepo) {
+        if (originCheckFailed) {
+          const errorMsg = `Unable to verify PR repository origin due to GitHub API error: ${originError}. Detached execution aborted.`;
+          io.warn(`[CI] Security: ${errorMsg}`);
+          verificationResult = {
+            status: 'failed',
+            profile: profileName,
+            error: errorMsg,
+            output: errorMsg,
+          };
+        } else if (isCrossRepo) {
           const skipMsg = 'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
           io.warn(`[CI] Security: ${skipMsg}`);
           verificationResult = {

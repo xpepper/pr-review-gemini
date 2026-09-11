@@ -554,17 +554,33 @@ export function extractCommenterIdentity(input) {
     return { username: 'unknown', association: null };
   }
 
+  const normalizeUsername = (raw) => {
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : 'unknown';
+    }
+    if (raw && typeof raw === 'object' && typeof raw.login === 'string') {
+      const trimmed = raw.login.trim();
+      return trimmed.length > 0 ? trimmed : 'unknown';
+    }
+    if (raw != null) {
+      const str = String(raw).trim();
+      return str.length > 0 ? str : 'unknown';
+    }
+    return 'unknown';
+  };
+
   // 1. Parsed eventInfo shape (preferred)
   if (typeof input.commentUser === 'string' || input.commentAuthorAssociation !== undefined) {
     const rawAssoc = input.commentAuthorAssociation || null;
     return {
-      username: input.commentUser || 'unknown',
+      username: normalizeUsername(input.commentUser),
       association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
     };
   }
 
   // 2. Raw GitHub webhook payload shape
-  const username =
+  const rawUser =
     input.comment?.user?.login ||
     input.sender?.login ||
     input.user ||
@@ -579,7 +595,7 @@ export function extractCommenterIdentity(input) {
     null;
 
   return {
-    username,
+    username: normalizeUsername(rawUser),
     association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
   };
 }
