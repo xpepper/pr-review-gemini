@@ -140,5 +140,4 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     - `formatCliError(err)`: Consistent error formatting for user-facing terminal output.
   - Refactored sibling CLI entrypoints in `scripts/` (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`) to consume `src/cli.js`.
   - Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) configuring `.git/hooks/pre-commit` to run `npm run self-review`.
-  - Added 46 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (493 total passing across 107 suites with 0 failures).
-
+  - Added unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (520 total passing across 109 suites with 0 failures).

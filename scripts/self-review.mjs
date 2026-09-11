@@ -35,6 +35,7 @@ Options:
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --install-hook      Install git pre-commit hook to run self-review before commits
   --uninstall-hook    Remove self-review git pre-commit hook
+  --command <cmd>     Custom command for pre-commit hook [default: 'npm run self-review']
   --json              Output machine-readable JSON result
   --mock              Use synthetic runner for testing without LLM inference
   -v, --version       Display version information
@@ -53,6 +54,7 @@ export function parseCliArgs(args) {
   let showVersion = false;
   let installHook = false;
   let uninstallHook = false;
+  let command;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -66,6 +68,10 @@ export function parseCliArgs(args) {
       installHook = true;
     } else if (arg === '--uninstall-hook') {
       uninstallHook = true;
+    } else if (arg.startsWith('--command=')) {
+      command = arg.slice('--command='.length);
+    } else if (arg === '--command') {
+      command = args[++i] || command;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
@@ -112,6 +118,7 @@ export function parseCliArgs(args) {
     showVersion,
     installHook,
     uninstallHook,
+    command,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
@@ -124,7 +131,10 @@ export async function main() {
   const parsed = parseCliArgs(rawArgs);
 
   if (parsed.installHook) {
-    const res = installPreCommitHook({ rootDir: process.cwd() });
+    const res = installPreCommitHook({
+      rootDir: process.cwd(),
+      command: parsed.command,
+    });
     if (!res.success) {
       throw new Error(`Failed to install pre-commit hook: ${res.error}`);
     }
@@ -140,7 +150,10 @@ export async function main() {
   }
 
   if (parsed.uninstallHook) {
-    const res = uninstallPreCommitHook({ rootDir: process.cwd() });
+    const res = uninstallPreCommitHook({
+      rootDir: process.cwd(),
+      command: parsed.command,
+    });
     if (!res.success) {
       throw new Error(`Failed to uninstall pre-commit hook: ${res.error}`);
     }

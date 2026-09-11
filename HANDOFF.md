@@ -4,7 +4,7 @@
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **Current Branch**: `feat/centralize-cli-infrastructure`
-* **Test Suite**: `npm test` runs and passes (520 tests across 109 suites, 0 failures)
+* **Test Suite**: `npm test` runs and passes (529 tests across 109 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -33,7 +33,7 @@
 
 ## Status: READY_FOR_PR_AND_DOGFOOD (Issue #29)
 
-All 17 increments are fully implemented, verified test-first (520 passing tests across 109 suites, manifest version check green):
+All 17 increments are fully implemented, verified test-first (529 passing tests across 109 suites, manifest version check green):
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -456,7 +456,7 @@ Possible future enhancements:
     - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
   - Tests & Verification:
     - Added 73 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
-    - Total **520 tests passing across 109 suites with 0 failures**.
+    - Total **529 tests passing across 109 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
     - Verified `npm run install-hook`, subdirectory resolution, worktree hook resolution, idempotency, shell fail-closed execution, and `--uninstall-hook` end-to-end.
 

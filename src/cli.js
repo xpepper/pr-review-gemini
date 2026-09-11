@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { printVersionBanner } from './version.js';
 
@@ -83,8 +84,8 @@ export function resolveDebugFlag(options = {}) {
   if (
     env?.GEM_PR_REVIEW_DEBUG === '1' ||
     env?.GEM_PR_REVIEW_DEBUG === 'true' ||
-    env?.DEBUG === '1' ||
-    env?.DEBUG === 'true'
+    env?.DEBUG === 'gem-pr-review' ||
+    env?.DEBUG === 'gem-pr-review:*'
   ) {
     return true;
   }
@@ -148,7 +149,7 @@ export function formatCliError(err, options = {}) {
  * @param {Function} [options.printVersionBanner] - Version banner function
  * @param {object} [options.io=console] - Logger object
  * @param {Function|boolean} [options.exit=process.exit] - Exit handler (false to suppress exit)
- * @param {string} [options.version=VERSION] - Version string
+ * @param {string} [options.version] - Version string (defaults to canonical plugin version)
  * @returns {{ handled: boolean, action?: 'version'|'help', exitCode?: number }}
  */
 export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
@@ -268,18 +269,56 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
 }
 
 /**
- * Resolves the git hooks directory for a standard git repository or linked worktree.
+ * Resolves the git hooks directory for a standard git repository, custom core.hooksPath, or linked worktree.
  * Searches upward from rootDir if rootDir is a subdirectory within a git repository.
  *
  * @param {string} [rootDir=process.cwd()]
+ * @param {object} [options={}]
+ * @param {string} [options.hooksDir] - Explicit custom hooks directory override
  * @returns {string|null} Absolute path to hooks directory, or null if not a git repository
  */
-export function resolveGitHooksDir(rootDir = process.cwd()) {
+export function resolveGitHooksDir(rootDir = process.cwd(), options = {}) {
+  if (options?.hooksDir) {
+    return path.resolve(options.hooksDir);
+  }
+
   const resolvedRoot = findGitRootDir(rootDir);
   if (!resolvedRoot) {
     return null;
   }
 
+  // 1. Check if git config core.hooksPath is set
+  try {
+    const configHooks = execFileSync('git', ['config', '--get', 'core.hooksPath'], {
+      cwd: resolvedRoot,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    if (configHooks) {
+      return path.isAbsolute(configHooks)
+        ? configHooks
+        : path.resolve(resolvedRoot, configHooks);
+    }
+  } catch {
+    // Ignore git command error (e.g. core.hooksPath unset or mock test repo)
+  }
+
+  // Fallback inspect .git/config directly if git binary was unavailable
+  try {
+    const cfgPath = path.join(resolvedRoot, '.git', 'config');
+    if (fs.existsSync(cfgPath)) {
+      const cfg = fs.readFileSync(cfgPath, 'utf8');
+      const match = cfg.match(/^\s*hooksPath\s*=\s*(.+)$/m);
+      if (match) {
+        const raw = match[1].trim();
+        return path.isAbsolute(raw) ? raw : path.resolve(resolvedRoot, raw);
+      }
+    }
+  } catch {
+    // Ignore config read error
+  }
+
+  // 2. Standard .git directory or linked worktree resolution
   const gitPath = path.join(resolvedRoot, '.git');
   try {
     const stat = fs.statSync(gitPath);
@@ -380,17 +419,86 @@ export function containsPreCommitHook(content, command = 'npm run self-review') 
 }
 
 /**
+ * Generates the canonical fail-closed pre-commit hook snippet lines.
+ *
+ * @param {string} [command='npm run self-review']
+ * @returns {string[]}
+ */
+export function generatePreCommitHookSnippet(command = 'npm run self-review') {
+  return [
+    PRE_COMMIT_HOOK_MARKER,
+    '__gem_prev=$?',
+    'if [ $__gem_prev -ne 0 ]; then',
+    '  exit $__gem_prev',
+    'fi',
+    `${command} || exit 1`,
+  ];
+}
+
+/**
+ * Checks whether a hook script line belongs to the managed pre-commit hook block.
+ *
+ * @param {string} line
+ * @param {string} [command='npm run self-review']
+ * @returns {boolean}
+ */
+export function isManagedHookSnippetLine(line, command = 'npm run self-review') {
+  if (typeof line !== 'string') {
+    return false;
+  }
+  const t = line.trim();
+  return (
+    t === PRE_COMMIT_HOOK_MARKER ||
+    t === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER ||
+    t === '__gem_prev=$?' ||
+    t === 'if [ $__gem_prev -ne 0 ]; then' ||
+    t === 'exit $__gem_prev' ||
+    t === 'fi' ||
+    t === command ||
+    t === `${command} || exit 1`
+  );
+}
+
+/**
+ * Resolves the default pre-commit hook command, inspecting root package.json if available.
+ *
+ * @param {string} [rootDir=process.cwd()]
+ * @param {string} [requestedCommand]
+ * @returns {string}
+ */
+export function resolveDefaultHookCommand(rootDir = process.cwd(), requestedCommand) {
+  if (typeof requestedCommand === 'string' && requestedCommand.trim()) {
+    return requestedCommand.trim();
+  }
+  try {
+    const pkgPath = path.join(rootDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      if (pkg?.scripts?.['self-review']) {
+        return 'npm run self-review';
+      }
+      if (pkg?.scripts?.['pr-review:self']) {
+        return 'npm run pr-review:self';
+      }
+    }
+  } catch {
+    // Ignore read/parse error
+  }
+  return 'npm run self-review';
+}
+
+/**
  * Checks if git pre-commit hook is installed and contains self-review.
  *
  * @param {object} [options={}]
  * @param {string} [options.rootDir=process.cwd()]
- * @param {string} [options.command='npm run self-review']
+ * @param {string} [options.command]
  * @returns {{ installed: boolean, containsSelfReview: boolean, hookPath: string }}
  */
 export function isPreCommitHookInstalled(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const hooksDir = resolveGitHooksDir(rootDir);
-  const command = options.command || 'npm run self-review';
+  const hooksDir = resolveGitHooksDir(rootDir, options);
+  const command = resolveDefaultHookCommand(rootDir, options.command);
 
   if (!hooksDir) {
     return {
@@ -419,12 +527,12 @@ export function isPreCommitHookInstalled(options = {}) {
  *
  * @param {object} [options={}]
  * @param {string} [options.rootDir=process.cwd()]
- * @param {string} [options.command='npm run self-review']
+ * @param {string} [options.command]
  * @returns {{ success: boolean, hookPath?: string, created?: boolean, appended?: boolean, alreadyInstalled?: boolean, error?: string }}
  */
 export function installPreCommitHook(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const hooksDir = resolveGitHooksDir(rootDir);
+  const hooksDir = resolveGitHooksDir(rootDir, options);
 
   if (!hooksDir) {
     return {
@@ -434,13 +542,19 @@ export function installPreCommitHook(options = {}) {
   }
 
   const hookPath = path.join(hooksDir, 'pre-commit');
-  const command = options.command || 'npm run self-review';
+  const command = resolveDefaultHookCommand(rootDir, options.command);
 
   try {
     fs.mkdirSync(hooksDir, { recursive: true });
     if (fs.existsSync(hookPath)) {
       const existing = fs.readFileSync(hookPath, 'utf8');
-      if (containsPreCommitHook(existing, command) || hasActiveHookCommand(existing, command)) {
+
+      // Only treat as already installed if it contains our fail-closed invocation
+      const isAlreadyFailClosed =
+        (containsPreCommitHook(existing, command) && existing.includes(`${command} || exit`)) ||
+        existing.includes(`${command} || exit 1`);
+
+      if (isAlreadyFailClosed) {
         try {
           fs.chmodSync(hookPath, 0o755);
         } catch {
@@ -453,43 +567,57 @@ export function installPreCommitHook(options = {}) {
         };
       }
 
-      // If an existing hook ends with a top-level terminal exit statement,
-      // insert before it so self-review is guaranteed to run.
-      // Top-level exit statements are unindented (column 0) and outside heredocs,
-      // avoiding nested exits inside if/then/fi branches, case blocks, or heredocs.
+      // Scan for top-level terminal exit statement:
+      // Outside heredocs, outside shell control blocks (if/fi, case/esac, while/done, for/done),
+      // and unindented.
       const lines = existing.split(/\r?\n/);
       let exitIdx = -1;
       let inHeredoc = false;
       let heredocDelim = '';
+      let blockDepth = 0;
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmed = line.trim();
-        if (!inHeredoc) {
-          if (trimmed.startsWith('#')) {
+        if (trimmed.startsWith('#')) {
+          continue;
+        }
+
+        if (inHeredoc) {
+          if (trimmed === heredocDelim) {
+            inHeredoc = false;
+            heredocDelim = '';
+          }
+          continue;
+        }
+
+        // Avoid false-positives on arithmetic left-shift ($((1 << 2)) or ((x << 1)))
+        const isArithmeticShift = /\$\(\(.*<<|\(\(.*<<|\b[0-9]+\s*<<\s*[0-9]+/.test(line);
+        if (!isArithmeticShift) {
+          const heredocMatch = line.match(/(?<!<|\$|\()(?:\s|^)<<-?\s*['"]?([A-Za-z_][A-Za-z0-9_]*)['"]?(?!\S)/);
+          if (heredocMatch) {
+            inHeredoc = true;
+            heredocDelim = heredocMatch[1];
             continue;
           }
-          const match = line.match(/(?<!<)<<-?\s*['"]?([A-Za-z0-9_]+)['"]?/);
-          if (match) {
-            inHeredoc = true;
-            heredocDelim = match[1];
-          } else if (/^exit\b/.test(line.trimEnd())) {
-            exitIdx = i;
-          }
-        } else if (trimmed === heredocDelim) {
-          inHeredoc = false;
-          heredocDelim = '';
+        }
+
+        // Shell block depth tracking outside heredocs
+        if (/^\s*if\b/.test(line)) blockDepth++;
+        if (/^\s*case\b/.test(line)) blockDepth++;
+        if (/^\s*(?:while|for)\b/.test(line)) blockDepth++;
+
+        if (/^\s*fi\b/.test(line)) blockDepth = Math.max(0, blockDepth - 1);
+        if (/^\s*esac\b/.test(line)) blockDepth = Math.max(0, blockDepth - 1);
+        if (/^\s*done\b/.test(line)) blockDepth = Math.max(0, blockDepth - 1);
+
+        // Terminal exit statement must be unindented and at top-level (blockDepth === 0)
+        if (blockDepth === 0 && !/^\s/.test(line) && /^exit\b/.test(trimmed)) {
+          exitIdx = i;
         }
       }
 
-      const hookBlock = [
-        PRE_COMMIT_HOOK_MARKER,
-        '__gem_prev=$?',
-        'if [ $__gem_prev -ne 0 ]; then',
-        '  exit $__gem_prev',
-        'fi',
-        `${command} || exit 1`,
-      ];
+      const hookBlock = generatePreCommitHookSnippet(command);
 
       if (exitIdx !== -1) {
         lines.splice(exitIdx, 0, ...hookBlock, '');
@@ -507,7 +635,7 @@ export function installPreCommitHook(options = {}) {
       };
     }
 
-    const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MANAGED_FILE_MARKER}\n${PRE_COMMIT_HOOK_MARKER}\n${command} || exit 1\n`;
+    const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MANAGED_FILE_MARKER}\n${generatePreCommitHookSnippet(command).join('\n')}\n`;
     fs.writeFileSync(hookPath, content, { mode: 0o755 });
     return {
       success: true,
@@ -528,25 +656,26 @@ export function installPreCommitHook(options = {}) {
  *
  * @param {object} [options={}]
  * @param {string} [options.rootDir=process.cwd()]
- * @param {string} [options.command='npm run self-review']
+ * @param {string} [options.command]
  * @returns {{ success: boolean, removed?: boolean, cleaned?: boolean, hookPath?: string, error?: string }}
  */
 export function uninstallPreCommitHook(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const hooksDir = resolveGitHooksDir(rootDir);
+  const hooksDir = resolveGitHooksDir(rootDir, options);
 
   if (!hooksDir) {
     return { success: true, removed: false };
   }
 
   const hookPath = path.join(hooksDir, 'pre-commit');
-  const command = options.command || 'npm run self-review';
+  const command = resolveDefaultHookCommand(rootDir, options.command);
 
   if (!fs.existsSync(hookPath)) {
     return { success: true, removed: false, hookPath };
   }
 
   try {
+    const statBefore = fs.statSync(hookPath);
     const content = fs.readFileSync(hookPath, 'utf8');
     // Only uninstall if it contains our managed marker
     if (!content.includes(PRE_COMMIT_HOOK_MARKER)) {
@@ -556,24 +685,10 @@ export function uninstallPreCommitHook(options = {}) {
     const lines = content.split(/\r?\n/);
     const hasManagedFileMarker = content.includes(PRE_COMMIT_HOOK_MANAGED_FILE_MARKER);
 
-    const isManagedSnippetLine = (l) => {
-      const t = l.trim();
-      return (
-        t === PRE_COMMIT_HOOK_MARKER ||
-        t === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER ||
-        t === '__gem_prev=$?' ||
-        t === 'if [ $__gem_prev -ne 0 ]; then' ||
-        t === 'exit $__gem_prev' ||
-        t === 'fi' ||
-        t === command ||
-        t === `${command} || exit 1`
-      );
-    };
-
-    // Check if the file only contains comments/shebang and our managed lines
+    // Check if the file contains any third-party commands
     const thirdPartyLines = lines
       .map((l) => l.trim())
-      .filter((l) => Boolean(l) && !l.startsWith('#') && !isManagedSnippetLine(l));
+      .filter((l) => Boolean(l) && !l.startsWith('#') && !isManagedHookSnippetLine(l, command));
 
     // If file was auto-created by us AND contains no third-party commands, delete it completely
     if (hasManagedFileMarker && thirdPartyLines.length === 0) {
@@ -581,7 +696,7 @@ export function uninstallPreCommitHook(options = {}) {
       return { success: true, removed: true, hookPath };
     }
 
-    // Otherwise, clean only our managed lines, preserving user content
+    // Otherwise, clean only our managed lines, preserving user content and original permissions
     const cleaned = [];
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -589,7 +704,7 @@ export function uninstallPreCommitHook(options = {}) {
 
       if (trimmed === PRE_COMMIT_HOOK_MARKER) {
         // Strip marker and any consecutive managed snippet lines
-        while (i + 1 < lines.length && isManagedSnippetLine(lines[i + 1])) {
+        while (i + 1 < lines.length && isManagedHookSnippetLine(lines[i + 1], command)) {
           i++;
         }
         continue;
@@ -601,7 +716,11 @@ export function uninstallPreCommitHook(options = {}) {
     }
 
     fs.writeFileSync(hookPath, cleaned.join('\n'));
-    fs.chmodSync(hookPath, 0o755);
+    try {
+      fs.chmodSync(hookPath, statBefore.mode & 0o777);
+    } catch {
+      // Ignore chmod error
+    }
     return { success: true, cleaned: true, hookPath };
   } catch (err) {
     return { success: false, error: err.message, hookPath };

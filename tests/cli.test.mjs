@@ -20,6 +20,9 @@ import {
   installPreCommitHook,
   uninstallPreCommitHook,
   isPreCommitHookInstalled,
+  generatePreCommitHookSnippet,
+  isManagedHookSnippetLine,
+  resolveDefaultHookCommand,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
 } from '../src/cli.js';
@@ -84,13 +87,21 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     });
 
     it('returns false when explicit debug is false even if other flags or env are present', () => {
-      assert.equal(resolveDebugFlag({ debug: false, verbose: true, env: { DEBUG: '1' } }), false);
+      assert.equal(resolveDebugFlag({ debug: false, verbose: true, env: { GEM_PR_REVIEW_DEBUG: '1' } }), false);
       assert.equal(resolveDebugFlag({ debug: false, argv: ['--debug'] }), false);
     });
 
-    it('returns true when options.env.DEBUG is set', () => {
-      assert.equal(resolveDebugFlag({ env: { DEBUG: '1' } }), true);
-      assert.equal(resolveDebugFlag({ env: { DEBUG: '' } }), false);
+    it('returns true when options.env.GEM_PR_REVIEW_DEBUG is set', () => {
+      assert.equal(resolveDebugFlag({ env: { GEM_PR_REVIEW_DEBUG: '1' } }), true);
+      assert.equal(resolveDebugFlag({ env: { GEM_PR_REVIEW_DEBUG: 'true' } }), true);
+      assert.equal(resolveDebugFlag({ env: { GEM_PR_REVIEW_DEBUG: '' } }), false);
+    });
+
+    it('returns true when options.env.DEBUG is set to gem-pr-review but ignores generic DEBUG=1', () => {
+      assert.equal(resolveDebugFlag({ env: { DEBUG: 'gem-pr-review' } }), true);
+      assert.equal(resolveDebugFlag({ env: { DEBUG: 'gem-pr-review:*' } }), true);
+      assert.equal(resolveDebugFlag({ env: { DEBUG: '1' } }), false);
+      assert.equal(resolveDebugFlag({ env: { DEBUG: 'express:*' } }), false);
     });
 
     it('returns true when argv includes --debug or --verbose', () => {
@@ -100,17 +111,17 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     });
 
     it('defaults to ambient process.env when options.env is omitted', () => {
-      const originalDebug = process.env.DEBUG;
+      const originalDebug = process.env.GEM_PR_REVIEW_DEBUG;
       try {
-        process.env.DEBUG = '1';
+        process.env.GEM_PR_REVIEW_DEBUG = '1';
         assert.equal(resolveDebugFlag(), true);
-        process.env.DEBUG = '';
+        process.env.GEM_PR_REVIEW_DEBUG = '';
         assert.equal(resolveDebugFlag(), false);
       } finally {
         if (originalDebug !== undefined) {
-          process.env.DEBUG = originalDebug;
+          process.env.GEM_PR_REVIEW_DEBUG = originalDebug;
         } else {
-          delete process.env.DEBUG;
+          delete process.env.GEM_PR_REVIEW_DEBUG;
         }
       }
     });
@@ -156,7 +167,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.match(withDebug, /Error: Explicit debug error/);
       assert.match(withDebug, /at /);
 
-      const withoutDebug = formatCliError(err, { debug: false, env: { DEBUG: '1' } });
+      const withoutDebug = formatCliError(err, { debug: false, env: { GEM_PR_REVIEW_DEBUG: '1' } });
       assert.equal(withoutDebug, '❌ Explicit debug error');
     });
   });
@@ -422,7 +433,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.match(loggedError, /at /);
     });
 
-    it('surfaces stack trace in runIfDirect when options.env.DEBUG is set', async () => {
+    it('surfaces stack trace in runIfDirect when options.env.GEM_PR_REVIEW_DEBUG or DEBUG=gem-pr-review is set', async () => {
       const dummyFile = path.resolve('scripts/dummy-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
 
@@ -438,7 +449,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
         argv: ['node', dummyFile],
         io: mockIo,
         exit: mockExit,
-        env: { DEBUG: '1' },
+        env: { GEM_PR_REVIEW_DEBUG: '1' },
       });
 
       assert.match(loggedError, /Error: Env debug error/);
@@ -981,7 +992,7 @@ exit 0
       fs.mkdirSync(hooksDir, { recursive: true });
       const hookFile = path.join(hooksDir, 'pre-commit');
 
-      const original = '#!/bin/sh\nnpm run self-review\nexit 0\n';
+      const original = '#!/bin/sh\nnpm run self-review || exit 1\nexit 0\n';
       fs.writeFileSync(hookFile, original, { mode: 0o755 });
 
       const res = installPreCommitHook({ rootDir: tempDir });
@@ -1059,6 +1070,178 @@ exit 0
       } catch (err) {
         assert.equal(err.code, 2, 'Hook must propagate prior failure code');
       }
+    });
+
+    it('provides single source of truth for managed snippet generation and identification', () => {
+      const snippet = generatePreCommitHookSnippet('npm run self-review');
+      assert.ok(Array.isArray(snippet));
+      assert.equal(snippet[0], PRE_COMMIT_HOOK_MARKER);
+      assert.ok(snippet.includes('npm run self-review || exit 1'));
+
+      for (const line of snippet) {
+        assert.equal(isManagedHookSnippetLine(line, 'npm run self-review'), true);
+      }
+      assert.equal(isManagedHookSnippetLine('# user comment', 'npm run self-review'), false);
+      assert.equal(isManagedHookSnippetLine('npm test', 'npm run self-review'), false);
+      assert.equal(isManagedHookSnippetLine(null), false);
+    });
+
+    it('resolves default hook command from package.json if available', () => {
+      // 1. package.json with self-review script
+      const pkgWithSelfReview = path.join(tempDir, 'package.json');
+      fs.writeFileSync(pkgWithSelfReview, JSON.stringify({
+        scripts: { 'self-review': 'node scripts/self-review.mjs' },
+      }));
+      assert.equal(resolveDefaultHookCommand(tempDir), 'npm run self-review');
+
+      // 2. package.json with pr-review:self script
+      fs.writeFileSync(pkgWithSelfReview, JSON.stringify({
+        scripts: { 'pr-review:self': 'node custom.mjs' },
+      }));
+      assert.equal(resolveDefaultHookCommand(tempDir), 'npm run pr-review:self');
+
+      // 3. Explicit requested command overrides package.json
+      assert.equal(resolveDefaultHookCommand(tempDir, 'npx gem-pr-review'), 'npx gem-pr-review');
+    });
+
+    it('honors core.hooksPath configuration and options.hooksDir override', () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+
+      // 1. Explicit options.hooksDir
+      const customHooksDir = path.join(tempDir, '.husky');
+      fs.mkdirSync(customHooksDir, { recursive: true });
+      assert.equal(resolveGitHooksDir(tempDir, { hooksDir: customHooksDir }), customHooksDir);
+
+      // 2. .git/config with core.hooksPath
+      const gitConfig = path.join(gitDir, 'config');
+      fs.writeFileSync(gitConfig, '[core]\n\thooksPath = .custom-hooks\n');
+      const expectedCustom = path.join(tempDir, '.custom-hooks');
+      assert.equal(resolveGitHooksDir(tempDir), expectedCustom);
+    });
+
+    it('does not insert before exits inside unindented if-blocks or case statements', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      // Hook with unindented exit inside if-block
+      const blockHook = `#!/bin/sh
+if [ "$CI" = "true" ]; then
+echo "in CI"
+exit 0
+fi
+
+npm test
+exit $?
+`;
+      fs.writeFileSync(hookFile, blockHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const ifExitIdx = content.indexOf('exit 0');
+      const terminalExitIdx = content.indexOf('exit $?');
+
+      assert.ok(selfReviewIdx > ifExitIdx, 'self-review must be inserted after unindented exit inside if block');
+      assert.ok(selfReviewIdx < terminalExitIdx, 'self-review must precede terminal exit $?');
+    });
+
+    it('does not enter heredoc mode on arithmetic left-shifts in shell scripts', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const shiftHook = `#!/bin/sh
+MASK=$((1 << 4))
+FLAG=$((2 << 1))
+exit 0
+`;
+      fs.writeFileSync(hookFile, shiftHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const terminalExitIdx = content.lastIndexOf('exit 0');
+
+      assert.ok(selfReviewIdx !== -1);
+      assert.ok(selfReviewIdx < terminalExitIdx, 'self-review must precede exit 0 despite arithmetic shifts');
+    });
+
+    it('preserves existing non-executable permissions (0o644) when uninstalling hook', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      // User created disabled hook (0o644)
+      fs.writeFileSync(hookFile, '#!/bin/sh\necho "disabled user hook"\n', { mode: 0o644 });
+      fs.chmodSync(hookFile, 0o644);
+
+      installPreCommitHook({ rootDir: tempDir });
+      assert.ok(fs.readFileSync(hookFile, 'utf8').includes('npm run self-review'));
+
+      // Deliberately reset mode to 0o644 to test that uninstall does not force-enable it
+      fs.chmodSync(hookFile, 0o644);
+
+      const uninstRes = uninstallPreCommitHook({ rootDir: tempDir });
+      assert.equal(uninstRes.success, true);
+      assert.equal(uninstRes.cleaned, true);
+
+      const stat = fs.statSync(hookFile);
+      assert.equal(stat.mode & 0o111, 0, 'Permissions must NOT be force-chmodded to executable 0o755 on uninstall');
+    });
+
+    it('upgrades existing non-fail-closed hook invocations with fail-closed gate', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      // Hook with command chained via semicolon (not fail-closed)
+      fs.writeFileSync(hookFile, '#!/bin/sh\nnpm run self-review; echo done\nexit 0\n', { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const updated = fs.readFileSync(hookFile, 'utf8');
+      assert.ok(updated.includes('npm run self-review || exit 1'), 'Must append fail-closed gate');
+    });
+
+    it('supports custom --command flag in self-review.mjs', async () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+
+      const selfReviewScript = path.resolve('scripts/self-review.mjs');
+
+      // Install with custom command
+      const { stdout: installOut } = await execFileAsync(
+        process.execPath,
+        [selfReviewScript, '--install-hook', '--command', 'npx custom-review'],
+        { cwd: tempDir }
+      );
+      assert.match(installOut, /Successfully installed pre-commit hook/);
+
+      const hookFile = path.join(gitDir, 'hooks', 'pre-commit');
+      const content = fs.readFileSync(hookFile, 'utf8');
+      assert.ok(content.includes('npx custom-review || exit 1'));
+
+      // Reinstall idempotency with custom command
+      const { stdout: reinstallOut } = await execFileAsync(
+        process.execPath,
+        [selfReviewScript, '--install-hook', '--command', 'npx custom-review'],
+        { cwd: tempDir }
+      );
+      assert.match(reinstallOut, /already installed/);
     });
   });
 

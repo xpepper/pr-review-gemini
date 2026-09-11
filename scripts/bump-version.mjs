@@ -16,7 +16,6 @@ import {
   isValidSemVer,
   checkManifestSync,
   getManifestVersions,
-  printVersionBanner,
 } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 import {
