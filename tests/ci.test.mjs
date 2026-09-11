@@ -1519,7 +1519,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /types:\s*\[.*opened.*synchronize.*\]/);
       assert.match(content, /pull-requests:\s*write/);
       assert.match(content, /issue_comment:/);
-      assert.match(content, /concurrency:/);
+      assert.match(content, /concurrency:\s*\n\s*group:\s*\${{\s*github\.workflow\s*}}-\${{\s*github\.event_name\s*}}-/);
       assert.match(content, /cancel-in-progress:\s*true/);
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-review['"]\)/);
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
