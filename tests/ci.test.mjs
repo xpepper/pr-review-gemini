@@ -19,6 +19,7 @@ import {
   formatHelpReply,
   formatCompletionReply,
   isVerificationPassed,
+  resolvePrContext,
 } from '../src/ci.js';
 import { runCiAction } from '../scripts/ci-action.mjs';
 
@@ -200,6 +201,32 @@ describe('CI Event Payload & Environment Resolution', () => {
       } finally {
         fs.unlinkSync(tmpFile);
       }
+    });
+  });
+
+  describe('resolvePrContext', () => {
+    it('resolves PR context from payload with pull_request object', () => {
+      assert.deepEqual(resolvePrContext({ pull_request: { number: 42 } }), { isPr: true, prNumber: 42 });
+      assert.deepEqual(resolvePrContext({ pull_request: {}, number: 42 }), { isPr: true, prNumber: 42 });
+    });
+
+    it('resolves PR context from issue payload with pull_request link', () => {
+      assert.deepEqual(resolvePrContext({ issue: { number: 99, pull_request: {} } }), { isPr: true, prNumber: 99 });
+      assert.deepEqual(resolvePrContext({ issue: { pull_request: {} }, number: 99 }), { isPr: true, prNumber: 99 });
+    });
+
+    it('resolves PR context from top-level PR action events without issue object', () => {
+      assert.deepEqual(resolvePrContext({ action: 'synchronize', number: 12 }), { isPr: true, prNumber: 12 });
+      assert.deepEqual(resolvePrContext({ action: 'opened', number: 13 }), { isPr: true, prNumber: 13 });
+      assert.deepEqual(resolvePrContext({ action: 'reopened', number: 14 }), { isPr: true, prNumber: 14 });
+    });
+
+    it('returns isPr: false for plain issues or non-PR payloads', () => {
+      assert.deepEqual(resolvePrContext({ issue: { number: 5 } }), { isPr: false, prNumber: null });
+      assert.deepEqual(resolvePrContext({ action: 'created', number: 5 }), { isPr: false, prNumber: null });
+      assert.deepEqual(resolvePrContext(null), { isPr: false, prNumber: null });
+      assert.deepEqual(resolvePrContext({}), { isPr: false, prNumber: null });
+      assert.deepEqual(resolvePrContext('invalid'), { isPr: false, prNumber: null });
     });
   });
 

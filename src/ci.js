@@ -12,6 +12,44 @@ import { resolveBlockingSeverities } from './self-review.js';
 const SEVERITY_LEVELS = ['P0', 'P1', 'P2', 'P3', 'nit'];
 
 /**
+ * Resolves PR context (isPr and prNumber) from GitHub event payload.
+ *
+ * @param {object} payload
+ * @returns {{ isPr: boolean, prNumber: number|null }}
+ */
+export function resolvePrContext(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return { isPr: false, prNumber: null };
+  }
+
+  if (payload.pull_request) {
+    const prNumber =
+      typeof payload.pull_request.number === 'number'
+        ? payload.pull_request.number
+        : (typeof payload.number === 'number' ? payload.number : null);
+    return { isPr: true, prNumber };
+  }
+
+  if (payload.issue && payload.issue.pull_request) {
+    const prNumber =
+      typeof payload.issue.number === 'number'
+        ? payload.issue.number
+        : (typeof payload.number === 'number' ? payload.number : null);
+    return { isPr: true, prNumber };
+  }
+
+  if (
+    !payload.issue &&
+    typeof payload.number === 'number' &&
+    (payload.action === 'synchronize' || payload.action === 'opened' || payload.action === 'reopened')
+  ) {
+    return { isPr: true, prNumber: payload.number };
+  }
+
+  return { isPr: false, prNumber: null };
+}
+
+/**
  * Parses GitHub event payload from object, JSON string, or file path.
  *
  * @param {object|string} payloadOrPath
@@ -65,17 +103,7 @@ export function parseEventPayload(payloadOrPath) {
   }
 
   const isComment = Boolean(payload.comment);
-  const isPr = Boolean(
-    payload.pull_request ||
-    (payload.issue && payload.issue.pull_request) ||
-    (!payload.issue && payload.number && (payload.action === 'synchronize' || payload.action === 'opened' || payload.action === 'reopened'))
-  );
-
-  const prNumber =
-    payload.pull_request?.number ||
-    (isPr ? payload.issue?.number : null) ||
-    (isPr ? payload.number : null) ||
-    null;
+  const { isPr, prNumber } = resolvePrContext(payload);
 
   const repo =
     payload.repository?.full_name ||
