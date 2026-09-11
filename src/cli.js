@@ -190,20 +190,21 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
       : (code) => process.exit(code);
   const formatErrorFn = options.formatError || formatCliError;
 
+  const env = options.env || process.env;
   const isDebug =
     options.debug !== undefined
       ? Boolean(options.debug)
       : Boolean(
           options.verbose ||
             options.stack ||
-            process.env.DEBUG ||
-            process.env.CI ||
+            env?.DEBUG ||
+            env?.CI ||
             argv.includes('--debug') ||
             argv.includes('--verbose')
         );
 
   const printAndExit = (err) => {
-    const msg = formatErrorFn(err, { debug: isDebug, ...options });
+    const msg = formatErrorFn(err, { debug: isDebug, env, ...options });
     (io.error || console.error)(msg);
     const code = typeof err?.exitCode === 'number' ? err.exitCode : 1;
     exitFn(code);
@@ -219,6 +220,20 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
   } catch (err) {
     return Promise.resolve(printAndExit(err));
   }
+}
+
+/**
+ * Checks whether pre-commit hook content contains the gem-pr-review hook or managed command.
+ *
+ * @param {string} content - Pre-commit hook file content
+ * @param {string} [command='npm run self-review'] - Expected command invocation
+ * @returns {boolean}
+ */
+export function containsPreCommitHook(content, command = 'npm run self-review') {
+  if (typeof content !== 'string') {
+    return false;
+  }
+  return content.includes(PRE_COMMIT_HOOK_MARKER) || content.includes(command);
 }
 
 /**
@@ -240,8 +255,7 @@ export function isPreCommitHookInstalled(options = {}) {
 
   try {
     const content = fs.readFileSync(hookPath, 'utf8');
-    const containsSelfReview =
-      content.includes(PRE_COMMIT_HOOK_MARKER) || content.includes(command);
+    const containsSelfReview = containsPreCommitHook(content, command);
     return { installed: true, containsSelfReview, hookPath };
   } catch {
     return { installed: true, containsSelfReview: false, hookPath };
@@ -275,7 +289,7 @@ export function installPreCommitHook(options = {}) {
     fs.mkdirSync(hooksDir, { recursive: true });
     if (fs.existsSync(hookPath)) {
       const existing = fs.readFileSync(hookPath, 'utf8');
-      if (existing.includes(PRE_COMMIT_HOOK_MARKER) || existing.includes(command)) {
+      if (containsPreCommitHook(existing, command)) {
         try {
           fs.chmodSync(hookPath, 0o755);
         } catch {
@@ -335,7 +349,7 @@ export function uninstallPreCommitHook(options = {}) {
 
   try {
     const content = fs.readFileSync(hookPath, 'utf8');
-    if (!content.includes(PRE_COMMIT_HOOK_MARKER) && !content.includes(command)) {
+    if (!containsPreCommitHook(content, command)) {
       return { success: true, removed: false, hookPath };
     }
 

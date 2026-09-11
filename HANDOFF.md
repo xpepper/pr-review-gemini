@@ -448,8 +448,8 @@ Possible future enhancements:
   - Documentation & Skill:
     - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
   - Tests & Verification:
-    - Added 39 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
-    - Total **486 tests passing across 105 suites with 0 failures**.
+    - Added 42 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
+    - Total **489 tests passing across 106 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
     - Verified `npm run install-hook`, idempotency, and `--uninstall-hook` end-to-end.
 

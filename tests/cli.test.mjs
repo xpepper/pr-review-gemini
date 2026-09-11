@@ -9,6 +9,7 @@ import {
   formatCliError,
   handleCommonFlags,
   runIfDirect,
+  containsPreCommitHook,
   installPreCommitHook,
   uninstallPreCommitHook,
   isPreCommitHookInstalled,
@@ -271,6 +272,53 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
 
       assert.match(loggedError, /Error: Unexpected crash in CI/);
       assert.match(loggedError, /at /);
+    });
+
+    it('respects injected options.env without reading ambient process.env', async () => {
+      const dummyFile = path.resolve('scripts/dummy-env-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+
+      let loggedError = '';
+      const mockIo = { error: (msg) => { loggedError += msg; } };
+      const mockExit = () => {};
+
+      const failingMain = () => {
+        throw new Error('Crash with injected env');
+      };
+
+      // With env: { DEBUG: '1' }, stack trace should be included
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+        env: { DEBUG: '1' },
+      });
+      assert.match(loggedError, /Error: Crash with injected env/);
+      assert.match(loggedError, /at /);
+
+      // With env: {}, stack trace should NOT be included
+      loggedError = '';
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+        env: {},
+      });
+      assert.equal(loggedError, '❌ Crash with injected env');
+    });
+  });
+
+  describe('containsPreCommitHook', () => {
+    it('returns true when content includes marker or exact command', () => {
+      assert.equal(containsPreCommitHook('#!/bin/sh\n# gem-pr-review self-review pre-commit hook\nnpm run self-review\n'), true);
+      assert.equal(containsPreCommitHook('#!/bin/sh\nnpm run self-review\n'), true);
+      assert.equal(containsPreCommitHook('#!/bin/sh\ncustom-command\n', 'custom-command'), true);
+    });
+
+    it('returns false for unrelated content or non-string input', () => {
+      assert.equal(containsPreCommitHook('#!/bin/sh\necho "hello"\n'), false);
+      assert.equal(containsPreCommitHook(null), false);
+      assert.equal(containsPreCommitHook(undefined), false);
     });
   });
 
