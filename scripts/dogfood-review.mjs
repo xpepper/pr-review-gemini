@@ -170,6 +170,9 @@ index 1111111..2222222 100644
 `;
 
 export async function main() {
+  const rawArgs = process.argv.slice(2);
+  handleCommonFlags(rawArgs, { printUsage });
+
   const {
     prNumber,
     self,
@@ -186,13 +189,9 @@ export async function main() {
     mock,
     mockGh,
     incremental,
-    showHelp,
-    showVersion,
     roles,
     replaceStandardRoles,
-  } = parseCliArgs(process.argv.slice(2));
-
-  handleCommonFlags(process.argv.slice(2), { printUsage });
+  } = parseCliArgs(rawArgs);
 
   if (self) {
     const cwd = process.cwd();

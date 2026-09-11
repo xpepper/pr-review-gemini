@@ -315,9 +315,9 @@ export async function runBump(options = {}, io = console) {
 
 export async function main() {
   const rawArgs = process.argv.slice(2);
-  const parsed = parseCliArgs(rawArgs);
-
   handleCommonFlags(rawArgs, { printUsage });
+
+  const parsed = parseCliArgs(rawArgs);
 
   const result = await runBump(parsed, console);
   process.exit(result.exitCode);

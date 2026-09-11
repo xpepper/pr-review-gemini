@@ -92,6 +92,16 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.match(formatted, /Error: Debug error/);
       assert.match(formatted, /at /);
     });
+
+    it('supports explicit debug option without reading ambient process.env.DEBUG', () => {
+      const err = new Error('Explicit debug error');
+      const withDebug = formatCliError(err, { debug: true, env: {} });
+      assert.match(withDebug, /Error: Explicit debug error/);
+      assert.match(withDebug, /at /);
+
+      const withoutDebug = formatCliError(err, { debug: false, env: { DEBUG: '1' } });
+      assert.equal(withoutDebug, '❌ Explicit debug error');
+    });
   });
 
   describe('handleCommonFlags', () => {
@@ -228,18 +238,16 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
         throw new Error('Sync throw during setup');
       };
 
-      try {
-        await runIfDirect(dummyUrl, syncFailingMain, {
-          argv: ['node', dummyFile],
-          io: mockIo,
-          exit: mockExit,
-        });
-      } catch {
-        // Ignored in test
-      }
+      const res = await runIfDirect(dummyUrl, syncFailingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+      });
 
       assert.match(loggedError, /Sync throw during setup/);
       assert.equal(exitCode, 1);
+      assert.ok(res && res.error);
+      assert.equal(res.exitCode, 1);
     });
   });
 
@@ -258,6 +266,17 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       const res = installPreCommitHook({ rootDir: tempDir });
       assert.equal(res.success, false);
       assert.match(res.error, /No \.git directory found/);
+    });
+
+    it('handles filesystem errors during installation adhering to return contract', () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+      // Create hooks as a file instead of a directory to force an error
+      fs.writeFileSync(path.join(gitDir, 'hooks'), 'blocking file');
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, false);
+      assert.ok(res.error);
     });
 
     it('installs pre-commit hook in a git repository and sets executable permission', () => {

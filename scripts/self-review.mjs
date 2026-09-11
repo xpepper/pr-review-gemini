@@ -118,9 +118,9 @@ export function parseCliArgs(args) {
 
 export async function main() {
   const rawArgs = process.argv.slice(2);
-  const parsed = parseCliArgs(rawArgs);
-
   handleCommonFlags(rawArgs, { printUsage });
+
+  const parsed = parseCliArgs(rawArgs);
 
   if (parsed.installHook) {
     const res = installPreCommitHook({ rootDir: process.cwd() });
