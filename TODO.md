@@ -6,10 +6,12 @@
 
 ---
 
-## Active Next Task: Dogfood Review & PR for Increment 16 (Issue #27)
-- [ ] Push branch `feat/reviewer-sensitivity-calibration` and open PR for Issue #27
-- [ ] Run dogfood review on PR #27: `npm run dogfood:pr <PR_NUMBER>`
-- [ ] Address any review findings or comments before merging
+## Active Next Task: Merge PR #28 (Increment 16 / Issue #27)
+- [x] Push branch `feat/reviewer-sensitivity-calibration` and open PR for Issue #27 (PR #28 opened: https://github.com/xpepper/pr-review-gemini/pull/28)
+- [x] Run dogfood review on PR #28: `npm run dogfood:pr 28`
+- [x] Addressed all 5 P2 review findings on calibration lens/severity matching, precision calculation, and uniform fallback semantics (commit `ffd9380`)
+- [x] Re-reviewed with `npm run dogfood:pr 28` (0 P0, 0 P1, 0 P2, 1 P3, 1 nit; all blocking defects resolved; CI review green)
+- [ ] Merge PR #28 into `main`
 
 ### Backlog & Future Capabilities
 - [ ] Pre-commit hook installer (`npx gem-pr-review --install-hook`) for local self-review
@@ -30,7 +32,8 @@
   - [x] Implemented automatic model catalog fallback to `auto` (`fallback_to_auto: true`) with error classifier `isModelUnavailableError` and unified `isRetriableModelError` in `src/subagents.js` and `src/config.js`.
   - [x] Added evaluation benchmark suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking recall, precision, and sensitivity across universal defect patterns from PR #26 dogfooding.
   - [x] Streamlined dogfood review runner via `scripts/dogfood-pr.mjs` and npm script `npm run dogfood:pr <PR_NUMBER>` with automatic model resolution (`--model auto`).
-  - [x] Added 26 new unit and integration tests across 6 suites (440 total tests passing across 98 suites with 0 failures).
+  - [x] Added 31 new unit and integration tests across 6 suites (445 total tests passing across 98 suites with 0 failures).
+  - [x] Executed dogfood review loop against PR #28, resolving all 5 P2 findings (lens/severity matching, distinct finding precision, uniform auto fallback semantics).
   - [x] Updated documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 15 / Issue #25: Automated Semantic Versioning, Release Management & Manifest Synchronization**
   - [x] Implemented canonical runtime version module (`src/version.js`) dynamically resolving version from `package.json` without hardcoding, with SemVer 2.0 validation (`isValidSemVer`, `parseSemVer`) and manifest sync inspection (`getManifestVersions`, `checkManifestSync`).

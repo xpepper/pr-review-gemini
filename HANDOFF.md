@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/reviewer-sensitivity-calibration`
-* **Test Suite**: `npm test` runs and passes (440 tests across 98 suites, 0 failures)
+* **Current Branch**: `feat/reviewer-sensitivity-calibration` (PR #28 opened and reviewed)
+* **Test Suite**: `npm test` runs and passes (445 tests across 98 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -26,13 +26,14 @@
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
-  - Increment 16 (Issue #27): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Implemented on branch `feat/reviewer-sensitivity-calibration`)
+  - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Open PR: https://github.com/xpepper/pr-review-gemini/pull/28)
 
 ---
 
-## Status: READY_FOR_PR_AND_DOGFOOD_REVIEW (Increment 16 / Issue #27)
+## Status: READY_TO_MERGE (PR #28 / Increment 16 / Issue #27)
 
-All deliverables for Increment 16 are implemented and verified test-first (440 passing tests across 98 suites, manifest version check green).
+All deliverables for Increment 16 are implemented and verified test-first (445 passing tests across 98 suites, manifest version check green).
+Dogfood review loop executed against PR #28: all 5 P2 findings resolved and verified, CI review green.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -41,7 +42,7 @@ All deliverables for Increment 16 are implemented and verified test-first (440 p
 - [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
 - [x] Increment 14: Pluggable custom review roles & specialist lenses
 - [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
-- [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27)
+- [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
 
 ---
 
@@ -401,25 +402,30 @@ Possible future enhancements:
     - Documented calibrated review dimensions, model catalog auto fallback resilience, and `npm run dogfood:pr`.
     - Added Key Features 9 & 10 to `README.md` and documented `fallback_to_auto` configuration.
   - Tests & Verification:
-    - Added 26 new unit and integration tests across 6 test suites (`tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/calibration.test.mjs`, `tests/dogfood.test.mjs`, `tests/skills.test.mjs`).
-    - Total **440 tests passing across 98 suites with 0 failures**.
+    - Added 31 new unit and integration tests across 6 test suites (`tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/calibration.test.mjs`, `tests/dogfood.test.mjs`, `tests/skills.test.mjs`).
+    - Total **445 tests passing across 98 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
+  - Dogfood Review Loop (PR #28):
+    - Opened PR #28 on GitHub referencing Issue #27.
+    - First dogfood review run caught 5 P2 findings in `src/calibration.js` and `src/subagents.js`:
+      1. Calibration scoring ignoring required lens and severity.
+      2. Calibration matching findings without validating lens or severity.
+      3. Calibration precision double-counting findings across multiple benchmarks.
+      4. Benchmark matching ignoring intended lens and severity.
+      5. Auto fallback not enabled by default for direct dispatch callers on quota errors.
+    - All 5 findings addressed and verified in commit `ffd9380`.
+    - Second dogfood review run verified clean: 0 P0, 0 P1, 0 P2, 1 P3, 1 nit; GitHub Actions CI automated review passed.
 
 ---
 
-## Next Steps: PR Submission & Dogfood Review
+## Next Steps: Merge PR #28
 
-1. **Commit & Push**:
-   - Push branch `feat/reviewer-sensitivity-calibration` to origin.
-   - Open Pull Request referencing Issue #27 (`feat: reviewer sensitivity & quality calibration (Increment 16)`).
-2. **Dogfood Verification**:
-   - Run dogfood review against the new PR using the streamlined command:
-     ```bash
-     npm run dogfood:pr <PR_NUMBER>
-     ```
-   - Address any findings or feedback from the dogfood review or Copilot reviewer bot.
-3. **Merge**:
-   - Merge PR into `main` after verification.
+1. **Merge PR #28**:
+   - Merge PR #28 into `main` on GitHub via `gh pr merge 28 --squash` or `gh pr merge 28 --merge`.
+2. **Post-Merge**:
+   - Switch local repo back to `main` and pull latest commits: `git checkout main && git pull`.
+   - Delete feature branch `feat/reviewer-sensitivity-calibration`.
+   - Increment 16 will be fully closed.
 
 ---
 
