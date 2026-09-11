@@ -5,6 +5,7 @@
  * Evaluates uncommitted git worktree changes through specialist review lenses
  * and enforces a fail-closed safety gate before finishing tasks or committing.
  */
+import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import {
@@ -127,10 +128,13 @@ export async function main() {
     if (!res.success) {
       throw new Error(`Failed to install pre-commit hook: ${res.error}`);
     }
+    const displayPath = res.hookPath
+      ? path.relative(process.cwd(), res.hookPath) || res.hookPath
+      : '.git/hooks/pre-commit';
     if (res.alreadyInstalled) {
-      console.log('ℹ️ Pre-commit hook is already installed in .git/hooks/pre-commit.');
+      console.log(`ℹ️ Pre-commit hook is already installed in ${displayPath}.`);
     } else {
-      console.log('✅ Successfully installed pre-commit hook to .git/hooks/pre-commit.');
+      console.log(`✅ Successfully installed pre-commit hook to ${displayPath}.`);
     }
     return;
   }

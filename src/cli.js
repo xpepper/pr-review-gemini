@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { printVersionBanner, VERSION } from './version.js';
+import { printVersionBanner } from './version.js';
 
 /**
  * Robustly detects whether a script module is being executed directly via CLI
@@ -46,10 +46,8 @@ export function isDirectRun(importMetaUrl, argv = process.argv) {
 
   // Handle symlinks if both paths exist on filesystem
   try {
-    if (fs.existsSync(resolvedTarget) && fs.existsSync(resolvedArg)) {
-      if (fs.realpathSync(resolvedTarget) === fs.realpathSync(resolvedArg)) {
-        return true;
-      }
+    if (fs.realpathSync(resolvedTarget) === fs.realpathSync(resolvedArg)) {
+      return true;
     }
   } catch {
     // Ignore filesystem errors during resolution
@@ -82,7 +80,12 @@ export function resolveDebugFlag(options = {}) {
     return Boolean(options.verbose);
   }
   const env = options.env !== undefined ? options.env : process.env;
-  if (env?.DEBUG) {
+  if (
+    env?.GEM_PR_REVIEW_DEBUG === '1' ||
+    env?.GEM_PR_REVIEW_DEBUG === 'true' ||
+    env?.DEBUG === '1' ||
+    env?.DEBUG === 'true'
+  ) {
     return true;
   }
   const argv = Array.isArray(options.argv) ? options.argv : [];
@@ -173,7 +176,8 @@ export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
 
   if (argv.includes('-h') || argv.includes('--help')) {
     if (typeof options.printUsage === 'function') {
-      options.printUsage(io.log || console.log);
+      const printFn = typeof io.log === 'function' ? io.log.bind(io) : console.log;
+      options.printUsage(printFn);
     }
     if (exitFn) {
       exitFn(0);
@@ -186,6 +190,32 @@ export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
 }
 
 export const PRE_COMMIT_HOOK_MARKER = '# gem-pr-review self-review pre-commit hook';
+export const PRE_COMMIT_HOOK_MANAGED_FILE_MARKER = '# gem-pr-review managed-file (auto-created)';
+
+/**
+ * Searches upward from startDir for the nearest directory containing a .git directory or file.
+ *
+ * @param {string} [startDir=process.cwd()]
+ * @returns {string|null} Directory containing .git, or null if filesystem root reached without match
+ */
+export function findGitRootDir(startDir = process.cwd()) {
+  let current = path.resolve(startDir);
+  while (true) {
+    const gitCandidate = path.join(current, '.git');
+    try {
+      if (fs.existsSync(gitCandidate)) {
+        return current;
+      }
+    } catch {
+      // Ignore filesystem read errors
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
 
 /**
  * Standardized direct execution runner. If invoked directly, executes mainFn,
@@ -218,7 +248,10 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
   const printAndExit = (err) => {
     const msg = formatErrorFn(err, { ...options, debug: isDebug });
     (io.error || console.error)(msg);
-    const code = typeof err?.exitCode === 'number' ? err.exitCode : 1;
+    const code =
+      typeof err?.exitCode === 'number' && err.exitCode > 0
+        ? err.exitCode
+        : 1;
     exitFn(code);
     return { error: err, exitCode: code };
   };
@@ -236,16 +269,18 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
 
 /**
  * Resolves the git hooks directory for a standard git repository or linked worktree.
+ * Searches upward from rootDir if rootDir is a subdirectory within a git repository.
  *
  * @param {string} [rootDir=process.cwd()]
  * @returns {string|null} Absolute path to hooks directory, or null if not a git repository
  */
 export function resolveGitHooksDir(rootDir = process.cwd()) {
-  const gitPath = path.join(rootDir, '.git');
-  if (!fs.existsSync(gitPath)) {
+  const resolvedRoot = findGitRootDir(rootDir);
+  if (!resolvedRoot) {
     return null;
   }
 
+  const gitPath = path.join(resolvedRoot, '.git');
   try {
     const stat = fs.statSync(gitPath);
     if (stat.isDirectory()) {
@@ -260,7 +295,12 @@ export function resolveGitHooksDir(rootDir = process.cwd()) {
       }
       let gitDir = match[1].trim();
       if (!path.isAbsolute(gitDir)) {
-        gitDir = path.resolve(rootDir, gitDir);
+        gitDir = path.resolve(resolvedRoot, gitDir);
+      }
+
+      // Validate resolved git directory exists and is a directory
+      if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
+        return null;
       }
 
       // In linked worktrees, hooks are shared in the common git directory
@@ -268,7 +308,9 @@ export function resolveGitHooksDir(rootDir = process.cwd()) {
       if (fs.existsSync(commonDirFile)) {
         const relCommon = fs.readFileSync(commonDirFile, 'utf8').trim();
         const commonDir = path.resolve(gitDir, relCommon);
-        return path.join(commonDir, 'hooks');
+        if (fs.existsSync(commonDir) && fs.statSync(commonDir).isDirectory()) {
+          return path.join(commonDir, 'hooks');
+        }
       }
 
       return path.join(gitDir, 'hooks');
@@ -278,6 +320,32 @@ export function resolveGitHooksDir(rootDir = process.cwd()) {
   }
 
   return null;
+}
+
+/**
+ * Checks whether an array of lines contains an active (non-comment) execution of the command.
+ *
+ * @param {string[]} lines
+ * @param {string} [command='npm run self-review']
+ * @returns {boolean}
+ */
+export function hasActiveHookCommandInLines(lines, command = 'npm run self-review') {
+  if (!Array.isArray(lines)) {
+    return false;
+  }
+  return lines.some((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) {
+      return false;
+    }
+    return (
+      trimmed === command ||
+      trimmed.startsWith(command + ' ') ||
+      trimmed.startsWith(command + ';') ||
+      trimmed.startsWith(command + '&') ||
+      trimmed.startsWith(command + '|')
+    );
+  });
 }
 
 /**
@@ -291,19 +359,7 @@ export function hasActiveHookCommand(content, command = 'npm run self-review') {
   if (typeof content !== 'string') {
     return false;
   }
-  const lines = content.split(/\r?\n/);
-  return lines.some((line) => {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('#')) {
-      return false;
-    }
-    return (
-      trimmed === command ||
-      trimmed.startsWith(command + ' ') ||
-      trimmed.startsWith(command + ';') ||
-      trimmed.startsWith(command + '&')
-    );
-  });
+  return hasActiveHookCommandInLines(content.split(/\r?\n/), command);
 }
 
 /**
@@ -319,7 +375,7 @@ export function containsPreCommitHook(content, command = 'npm run self-review') 
   }
   const lines = content.split(/\r?\n/);
   const hasMarker = lines.some((l) => l.trim() === PRE_COMMIT_HOOK_MARKER);
-  const hasCmd = hasActiveHookCommand(content, command);
+  const hasCmd = hasActiveHookCommandInLines(lines, command);
   return hasMarker && hasCmd;
 }
 
@@ -384,7 +440,7 @@ export function installPreCommitHook(options = {}) {
     fs.mkdirSync(hooksDir, { recursive: true });
     if (fs.existsSync(hookPath)) {
       const existing = fs.readFileSync(hookPath, 'utf8');
-      if (containsPreCommitHook(existing, command)) {
+      if (containsPreCommitHook(existing, command) || hasActiveHookCommand(existing, command)) {
         try {
           fs.chmodSync(hookPath, 0o755);
         } catch {
@@ -408,26 +464,39 @@ export function installPreCommitHook(options = {}) {
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        const trimmed = line.trim();
         if (!inHeredoc) {
-          const match = line.match(/<<-?\s*['"]?([A-Za-z0-9_]+)['"]?/);
+          if (trimmed.startsWith('#')) {
+            continue;
+          }
+          const match = line.match(/(?<!<)<<-?\s*['"]?([A-Za-z0-9_]+)['"]?/);
           if (match) {
             inHeredoc = true;
             heredocDelim = match[1];
           } else if (/^exit\b/.test(line.trimEnd())) {
             exitIdx = i;
           }
-        } else if (line.trim() === heredocDelim) {
+        } else if (trimmed === heredocDelim) {
           inHeredoc = false;
           heredocDelim = '';
         }
       }
 
+      const hookBlock = [
+        PRE_COMMIT_HOOK_MARKER,
+        '__gem_prev=$?',
+        'if [ $__gem_prev -ne 0 ]; then',
+        '  exit $__gem_prev',
+        'fi',
+        `${command} || exit 1`,
+      ];
+
       if (exitIdx !== -1) {
-        lines.splice(exitIdx, 0, PRE_COMMIT_HOOK_MARKER, command, '');
+        lines.splice(exitIdx, 0, ...hookBlock, '');
         fs.writeFileSync(hookPath, lines.join('\n'));
       } else {
         const separator = existing.endsWith('\n') ? '' : '\n';
-        const addition = `\n${PRE_COMMIT_HOOK_MARKER}\n${command}\n`;
+        const addition = `\n${hookBlock.join('\n')}\n`;
         fs.writeFileSync(hookPath, existing + separator + addition);
       }
       fs.chmodSync(hookPath, 0o755);
@@ -438,7 +507,7 @@ export function installPreCommitHook(options = {}) {
       };
     }
 
-    const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MARKER}\n${command}\n`;
+    const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MANAGED_FILE_MARKER}\n${PRE_COMMIT_HOOK_MARKER}\n${command} || exit 1\n`;
     fs.writeFileSync(hookPath, content, { mode: 0o755 });
     return {
       success: true,
@@ -485,30 +554,50 @@ export function uninstallPreCommitHook(options = {}) {
     }
 
     const lines = content.split(/\r?\n/);
-    // Check if the file only contains comments/shebang and our exact command
-    const nonCommentLines = lines
-      .map((l) => l.trim())
-      .filter((l) => Boolean(l) && !l.startsWith('#'));
+    const hasManagedFileMarker = content.includes(PRE_COMMIT_HOOK_MANAGED_FILE_MARKER);
 
-    if (
-      nonCommentLines.length <= 1 &&
-      nonCommentLines.every((l) => l === command)
-    ) {
+    const isManagedSnippetLine = (l) => {
+      const t = l.trim();
+      return (
+        t === PRE_COMMIT_HOOK_MARKER ||
+        t === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER ||
+        t === '__gem_prev=$?' ||
+        t === 'if [ $__gem_prev -ne 0 ]; then' ||
+        t === 'exit $__gem_prev' ||
+        t === 'fi' ||
+        t === command ||
+        t === `${command} || exit 1`
+      );
+    };
+
+    // Check if the file only contains comments/shebang and our managed lines
+    const thirdPartyLines = lines
+      .map((l) => l.trim())
+      .filter((l) => Boolean(l) && !l.startsWith('#') && !isManagedSnippetLine(l));
+
+    // If file was auto-created by us AND contains no third-party commands, delete it completely
+    if (hasManagedFileMarker && thirdPartyLines.length === 0) {
       fs.unlinkSync(hookPath);
       return { success: true, removed: true, hookPath };
     }
 
-    // If file contains other commands, strip only marker and managed command line
+    // Otherwise, clean only our managed lines, preserving user content
     const cleaned = [];
     for (let i = 0; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
+      const line = lines[i];
+      const trimmed = line.trim();
+
       if (trimmed === PRE_COMMIT_HOOK_MARKER) {
-        if (i + 1 < lines.length && lines[i + 1].trim() === command) {
-          i++; // Skip the managed command line as well
+        // Strip marker and any consecutive managed snippet lines
+        while (i + 1 < lines.length && isManagedSnippetLine(lines[i + 1])) {
+          i++;
         }
         continue;
       }
-      cleaned.push(lines[i]);
+      if (trimmed === PRE_COMMIT_HOOK_MANAGED_FILE_MARKER) {
+        continue;
+      }
+      cleaned.push(line);
     }
 
     fs.writeFileSync(hookPath, cleaned.join('\n'));

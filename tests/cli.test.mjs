@@ -12,12 +12,16 @@ import {
   formatCliError,
   handleCommonFlags,
   runIfDirect,
+  findGitRootDir,
   resolveGitHooksDir,
+  hasActiveHookCommandInLines,
   hasActiveHookCommand,
   containsPreCommitHook,
   installPreCommitHook,
   uninstallPreCommitHook,
   isPreCommitHookInstalled,
+  PRE_COMMIT_HOOK_MARKER,
+  PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
 } from '../src/cli.js';
 import { VERSION, PLUGIN_NAME } from '../src/version.js';
 
@@ -211,6 +215,30 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(res.exitCode, undefined);
       assert.match(logged, new RegExp(`${PLUGIN_NAME} v${VERSION}`));
     });
+
+    it('binds io.log to io instance when invoking printUsage', () => {
+      const customIo = {
+        name: 'custom-logger',
+        messages: [],
+        log(msg) {
+          this.messages.push(`[${this.name}] ${msg}`);
+        },
+      };
+
+      const printUsage = (logger) => {
+        logger('Usage line 1');
+      };
+
+      const res = handleCommonFlags(['--help'], {
+        io: customIo,
+        printUsage,
+        exit: false,
+      });
+
+      assert.equal(res.handled, true);
+      assert.equal(res.action, 'help');
+      assert.deepEqual(customIo.messages, ['[custom-logger] Usage line 1']);
+    });
   });
 
   describe('runIfDirect', () => {
@@ -301,6 +329,30 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.match(loggedError, /Sync throw during setup/);
       assert.equal(exitCode, 1);
       assert.ok(res && res.error);
+      assert.equal(res.exitCode, 1);
+    });
+
+    it('clamps exit code to 1 if error has exitCode 0 or negative', async () => {
+      const dummyFile = path.resolve('scripts/direct-test.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+      let exitCode = null;
+
+      const mockIo = { error: () => {}, log: () => {} };
+      const mockExit = (code) => { exitCode = code; };
+
+      const errorWithZeroExit = Object.assign(new Error('Supposedly zero exit code error'), {
+        exitCode: 0,
+      });
+
+      const res = await runIfDirect(dummyUrl, async () => {
+        throw errorWithZeroExit;
+      }, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+      });
+
+      assert.equal(exitCode, 1);
       assert.equal(res.exitCode, 1);
     });
 
@@ -416,12 +468,62 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     });
   });
 
-  describe('hasActiveHookCommand', () => {
+  describe('findGitRootDir', () => {
+    let tempDir;
+
+    beforeEach(() => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-cli-find-root-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it('returns root dir when called with root directory containing .git', () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+
+      const found = findGitRootDir(tempDir);
+      assert.equal(found, tempDir);
+    });
+
+    it('finds root dir when traversing up from deeply nested subdirectories', () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+      const deepSub = path.join(tempDir, 'packages', 'core', 'src', 'utils');
+      fs.mkdirSync(deepSub, { recursive: true });
+
+      const found = findGitRootDir(deepSub);
+      assert.equal(found, tempDir);
+    });
+
+    it('returns null when no .git exists in ancestry', () => {
+      // In isolated temp dir with no .git
+      const sub = path.join(tempDir, 'nested');
+      fs.mkdirSync(sub, { recursive: true });
+
+      const found = findGitRootDir(sub);
+      // Unless the parent machine root has a .git (which it shouldn't under tmp), this is null
+      assert.equal(found, null);
+    });
+  });
+
+  describe('hasActiveHookCommand and hasActiveHookCommandInLines', () => {
     it('detects active command lines and ignores comments', () => {
       assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review\n'), true);
       assert.equal(hasActiveHookCommand('#!/bin/sh\n# npm run self-review\n'), false);
       assert.equal(hasActiveHookCommand('#!/bin/sh\n# check npm run self-review for docs\n'), false);
       assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review --staged\n'), true);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review || exit 1\n'), true);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review | cat\n'), true);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review; echo done\n'), true);
+    });
+
+    it('hasActiveHookCommandInLines evaluates line arrays and handles invalid inputs', () => {
+      assert.equal(hasActiveHookCommandInLines(['# comment', 'npm run self-review || exit 1']), true);
+      assert.equal(hasActiveHookCommandInLines(['# comment', '# npm run self-review']), false);
+      assert.equal(hasActiveHookCommandInLines(null), false);
+      assert.equal(hasActiveHookCommandInLines(undefined), false);
     });
   });
 
@@ -665,10 +767,13 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
 
         const content = fs.readFileSync(hookFile, 'utf8');
         const selfReviewIdx = content.indexOf('npm run self-review');
-        const exitIdx = content.search(/^\s*exit\b/m);
+        const expectedExit = testCases[i].trim().split('\n').pop().trim();
+        const terminalExitIdx = content.lastIndexOf(expectedExit);
         assert.ok(selfReviewIdx !== -1, `Must contain self-review for test case ${i}`);
-        assert.ok(exitIdx !== -1, `Must contain exit for test case ${i}`);
-        assert.ok(selfReviewIdx < exitIdx, `self-review must precede exit statement in case ${i}`);
+        assert.ok(terminalExitIdx !== -1, `Must contain exit for test case ${i}`);
+        assert.ok(selfReviewIdx < terminalExitIdx, `self-review must precede terminal exit statement in case ${i}`);
+        assert.ok(content.includes('npm run self-review || exit 1'), `Must include fail-closed || exit 1 in case ${i}`);
+        assert.ok(content.includes('__gem_prev=$?'), `Must include prior status guard in case ${i}`);
       }
     });
 
@@ -810,6 +915,150 @@ exit 0
       );
       assert.match(uninstallOut, /Successfully removed self-review pre-commit hook/);
       assert.equal(fs.existsSync(hookFile), false);
+    });
+
+    it('resolves git hooks directory and installs hook when executed from a nested subdirectory', () => {
+      const gitDir = path.join(tempDir, '.git');
+      fs.mkdirSync(gitDir, { recursive: true });
+
+      const nestedSubdir = path.join(tempDir, 'src', 'features', 'deep');
+      fs.mkdirSync(nestedSubdir, { recursive: true });
+
+      const resolvedHooks = resolveGitHooksDir(nestedSubdir);
+      assert.equal(resolvedHooks, path.join(gitDir, 'hooks'));
+
+      const res = installPreCommitHook({ rootDir: nestedSubdir });
+      assert.equal(res.success, true);
+      assert.equal(res.created, true);
+
+      const hookFile = path.join(gitDir, 'hooks', 'pre-commit');
+      assert.ok(fs.existsSync(hookFile));
+    });
+
+    it('rejects path traversal or invalid targets in .git gitdir pointer files', () => {
+      // 1. Target directory does not exist
+      const fakeDir = path.join(tempDir, 'nonexistent-git-dir');
+      const gitFile = path.join(tempDir, '.git');
+      fs.writeFileSync(gitFile, `gitdir: ${fakeDir}\n`);
+
+      assert.equal(resolveGitHooksDir(tempDir), null);
+
+      // 2. Target points to a regular file, not a directory
+      const blockingFile = path.join(tempDir, 'regular-file');
+      fs.writeFileSync(blockingFile, 'not a directory');
+      fs.writeFileSync(gitFile, `gitdir: ${blockingFile}\n`);
+
+      assert.equal(resolveGitHooksDir(tempDir), null);
+    });
+
+    it('does not trigger heredoc mode on comments with << or here-strings <<<', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const hookContent = `#!/bin/sh
+# Comment mentioning <<- EOF
+echo "test"
+exit 0
+`;
+      fs.writeFileSync(hookFile, hookContent, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const exitIdx = content.lastIndexOf('exit 0');
+      assert.ok(selfReviewIdx !== -1);
+      assert.ok(selfReviewIdx < exitIdx, 'self-review must be inserted before exit 0 despite comments with <<');
+    });
+
+    it('does not duplicate command if active command is already present without marker', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      const original = '#!/bin/sh\nnpm run self-review\nexit 0\n';
+      fs.writeFileSync(hookFile, original, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.alreadyInstalled, true);
+      assert.equal(fs.readFileSync(hookFile, 'utf8'), original);
+    });
+
+    it('preserves user-authored files on uninstall and only unlinks auto-created hooks', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      // 1. User had a pre-existing hook without managed marker
+      const userHook = '#!/bin/sh\necho "user pre-commit check"\n';
+      fs.writeFileSync(hookFile, userHook, { mode: 0o755 });
+
+      // Install appends
+      const installRes = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(installRes.appended, true);
+
+      // Uninstall cleans managed lines but NEVER deletes user hook file
+      const uninstRes = uninstallPreCommitHook({ rootDir: tempDir });
+      assert.equal(uninstRes.success, true);
+      assert.equal(uninstRes.cleaned, true);
+      assert.ok(fs.existsSync(hookFile), 'User-authored hook file must NOT be unlinked');
+      assert.match(fs.readFileSync(hookFile, 'utf8'), /user pre-commit check/);
+
+      // 2. Auto-created hook where user subsequently added their own custom command
+      fs.unlinkSync(hookFile);
+      installPreCommitHook({ rootDir: tempDir });
+      assert.ok(fs.readFileSync(hookFile, 'utf8').includes(PRE_COMMIT_HOOK_MANAGED_FILE_MARKER));
+
+      // User adds a command
+      fs.appendFileSync(hookFile, 'npm test\n');
+
+      // Uninstall should clean managed lines but NOT unlink the file
+      const uninstModified = uninstallPreCommitHook({ rootDir: tempDir });
+      assert.equal(uninstModified.success, true);
+      assert.equal(uninstModified.cleaned, true);
+      assert.ok(fs.existsSync(hookFile), 'File with third-party commands must NOT be unlinked');
+      assert.match(fs.readFileSync(hookFile, 'utf8'), /npm test/);
+    });
+
+    it('enforces fail-closed execution in shell when hook command fails or previous command fails', async () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      const hookFile = path.join(hooksDir, 'pre-commit');
+
+      // Case A: Existing hook ends with exit 0, but review command fails (returns exit 1)
+      const existingHook = '#!/bin/sh\necho "running prior checks"\nexit 0\n';
+      fs.writeFileSync(hookFile, existingHook, { mode: 0o755 });
+
+      installPreCommitHook({ rootDir: tempDir, command: 'sh -c "exit 1"' });
+
+      // Execute hook with sh
+      try {
+        await execFileAsync('/bin/sh', [hookFile]);
+        assert.fail('Hook execution should have failed with exit 1');
+      } catch (err) {
+        assert.equal(err.code, 1, 'Hook must fail-closed with exit code 1');
+      }
+
+      // Case B: Prior command in hook fails (exit 2); hook should terminate with prior code 2
+      const failingPriorHook = '#!/bin/sh\nsh -c "exit 2"\nexit 0\n';
+      fs.writeFileSync(hookFile, failingPriorHook, { mode: 0o755 });
+
+      installPreCommitHook({ rootDir: tempDir, command: 'sh -c "exit 0"' });
+
+      try {
+        await execFileAsync('/bin/sh', [hookFile]);
+        assert.fail('Hook execution should have failed with exit 2');
+      } catch (err) {
+        assert.equal(err.code, 2, 'Hook must propagate prior failure code');
+      }
     });
   });
 
