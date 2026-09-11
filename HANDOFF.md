@@ -442,13 +442,14 @@ Possible future enhancements:
     - `scripts/bump-version.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
   - `package.json`:
     - Added npm script `"install-hook": "node scripts/self-review.mjs --install-hook"`.
-  - Re-exports in `src/reviewer.js`:
-    - Re-exported all CLI utilities (`isDirectRun`, `runIfDirect`, `handleCommonFlags`, `formatCliError`, `installPreCommitHook`, `uninstallPreCommitHook`, `isPreCommitHookInstalled`).
+  - Architecture & Module Isolation:
+    - Dedicated CLI infrastructure housed exclusively in `src/cli.js` without polluting core `src/reviewer.js` domain surface.
+    - Robust pre-commit hook idempotency and uninstallation keyed to unique marker (`PRE_COMMIT_HOOK_MARKER`) and exact command with guaranteed executable permissions (`chmod 0o755`).
   - Documentation & Skill:
     - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
   - Tests & Verification:
-    - Added 36 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
-    - Total **481 tests passing across 105 suites with 0 failures**.
+    - Added 39 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
+    - Total **486 tests passing across 105 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
     - Verified `npm run install-hook`, idempotency, and `--uninstall-hook` end-to-end.
 

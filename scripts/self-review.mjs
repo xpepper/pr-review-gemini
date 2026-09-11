@@ -107,8 +107,6 @@ export function parseCliArgs(args) {
     failOn,
     json,
     mock,
-    showHelp,
-    showVersion,
     installHook,
     uninstallHook,
     roles: roles.length > 0 ? roles : undefined,
@@ -124,32 +122,28 @@ export async function main() {
 
   if (parsed.installHook) {
     const res = installPreCommitHook({ rootDir: process.cwd() });
-    if (res.success) {
-      if (res.alreadyInstalled) {
-        console.log(`ℹ️ Pre-commit hook is already installed in .git/hooks/pre-commit.`);
-      } else {
-        console.log(`✅ Successfully installed pre-commit hook to .git/hooks/pre-commit.`);
-      }
-      process.exit(0);
-    } else {
-      console.error(`❌ Failed to install pre-commit hook: ${res.error}`);
-      process.exit(1);
+    if (!res.success) {
+      throw new Error(`Failed to install pre-commit hook: ${res.error}`);
     }
+    if (res.alreadyInstalled) {
+      console.log('ℹ️ Pre-commit hook is already installed in .git/hooks/pre-commit.');
+    } else {
+      console.log('✅ Successfully installed pre-commit hook to .git/hooks/pre-commit.');
+    }
+    return;
   }
 
   if (parsed.uninstallHook) {
     const res = uninstallPreCommitHook({ rootDir: process.cwd() });
-    if (res.success) {
-      if (res.removed || res.cleaned) {
-        console.log(`✅ Successfully removed self-review pre-commit hook.`);
-      } else {
-        console.log(`ℹ️ Pre-commit hook was not installed.`);
-      }
-      process.exit(0);
-    } else {
-      console.error(`❌ Failed to uninstall pre-commit hook: ${res.error}`);
-      process.exit(1);
+    if (!res.success) {
+      throw new Error(`Failed to uninstall pre-commit hook: ${res.error}`);
     }
+    if (res.removed || res.cleaned) {
+      console.log('✅ Successfully removed self-review pre-commit hook.');
+    } else {
+      console.log('ℹ️ Pre-commit hook was not installed.');
+    }
+    return;
   }
 
   const cwd = process.cwd();

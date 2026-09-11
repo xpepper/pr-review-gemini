@@ -249,6 +249,29 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.ok(res && res.error);
       assert.equal(res.exitCode, 1);
     });
+
+    it('surfaces stack trace in runIfDirect when CI environment variable or debug option is active', async () => {
+      const dummyFile = path.resolve('scripts/dummy-ci-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+
+      let loggedError = '';
+      const mockIo = { error: (msg) => { loggedError += msg; } };
+      const mockExit = () => {};
+
+      const failingMain = () => {
+        throw new Error('Unexpected crash in CI');
+      };
+
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+        debug: true,
+      });
+
+      assert.match(loggedError, /Error: Unexpected crash in CI/);
+      assert.match(loggedError, /at /);
+    });
   });
 
   describe('Pre-Commit Hook Integration', () => {
@@ -330,6 +353,43 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
 
       const updated = fs.readFileSync(hookFile, 'utf8');
       assert.match(updated, /running other linter/);
+      assert.match(updated, /npm run self-review/);
+    });
+
+    it('ensures existing non-executable hook becomes executable after appending', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      const hookFile = path.join(hooksDir, 'pre-commit');
+      // Create non-executable hook file (0o644)
+      fs.writeFileSync(hookFile, '#!/bin/sh\necho "existing test"\n', { mode: 0o644 });
+      fs.chmodSync(hookFile, 0o644);
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+
+      const stat = fs.statSync(hookFile);
+      assert.ok((stat.mode & 0o111) !== 0, 'Hook must be made executable (0o755)');
+    });
+
+    it('does not falsely detect installation when file mentions self-review in unrelated scripts', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      const hookFile = path.join(hooksDir, 'pre-commit');
+      // Contains 'self-review' in unrelated comment or filename
+      fs.writeFileSync(hookFile, '#!/bin/sh\n# run-self-review-check.sh\n./custom-script.sh\n', { mode: 0o755 });
+
+      const statusBefore = isPreCommitHookInstalled({ rootDir: tempDir });
+      assert.equal(statusBefore.containsSelfReview, false);
+
+      const installRes = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(installRes.success, true);
+      assert.equal(installRes.appended, true);
+
+      const updated = fs.readFileSync(hookFile, 'utf8');
       assert.match(updated, /npm run self-review/);
     });
 

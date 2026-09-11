@@ -6,7 +6,6 @@
  * enforcing automated CI quality gates (fail_on) and publishing step outputs.
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import { execFile } from 'node:child_process';
 import {
   resolveCiEnvironment,

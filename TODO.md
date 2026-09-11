@@ -7,8 +7,8 @@
 ---
 
 ## Active Next Task: Dogfood Review & PR for Increment 17 (Issue #29)
-- [ ] Open GitHub PR for Increment 17: "Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication"
-- [ ] Run dogfood review on the PR (`npm run dogfood:pr <PR_NUMBER>`)
+- [x] Open GitHub PR for Increment 17: "Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication"
+- [x] Run dogfood review on the PR (`npm run dogfood:pr 30`)
 - [ ] Address review feedback and merge to main
 
 ### Backlog & Future Capabilities
@@ -31,7 +31,7 @@
     - `scripts/ci-action.mjs`
     - `scripts/bump-version.mjs`
   - [x] Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) to configure `.git/hooks/pre-commit` to execute `npm run self-review`.
-  - [x] Added unit and integration tests in `tests/cli.test.mjs` and `tests/skills.test.mjs` (481 total passing across 105 suites with 0 failures).
+  - [x] Added unit and integration tests in `tests/cli.test.mjs` and `tests/skills.test.mjs` (486 total passing across 105 suites with 0 failures).
   - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
   - [x] Calibrated lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
