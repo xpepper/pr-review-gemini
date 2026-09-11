@@ -39,13 +39,6 @@ export function isDirectRun(importMetaUrl, argv = process.argv) {
   }
 
   // Handle invocation omitting extension (e.g. `node scripts/self-review`)
-  if (
-    resolvedArg + '.mjs' === resolvedTarget ||
-    resolvedArg + '.js' === resolvedTarget
-  ) {
-    return true;
-  }
-
   const targetExt = path.extname(resolvedTarget);
   if (targetExt && resolvedTarget.slice(0, -targetExt.length) === resolvedArg) {
     return true;
@@ -62,6 +55,39 @@ export function isDirectRun(importMetaUrl, argv = process.argv) {
     // Ignore filesystem errors during resolution
   }
 
+  return false;
+}
+
+/**
+ * Resolves whether debug/verbose mode is enabled from caller options or environment.
+ * Explicit options (`debug`, `stack`, `verbose`) take precedence over `env.DEBUG` or `--debug`/`--verbose` flags.
+ * Defaults to false to prevent unintentional exposure of internal paths or stack traces.
+ *
+ * @param {object} [options={}]
+ * @param {boolean} [options.debug]
+ * @param {boolean} [options.stack]
+ * @param {boolean} [options.verbose]
+ * @param {object} [options.env]
+ * @param {string[]} [options.argv]
+ * @returns {boolean}
+ */
+export function resolveDebugFlag(options = {}) {
+  if (options.debug !== undefined) {
+    return Boolean(options.debug);
+  }
+  if (options.stack !== undefined) {
+    return Boolean(options.stack);
+  }
+  if (options.verbose !== undefined) {
+    return Boolean(options.verbose);
+  }
+  if (options.env?.DEBUG) {
+    return true;
+  }
+  const argv = Array.isArray(options.argv) ? options.argv : [];
+  if (argv.includes('--debug') || argv.includes('--verbose')) {
+    return true;
+  }
   return false;
 }
 
@@ -93,10 +119,7 @@ export function formatCliError(err, options = {}) {
     return `${prefix}${err}`;
   }
 
-  const isDebug =
-    options.debug !== undefined
-      ? Boolean(options.debug)
-      : Boolean(options.verbose || options.stack || options.env?.DEBUG);
+  const isDebug = resolveDebugFlag(options);
 
   if (err instanceof Error) {
     if (isDebug) {
@@ -189,17 +212,10 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
       : (code) => process.exit(code);
   const formatErrorFn = options.formatError || formatCliError;
 
-  // Fully explicit debuggability: default to true to preserve full diagnostic stack traces
-  // on unhandled script exceptions unless explicitly suppressed with debug: false or stack: false
-  const isDebug =
-    options.debug !== undefined
-      ? Boolean(options.debug)
-      : options.stack !== undefined
-      ? Boolean(options.stack)
-      : true;
+  const isDebug = resolveDebugFlag({ argv, ...options });
 
   const printAndExit = (err) => {
-    const msg = formatErrorFn(err, { debug: isDebug, ...options });
+    const msg = formatErrorFn(err, { ...options, debug: isDebug });
     (io.error || console.error)(msg);
     const code = typeof err?.exitCode === 'number' ? err.exitCode : 1;
     exitFn(code);
@@ -383,9 +399,7 @@ export function installPreCommitHook(options = {}) {
       // If an existing hook ends with or contains an exit statement,
       // insert before it so self-review is guaranteed to run
       const lines = existing.split(/\r?\n/);
-      const exitIdx = lines.findIndex((l) =>
-        /^\s*exit(\s+[0-9]+|\s+\$[a-zA-Z0-9_]+)?\s*$/.test(l)
-      );
+      const exitIdx = lines.findIndex((l) => /^\s*exit\b/.test(l));
 
       if (exitIdx !== -1) {
         lines.splice(exitIdx, 0, PRE_COMMIT_HOOK_MARKER, command, '');

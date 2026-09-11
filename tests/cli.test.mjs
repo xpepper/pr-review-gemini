@@ -1,11 +1,14 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import {
   isDirectRun,
+  resolveDebugFlag,
   formatCliError,
   handleCommonFlags,
   runIfDirect,
@@ -17,6 +20,8 @@ import {
   isPreCommitHookInstalled,
 } from '../src/cli.js';
 import { VERSION, PLUGIN_NAME } from '../src/version.js';
+
+const execFileAsync = promisify(execFile);
 
 describe('Centralized CLI Infrastructure (src/cli.js)', () => {
   describe('isDirectRun', () => {
@@ -59,6 +64,35 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(isDirectRun(dummyUrl, null), false);
       assert.equal(isDirectRun(dummyUrl, []), false);
       assert.equal(isDirectRun(dummyUrl, ['node']), false);
+    });
+  });
+
+  describe('resolveDebugFlag', () => {
+    it('returns false by default for safe user-facing error formatting', () => {
+      assert.equal(resolveDebugFlag(), false);
+      assert.equal(resolveDebugFlag({}), false);
+    });
+
+    it('returns true when explicit debug, stack, or verbose option is true', () => {
+      assert.equal(resolveDebugFlag({ debug: true }), true);
+      assert.equal(resolveDebugFlag({ stack: true }), true);
+      assert.equal(resolveDebugFlag({ verbose: true }), true);
+    });
+
+    it('returns false when explicit debug is false even if other flags or env are present', () => {
+      assert.equal(resolveDebugFlag({ debug: false, verbose: true, env: { DEBUG: '1' } }), false);
+      assert.equal(resolveDebugFlag({ debug: false, argv: ['--debug'] }), false);
+    });
+
+    it('returns true when options.env.DEBUG is set', () => {
+      assert.equal(resolveDebugFlag({ env: { DEBUG: '1' } }), true);
+      assert.equal(resolveDebugFlag({ env: { DEBUG: '' } }), false);
+    });
+
+    it('returns true when argv includes --debug or --verbose', () => {
+      assert.equal(resolveDebugFlag({ argv: ['node', 'script.mjs', '--debug'] }), true);
+      assert.equal(resolveDebugFlag({ argv: ['node', 'script.mjs', '--verbose'] }), true);
+      assert.equal(resolveDebugFlag({ argv: ['node', 'script.mjs', '--quick'] }), false);
     });
   });
 
@@ -254,7 +288,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(res.exitCode, 1);
     });
 
-    it('surfaces stack trace in runIfDirect by default for full developer debuggability', async () => {
+    it('formats clean error message by default without exposing stack trace', async () => {
       const dummyFile = path.resolve('scripts/dummy-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
 
@@ -263,7 +297,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       const mockExit = () => {};
 
       const failingMain = () => {
-        throw new Error('Unexpected unhandled crash');
+        throw new Error('Clean failure without stack leak');
       };
 
       await runIfDirect(dummyUrl, failingMain, {
@@ -272,7 +306,74 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
         exit: mockExit,
       });
 
-      assert.match(loggedError, /Error: Unexpected unhandled crash/);
+      assert.equal(loggedError, '❌ Clean failure without stack leak');
+    });
+
+    it('surfaces stack trace in runIfDirect when debug, verbose, or stack option is true', async () => {
+      const dummyFile = path.resolve('scripts/dummy-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+
+      let loggedError = '';
+      const mockIo = { error: (msg) => { loggedError += msg; } };
+      const mockExit = () => {};
+
+      const failingMain = () => {
+        throw new Error('Debug error with stack');
+      };
+
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+        debug: true,
+      });
+
+      assert.match(loggedError, /Error: Debug error with stack/);
+      assert.match(loggedError, /at /);
+    });
+
+    it('surfaces stack trace in runIfDirect when --debug or --verbose is passed in argv', async () => {
+      const dummyFile = path.resolve('scripts/dummy-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+
+      let loggedError = '';
+      const mockIo = { error: (msg) => { loggedError += msg; } };
+      const mockExit = () => {};
+
+      const failingMain = () => {
+        throw new Error('Argv debug error');
+      };
+
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile, '--debug'],
+        io: mockIo,
+        exit: mockExit,
+      });
+
+      assert.match(loggedError, /Error: Argv debug error/);
+      assert.match(loggedError, /at /);
+    });
+
+    it('surfaces stack trace in runIfDirect when options.env.DEBUG is set', async () => {
+      const dummyFile = path.resolve('scripts/dummy-runner.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+
+      let loggedError = '';
+      const mockIo = { error: (msg) => { loggedError += msg; } };
+      const mockExit = () => {};
+
+      const failingMain = () => {
+        throw new Error('Env debug error');
+      };
+
+      await runIfDirect(dummyUrl, failingMain, {
+        argv: ['node', dummyFile],
+        io: mockIo,
+        exit: mockExit,
+        env: { DEBUG: '1' },
+      });
+
+      assert.match(loggedError, /Error: Env debug error/);
       assert.match(loggedError, /at /);
     });
 
@@ -289,7 +390,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       };
 
       await runIfDirect(dummyUrl, failingMain, {
-        argv: ['node', dummyFile],
+        argv: ['node', dummyFile, '--debug'],
         io: mockIo,
         exit: mockExit,
         debug: false,
@@ -522,24 +623,37 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(status.containsSelfReview, true);
     });
 
-    it('inserts self-review hook before terminal exit statement in existing hook', () => {
+    it('inserts self-review hook before terminal exit statement in existing hook across shell idioms', () => {
       const gitDir = path.join(tempDir, '.git');
       const hooksDir = path.join(gitDir, 'hooks');
       fs.mkdirSync(hooksDir, { recursive: true });
 
-      const hookFile = path.join(hooksDir, 'pre-commit');
-      fs.writeFileSync(hookFile, '#!/bin/sh\necho "check"\nexit 0\n', { mode: 0o755 });
+      const testCases = [
+        '#!/bin/sh\necho "check"\nexit 0\n',
+        '#!/bin/sh\necho "check"\nexit $?\n',
+        '#!/bin/sh\necho "check"\nexit $!\n',
+        '#!/bin/sh\necho "check"\nexit 1;\n',
+        '#!/bin/sh\necho "check"\nexit $status\n',
+      ];
 
-      const res = installPreCommitHook({ rootDir: tempDir });
-      assert.equal(res.success, true);
-      assert.equal(res.appended, true);
+      for (let i = 0; i < testCases.length; i++) {
+        const subTemp = path.join(tempDir, `sub-${i}`);
+        const subHooks = path.join(subTemp, '.git', 'hooks');
+        fs.mkdirSync(subHooks, { recursive: true });
+        const hookFile = path.join(subHooks, 'pre-commit');
+        fs.writeFileSync(hookFile, testCases[i], { mode: 0o755 });
 
-      const content = fs.readFileSync(hookFile, 'utf8');
-      const selfReviewIdx = content.indexOf('npm run self-review');
-      const exitIdx = content.indexOf('exit 0');
-      assert.ok(selfReviewIdx !== -1, 'Must contain self-review');
-      assert.ok(exitIdx !== -1, 'Must contain exit 0');
-      assert.ok(selfReviewIdx < exitIdx, 'self-review must precede exit 0 so it executes');
+        const res = installPreCommitHook({ rootDir: subTemp });
+        assert.equal(res.success, true);
+        assert.equal(res.appended, true);
+
+        const content = fs.readFileSync(hookFile, 'utf8');
+        const selfReviewIdx = content.indexOf('npm run self-review');
+        const exitIdx = content.search(/^\s*exit\b/m);
+        assert.ok(selfReviewIdx !== -1, `Must contain self-review for test case ${i}`);
+        assert.ok(exitIdx !== -1, `Must contain exit for test case ${i}`);
+        assert.ok(selfReviewIdx < exitIdx, `self-review must precede exit statement in case ${i}`);
+      }
     });
 
     it('does not touch or uninstall unmanaged hooks without PRE_COMMIT_HOOK_MARKER', () => {
@@ -559,10 +673,6 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     });
 
     it('installs and uninstalls pre-commit hook via self-review.mjs CLI flags', async () => {
-      const { execFile } = await import('node:child_process');
-      const { promisify } = await import('node:util');
-      const execFileAsync = promisify(execFile);
-
       const gitDir = path.join(tempDir, '.git');
       fs.mkdirSync(gitDir, { recursive: true });
 
@@ -608,19 +718,11 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
 
     for (const script of scripts) {
       it(`${script.name} displays usage banner with --help and exits 0`, async () => {
-        const { execFile } = await import('node:child_process');
-        const { promisify } = await import('node:util');
-        const execFileAsync = promisify(execFile);
-
         const { stdout } = await execFileAsync(process.execPath, [script.path, '--help']);
         assert.match(stdout, script.expectedUsage);
       });
 
       it(`${script.name} displays version banner with -v and exits 0`, async () => {
-        const { execFile } = await import('node:child_process');
-        const { promisify } = await import('node:util');
-        const execFileAsync = promisify(execFile);
-
         const { stdout } = await execFileAsync(process.execPath, [script.path, '-v']);
         assert.match(stdout, new RegExp(`${PLUGIN_NAME} v${VERSION}`));
       });
