@@ -3,8 +3,10 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (541 tests across 109 suites, 0 failures)
+* **Current Branch**: `feat/pr-comment-commands`
+* **Active PR**: [#32: feat(ci): interactive PR comment command dispatcher (/gem-review) (#31)](https://github.com/xpepper/pr-review-gemini/pull/32)
+* **Test Suite**: `npm test` runs and passes (603 tests across 117 suites, 0 failures)
+* **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -28,24 +30,23 @@
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
+  - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (In review, head commit `8d53b8c`)
 
 ---
 
-## Status: READY_FOR_INCREMENT_18 (Issue #31)
+## Status: INCREMENT_18_REVIEW_TRIAGE (Issue #31, PR #32)
 
-All 17 increments are fully implemented, verified test-first (541 passing tests across 109 suites, manifest version check green), dogfood-reviewed on GitHub PRs, and merged to `main`.
-Active next mission: **Increment 18 / Issue #31**: Interactive PR Comment Command Dispatcher (`/gem-review`).
-- [x] Increment 8: Large-diff file-backed transport (> 200 KB)
-- [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
-- [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
-- [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
-- [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
-- [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
-- [x] Increment 14: Pluggable custom review roles & specialist lenses
-- [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
-- [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
-- [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29, PR #30)
-- [ ] Increment 18: Interactive PR comment command dispatcher (`/gem-review`) (Issue #31)
+Increment 18 is fully implemented, verified test-first (603 passing tests across 117 suites, manifest version check green), dogfood-reviewed across multiple passes on GitHub PR #32.
+
+### Direct Action Item for the Incoming Agent:
+**Run a full `/pr-review-loop` triage on the open review comments on PR #32**:
+1. Run `gh pr status` and fetch open review threads via GraphQL.
+2. For each open inline review thread:
+   - Many of the earlier comments have already been fixed in commits `73278d1`, `75f19bf`, `d9763f0`, and `8d53b8c` (e.g., custom profile opt-in gating, eliminating duplicate metadata fetches, failing closed on missing head SHA, aligning `formatCiSummary` banner with verification results, fixing indentation).
+   - If already addressed: reply with the commit SHA and explanation, and call `resolveReviewThread`.
+   - If any finding requires code adjustment: write a test first, make the smallest passing change, verify green (`npm test`), commit with conventional message, reply, and resolve the thread.
+3. Run the full verification suite (`npm test`, `npm run version:check`).
+4. Once all review threads are resolved and clean, merge PR #32 into `main` (`gh pr merge 32 --squash --delete-branch`), pull `main`, and advance the roadmap to Increment 19.
 
 ---
 
