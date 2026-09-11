@@ -541,7 +541,9 @@ jobs:
 ```
 
 > [!NOTE]
-> **Host-Gated Security**: The runner keeps the repository checked out on the trusted base branch (`main`). `pr-review-gemini` inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace. Detached worktree test verification (`--verify`) is restricted to same-repository branches and safe predefined built-in profiles (`test`, `build`, `lint`), automatically skipping execution on cross-repository/fork PRs to ensure untrusted code is never executed.
+> **Host-Gated Security & Execution Boundary**: By default, `pr-review-gemini` operates strictly as a diff-only static analysis tool. The CI runner keeps the repository checked out on the trusted base branch (`main`) and inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace.
+>
+> Detached worktree test verification (`--verify`) is an optional, maintainer-initiated feature that executes test suites against the PR head in an isolated temporary worktree with process group timeout supervision and scrubbed environment variables (stripping GitHub tokens and CI secrets). In CI environments, `--verify` is restricted to same-repository branches and canonical safe built-in profiles (`test`, `build`, `lint`). Verification automatically fails closed on cross-repository/fork PRs or API origin check errors to guarantee that untrusted fork code is never executed. Custom verification profiles require explicit opt-in (`enableCustomCiProfiles: true`) and strict command validation rejecting shell metacharacters and unapproved executables.
 
 ---
 

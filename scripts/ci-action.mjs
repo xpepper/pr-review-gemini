@@ -25,6 +25,7 @@ import {
   listVerificationProfiles,
   resolveVerificationProfile,
   validateCiVerificationCommand,
+  DEFAULT_VERIFICATION_PROFILES,
 } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
@@ -272,7 +273,11 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
       const registered = listVerificationProfiles(options.config);
-      const allowedNames = options.config?.allowedCiVerificationProfiles || Object.keys(registered);
+      const allowedNames = options.config?.allowedCiVerificationProfiles || (
+        options.config?.enableCustomCiProfiles === true
+          ? Object.keys(registered)
+          : Object.keys(DEFAULT_VERIFICATION_PROFILES)
+      );
       const SAFE_PROFILES = new Set(allowedNames);
 
       if (!SAFE_PROFILES.has(profileName)) {
@@ -285,16 +290,11 @@ export async function runCiAction(options = {}, env = process.env, io = console)
           output: errorMsg,
         };
       } else {
-        let resolvedProfile;
+        let resolvedProfile = null;
         try {
           resolvedProfile = resolveVerificationProfile(profileName, options.config);
-        } catch {
-          resolvedProfile = null;
-        }
-
-        const cmdValidation = validateCiVerificationCommand(resolvedProfile?.command || '');
-        if (!cmdValidation.safe) {
-          const errorMsg = `Security: Verification profile "${profileName}" rejected: ${cmdValidation.reason}.`;
+        } catch (resolveErr) {
+          const errorMsg = `Verification profile "${profileName}" failed to resolve: ${resolveErr.message}`;
           io.warn(`[CI] ${errorMsg}`);
           verificationResult = {
             status: 'failed',
@@ -302,7 +302,20 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             error: errorMsg,
             output: errorMsg,
           };
-        } else {
+        }
+
+        if (resolvedProfile) {
+          const cmdValidation = validateCiVerificationCommand(resolvedProfile.command || '');
+          if (!cmdValidation.safe) {
+            const errorMsg = `Security: Verification profile "${profileName}" rejected: ${cmdValidation.reason}.`;
+            io.warn(`[CI] ${errorMsg}`);
+            verificationResult = {
+              status: 'failed',
+              profile: profileName,
+              error: errorMsg,
+              output: errorMsg,
+            };
+          } else {
           // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
         let isCrossRepo = true;
         let originCheckFailed = false;
@@ -385,6 +398,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       }
     }
   }
+}
 
     const qualityGate = evaluateCiQualityGate(reviewResult.findings, {
       failOn: ciEnv.failOn,
