@@ -1,0 +1,51 @@
+name: 'Release'
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name to release (e.g. v0.2.0)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 'Verify & Publish GitHub Release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify Manifest Synchronization
+        run: node scripts/bump-version.mjs --check
+
+      - name: Run Test Suite
+        run: npm test
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          node scripts/bump-version.mjs auto --changelog > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name || github.event.inputs.tag }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Release $TAG_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
