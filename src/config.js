@@ -23,6 +23,15 @@ export const VALID_REASONING_EFFORTS = Object.freeze(['off', 'low', 'medium', 'h
 export const VALID_APPROVE_MAX_PRIORITY_LEVELS = Object.freeze(['off', 'P2', 'P3', 'nit']);
 
 /**
+ * Default guidelines configuration.
+ */
+export const DEFAULT_GUIDELINES_CONFIG = Object.freeze({
+  enabled: true,
+  path: null,
+  max_bytes: 64 * 1024,
+});
+
+/**
  * Sensible default configuration.
  */
 export const DEFAULT_CONFIG = Object.freeze({
@@ -52,6 +61,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   enabled_roles: Object.freeze([]),
   autoPostReviews: false,
   approveMaxPriorityLevel: 'off',
+  guidelines: DEFAULT_GUIDELINES_CONFIG,
 });
 
 const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'prototype', 'constructor']);
@@ -211,6 +221,11 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     enabled_roles: [...DEFAULT_CONFIG.enabled_roles],
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
+    guidelines: {
+      enabled: DEFAULT_CONFIG.guidelines.enabled,
+      path: DEFAULT_CONFIG.guidelines.path,
+      max_bytes: DEFAULT_CONFIG.guidelines.max_bytes,
+    },
   };
 
   for (const src of sources) {
@@ -237,6 +252,37 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
       VALID_APPROVE_MAX_PRIORITY_LEVELS.includes(src.approveMaxPriorityLevel)
     ) {
       resolved.approveMaxPriorityLevel = src.approveMaxPriorityLevel;
+    }
+
+    // Top-level guideline aliases
+    if (typeof src.review_guidelines_path === 'string' && src.review_guidelines_path.trim().length > 0) {
+      resolved.guidelines.path = src.review_guidelines_path.trim();
+    } else if (typeof src.guidelines_path === 'string' && src.guidelines_path.trim().length > 0) {
+      resolved.guidelines.path = src.guidelines_path.trim();
+    } else if (typeof src.guidelinesPath === 'string' && src.guidelinesPath.trim().length > 0) {
+      resolved.guidelines.path = src.guidelinesPath.trim();
+    }
+
+    if (typeof src.guidelines_enabled === 'boolean') {
+      resolved.guidelines.enabled = src.guidelines_enabled;
+    } else if (typeof src.guidelinesEnabled === 'boolean') {
+      resolved.guidelines.enabled = src.guidelinesEnabled;
+    }
+
+    // Guidelines configuration object
+    if (isPlainObject(src.guidelines)) {
+      if (typeof src.guidelines.enabled === 'boolean') {
+        resolved.guidelines.enabled = src.guidelines.enabled;
+      }
+      if (typeof src.guidelines.path === 'string' && src.guidelines.path.trim().length > 0) {
+        resolved.guidelines.path = src.guidelines.path.trim();
+      } else if (src.guidelines.path === null) {
+        resolved.guidelines.path = null;
+      }
+      const rawMaxBytes = src.guidelines.max_bytes ?? src.guidelines.maxBytes;
+      if (typeof rawMaxBytes === 'number' && Number.isFinite(rawMaxBytes) && rawMaxBytes > 0) {
+        resolved.guidelines.max_bytes = Math.floor(rawMaxBytes);
+      }
     }
 
     if (isPlainObject(src.tiers)) {
