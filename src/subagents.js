@@ -21,6 +21,8 @@ import {
   getFallbackModelsForTier,
   DEFAULT_CONFIG,
   VALID_TIERS,
+  formatDefaultRoleName,
+  sanitizeCustomRoles,
 } from './config.js';
 import { parseMarkdownFindings } from './publish.js';
 import { isLargeDiff, createFileBackedDiff } from './diff.js';
@@ -148,76 +150,189 @@ export const DEFAULT_LENS_TIERS = Object.freeze({
 
 /**
  * Resolves the execution plan (lenses, tiers, models, and reasoning efforts) for a given review mode.
+ * Supports custom review roles, flexible composition (adding or replacing standard lenses),
+ * and filtering via enabled roles.
  *
- * @param {Object} options
- * @param {string|Object} [options.mode] - Review mode name or object
- * @param {Object} [options.config] - Configuration settings
+ * @param {string|Object} [modeOrOptions='balanced'] - Review mode name/object, or options object
+ * @param {Object} [maybeConfig] - Configuration settings (when modeOrOptions is mode string/object)
  * @returns {Array<Object>} Execution plan items
  */
-export function resolveLensPlan({ mode = 'balanced', config } = {}) {
-  const resolvedMode = typeof mode === 'string' ? resolveReviewMode(mode) : mode || REVIEW_MODES.balanced;
-  const resolvedConfig = config || DEFAULT_CONFIG;
+export function resolveLensPlan(modeOrOptions = 'balanced', maybeConfig) {
+  let modeInput = 'balanced';
+  let configInput = null;
+  let explicitRoles = null;
+  let explicitReplaceStandard = null;
+  let explicitCustomRoles = null;
+
+  if (
+    typeof modeOrOptions === 'string' ||
+    (modeOrOptions && modeOrOptions.lenses && !modeOrOptions.mode && !modeOrOptions.config && !modeOrOptions.customRoles)
+  ) {
+    modeInput = modeOrOptions;
+    configInput = maybeConfig;
+  } else if (modeOrOptions && typeof modeOrOptions === 'object') {
+    modeInput = modeOrOptions.mode ?? 'balanced';
+    configInput = modeOrOptions.config || maybeConfig;
+    explicitRoles = modeOrOptions.roles || modeOrOptions.enabledRoles || modeOrOptions.enabled_roles;
+    explicitReplaceStandard = modeOrOptions.replaceStandardRoles ?? modeOrOptions.replace_standard_roles;
+    explicitCustomRoles = modeOrOptions.customRoles ?? modeOrOptions.custom_roles;
+  }
+
+  const resolvedMode = typeof modeInput === 'string' ? resolveReviewMode(modeInput) : modeInput || REVIEW_MODES.balanced;
+  const resolvedConfig = configInput || DEFAULT_CONFIG;
+
+  const customRoles = {
+    ...(resolvedConfig.custom_roles || {}),
+    ...sanitizeCustomRoles(explicitCustomRoles),
+  };
+
+  const replaceStandard =
+    explicitReplaceStandard !== null && explicitReplaceStandard !== undefined
+      ? Boolean(explicitReplaceStandard)
+      : Boolean(resolvedConfig.replace_standard_roles);
+
+  let enabledList = null;
+  if (explicitRoles) {
+    if (Array.isArray(explicitRoles)) {
+      enabledList = [...new Set(explicitRoles.map(String).map((s) => s.trim()).filter(Boolean))];
+    } else if (typeof explicitRoles === 'string') {
+      enabledList = [...new Set(explicitRoles.split(',').map((s) => s.trim()).filter(Boolean))];
+    }
+  } else if (Array.isArray(resolvedConfig.enabled_roles) && resolvedConfig.enabled_roles.length > 0) {
+    enabledList = [...new Set(resolvedConfig.enabled_roles)];
+  }
+
+  // Determine role IDs to schedule
+  let roleIdsToRun = [];
+  if (enabledList && enabledList.length > 0) {
+    for (const requestedId of enabledList) {
+      if (!customRoles[requestedId] && !LENS_DEFINITIONS[requestedId]) {
+        throw new Error(`Unknown review role: "${requestedId}".`);
+      }
+    }
+    roleIdsToRun = enabledList;
+  } else if (replaceStandard) {
+    roleIdsToRun = Object.keys(customRoles);
+  } else {
+    const standardLenses = resolvedMode.lenses || [];
+    roleIdsToRun = [...standardLenses];
+    for (const customId of Object.keys(customRoles)) {
+      if (!roleIdsToRun.includes(customId)) {
+        roleIdsToRun.push(customId);
+      }
+    }
+  }
 
   const plan = [];
 
-  for (const lensId of resolvedMode.lenses || []) {
-    const lensDef = LENS_DEFINITIONS[lensId];
-    if (!lensDef) continue;
+  for (const lensId of roleIdsToRun) {
+    const customRole = customRoles[lensId];
+    const standardDef = LENS_DEFINITIONS[lensId];
 
-    let tier = resolvedMode.defaultTier || 'medium';
-    let reasoningEffort = resolvedMode.reasoningEffort || 'off';
+    if (!customRole && !standardDef) {
+      throw new Error(`Unknown review role: "${lensId}".`);
+    }
 
     const lensOverride = resolvedConfig.lenses?.[lensId];
 
-    if (resolvedMode.name === 'quick') {
-      tier = 'light';
-      reasoningEffort = 'off';
-    } else if (resolvedMode.name === 'deep') {
-      tier = 'heavy';
-      reasoningEffort = 'high';
+    if (customRole) {
+      const promptText = customRole.prompt || customRole.instructions || '';
+      const lensDef = {
+        id: lensId,
+        name: customRole.name || formatDefaultRoleName(lensId),
+        description: customRole.description || `Custom review role for ${lensId}`,
+        instructions: promptText,
+        prompt: promptText,
+        isCustomRole: true,
+      };
+
+      let tier = customRole.tier || resolvedMode.defaultTier || 'medium';
+      if (lensOverride?.tier && VALID_TIERS.includes(lensOverride.tier)) {
+        tier = lensOverride.tier;
+      }
+
+      const model = lensOverride?.model || customRole.model || getModelForTier(resolvedConfig, tier);
+
+      let reasoningEffort = lensOverride?.reasoningEffort || customRole.reasoningEffort;
+      if (!reasoningEffort) {
+        if (resolvedMode.name === 'deep') {
+          reasoningEffort = 'high';
+        } else if (resolvedConfig.reasoningEfforts?.[tier] && resolvedConfig.reasoningEfforts[tier] !== 'off') {
+          reasoningEffort = resolvedConfig.reasoningEfforts[tier];
+        } else {
+          reasoningEffort = 'off';
+        }
+      }
+
+      const rawFallbacks = lensOverride?.fallbacks || customRole.fallbacks || getFallbackModels(resolvedConfig, { tier, lensId });
+      const fallbacks = (Array.isArray(rawFallbacks) ? rawFallbacks : []).filter(
+        (fb) => fb && fb !== model
+      );
+
+      plan.push({
+        lensId,
+        lensDef,
+        mode: resolvedMode.name || 'custom',
+        tier,
+        model,
+        reasoningEffort,
+        fallbacks,
+      });
     } else {
-      // Balanced or full: use specialized tier mapping
-      const defaultMapping = DEFAULT_LENS_TIERS[lensId];
-      if (defaultMapping) {
-        tier = defaultMapping.tier;
-        reasoningEffort = defaultMapping.reasoningEffort;
+      // Standard lens
+      const lensDef = standardDef;
+      let tier = resolvedMode.defaultTier || 'medium';
+      let reasoningEffort = resolvedMode.reasoningEffort || 'off';
+
+      if (resolvedMode.name === 'quick') {
+        tier = 'light';
+        reasoningEffort = 'off';
+      } else if (resolvedMode.name === 'deep') {
+        tier = 'heavy';
+        reasoningEffort = 'high';
+      } else {
+        const defaultMapping = DEFAULT_LENS_TIERS[lensId];
+        if (defaultMapping) {
+          tier = defaultMapping.tier;
+          reasoningEffort = defaultMapping.reasoningEffort;
+        }
       }
-    }
 
-    if (lensOverride?.tier && VALID_TIERS.includes(lensOverride.tier)) {
-      tier = lensOverride.tier;
-    }
-
-    // Resolve model identifier: lens override -> config tiers -> default tiers
-    const model = lensOverride?.model || getModelForTier(resolvedConfig, tier);
-
-    // Resolve reasoning effort: lens override -> tier configuration -> default assignment
-    if (lensOverride?.reasoningEffort) {
-      reasoningEffort = lensOverride.reasoningEffort;
-    } else if (resolvedConfig.reasoningEfforts?.[tier]) {
-      // When lens reasoning effort is 'off', respect config if set, otherwise keep lens recommendation
-      if (reasoningEffort === 'off' && resolvedConfig.reasoningEfforts[tier] !== 'off') {
-        reasoningEffort = resolvedConfig.reasoningEfforts[tier];
+      if (lensOverride?.tier && VALID_TIERS.includes(lensOverride.tier)) {
+        tier = lensOverride.tier;
       }
+
+      const model = lensOverride?.model || getModelForTier(resolvedConfig, tier);
+
+      if (lensOverride?.reasoningEffort) {
+        reasoningEffort = lensOverride.reasoningEffort;
+      } else if (resolvedConfig.reasoningEfforts?.[tier]) {
+        if (reasoningEffort === 'off' && resolvedConfig.reasoningEfforts[tier] !== 'off') {
+          reasoningEffort = resolvedConfig.reasoningEfforts[tier];
+        }
+      }
+
+      const rawFallbacks = lensOverride?.fallbacks
+        ? lensOverride.fallbacks
+        : getFallbackModels(resolvedConfig, { tier, lensId });
+      const fallbacks = (Array.isArray(rawFallbacks) ? rawFallbacks : []).filter(
+        (fb) => fb && fb !== model
+      );
+
+      plan.push({
+        lensId,
+        lensDef,
+        mode: resolvedMode.name,
+        tier,
+        model,
+        reasoningEffort,
+        fallbacks,
+      });
     }
+  }
 
-    // Resolve fallback models: lens override -> tier fallbacks (excluding primary model)
-    const rawFallbacks = lensOverride?.fallbacks
-      ? lensOverride.fallbacks
-      : getFallbackModels(resolvedConfig, { tier, lensId });
-    const fallbacks = (Array.isArray(rawFallbacks) ? rawFallbacks : []).filter(
-      (fb) => fb && fb !== model
-    );
-
-    plan.push({
-      lensId,
-      lensDef,
-      mode: resolvedMode.name,
-      tier,
-      model,
-      reasoningEffort,
-      fallbacks,
-    });
+  if (plan.length === 0) {
+    throw new Error('No review roles scheduled. Cannot execute review with zero lenses.');
   }
 
   return plan;

@@ -46,6 +46,9 @@ export const DEFAULT_CONFIG = Object.freeze({
   medium_fallbacks: Object.freeze([]),
   light_fallbacks: Object.freeze([]),
   lenses: Object.freeze({}),
+  custom_roles: Object.freeze({}),
+  replace_standard_roles: false,
+  enabled_roles: Object.freeze([]),
   autoPostReviews: false,
   approveMaxPriorityLevel: 'off',
 });
@@ -61,6 +64,99 @@ function sanitizeModelList(list) {
     }
   }
   return result;
+}
+
+function sanitizeStringList(list) {
+  if (!Array.isArray(list)) return [];
+  const result = [];
+  for (const item of list) {
+    if (typeof item === 'string' && item.trim().length > 0) {
+      result.push(item.trim());
+    }
+  }
+  return result;
+}
+
+export function formatDefaultRoleName(roleId) {
+  if (!roleId || typeof roleId !== 'string') return 'Custom Role';
+  return roleId
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export function sanitizeCustomRoles(rawRoles) {
+  if (!isPlainObject(rawRoles)) return {};
+  const sanitized = {};
+  for (const [roleId, roleConfig] of Object.entries(rawRoles)) {
+    if (UNSAFE_OBJECT_KEYS.includes(roleId) || !isPlainObject(roleConfig)) continue;
+    const clean = sanitizeRoleConfig(roleId, roleConfig);
+    if (clean) {
+      sanitized[roleId] = clean;
+    }
+  }
+  return sanitized;
+}
+
+function sanitizeRoleConfig(roleId, roleConfig, existingRole = null) {
+  if (!isPlainObject(roleConfig)) return null;
+
+  const rawPrompt =
+    typeof roleConfig.prompt === 'string' && roleConfig.prompt.trim().length > 0
+      ? roleConfig.prompt.trim()
+      : typeof roleConfig.instructions === 'string' && roleConfig.instructions.trim().length > 0
+        ? roleConfig.instructions.trim()
+        : existingRole?.prompt || '';
+
+  if (!rawPrompt) {
+    return null;
+  }
+
+  const sanitized = {
+    name:
+      typeof roleConfig.name === 'string' && roleConfig.name.trim().length > 0
+        ? roleConfig.name.trim()
+        : existingRole?.name || formatDefaultRoleName(roleId),
+    prompt: rawPrompt,
+    instructions: rawPrompt,
+  };
+
+  if (typeof roleConfig.description === 'string' && roleConfig.description.trim().length > 0) {
+    sanitized.description = roleConfig.description.trim();
+  } else if (existingRole?.description) {
+    sanitized.description = existingRole.description;
+  }
+
+  if (typeof roleConfig.model === 'string' && roleConfig.model.trim().length > 0) {
+    sanitized.model = roleConfig.model.trim();
+  } else if (existingRole?.model) {
+    sanitized.model = existingRole.model;
+  }
+
+  if (
+    typeof roleConfig.reasoningEffort === 'string' &&
+    VALID_REASONING_EFFORTS.includes(roleConfig.reasoningEffort)
+  ) {
+    sanitized.reasoningEffort = roleConfig.reasoningEffort;
+  } else if (existingRole?.reasoningEffort) {
+    sanitized.reasoningEffort = existingRole.reasoningEffort;
+  }
+
+  if (typeof roleConfig.tier === 'string' && VALID_TIERS.includes(roleConfig.tier)) {
+    sanitized.tier = roleConfig.tier;
+  } else if (existingRole?.tier) {
+    sanitized.tier = existingRole.tier;
+  }
+
+  if (Array.isArray(roleConfig.fallbacks)) {
+    sanitized.fallbacks = sanitizeModelList(roleConfig.fallbacks);
+  } else if (existingRole?.fallbacks) {
+    sanitized.fallbacks = [...existingRole.fallbacks];
+  }
+
+  return sanitized;
 }
 
 function isPlainObject(val) {
@@ -108,6 +204,9 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     medium_fallbacks: [...DEFAULT_CONFIG.medium_fallbacks],
     light_fallbacks: [...DEFAULT_CONFIG.light_fallbacks],
     lenses: { ...DEFAULT_CONFIG.lenses },
+    custom_roles: { ...DEFAULT_CONFIG.custom_roles },
+    replace_standard_roles: DEFAULT_CONFIG.replace_standard_roles,
+    enabled_roles: [...DEFAULT_CONFIG.enabled_roles],
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
   };
@@ -194,6 +293,40 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
         }
       }
     }
+
+    if (typeof src.replace_standard_roles === 'boolean') {
+      resolved.replace_standard_roles = src.replace_standard_roles;
+    } else if (typeof src.replaceStandardRoles === 'boolean') {
+      resolved.replace_standard_roles = src.replaceStandardRoles;
+    }
+
+    if (Array.isArray(src.enabled_roles)) {
+      resolved.enabled_roles = sanitizeStringList(src.enabled_roles);
+    } else if (Array.isArray(src.enabledRoles)) {
+      resolved.enabled_roles = sanitizeStringList(src.enabledRoles);
+    }
+
+    const rawRoles = isPlainObject(src.custom_roles)
+      ? src.custom_roles
+      : isPlainObject(src.customRoles)
+        ? src.customRoles
+        : isPlainObject(src.roles)
+          ? src.roles
+          : null;
+
+    if (rawRoles) {
+      for (const [roleId, roleConfig] of Object.entries(rawRoles)) {
+        if (UNSAFE_OBJECT_KEYS.includes(roleId) || !isPlainObject(roleConfig)) continue;
+        const existingRole = resolved.custom_roles[roleId] || null;
+        const sanitized = sanitizeRoleConfig(roleId, roleConfig, existingRole);
+        if (sanitized) {
+          resolved.custom_roles[roleId] = {
+            ...(resolved.custom_roles[roleId] || {}),
+            ...sanitized,
+          };
+        }
+      }
+    }
   }
 
   return resolved;
@@ -211,18 +344,19 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
  * @returns {typeof DEFAULT_CONFIG} Resolved configuration object
  */
 export function loadConfig(options = {}) {
-  const homeDir = options.homeDir || os.homedir();
-  const cwd = options.cwd || process.cwd();
+  const opts = typeof options === 'string' ? { cwd: options } : (options || {});
+  const homeDir = opts.homeDir || os.homedir();
+  const cwd = opts.cwd || process.cwd();
 
   const userGemConfigPath = path.join(homeDir, '.copilot', 'gem-pr-review.json');
   const userFallbackConfigPath = path.join(homeDir, '.copilot', 'pr-review.json');
-  const userConfigPath = options.userConfigPath || (
+  const userConfigPath = opts.userConfigPath || (
     fs.existsSync(userGemConfigPath) ? userGemConfigPath : userFallbackConfigPath
   );
 
   const projectGemConfigPath = path.join(cwd, '.github', 'gem-pr-review.json');
   const projectFallbackConfigPath = path.join(cwd, '.github', 'pr-review.json');
-  const projectConfigPath = options.projectConfigPath || (
+  const projectConfigPath = opts.projectConfigPath || (
     fs.existsSync(projectGemConfigPath) ? projectGemConfigPath : projectFallbackConfigPath
   );
 
@@ -232,7 +366,7 @@ export function loadConfig(options = {}) {
   return resolveConfig({
     userConfig,
     projectConfig,
-    overrides: options.overrides,
+    overrides: opts.overrides,
   });
 }
 
@@ -296,4 +430,14 @@ export function getFallbackModels(config, { tier, lensId } = {}) {
     return getFallbackModelsForTier(config, tier);
   }
   return [];
+}
+
+/**
+ * Returns the configured custom roles dictionary.
+ *
+ * @param {Object} config - Resolved configuration object
+ * @returns {Record<string, Object>} Custom roles map
+ */
+export function getCustomRoles(config) {
+  return config?.custom_roles || {};
 }

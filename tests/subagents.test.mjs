@@ -285,6 +285,213 @@ describe('Subagent Dispatcher & Parallel Execution', () => {
       assert.equal(security.model, 'claude-3.5-sonnet');
       assert.deepEqual(security.fallbacks, ['gpt-4o', 'gemini-2.5-pro']);
     });
+
+    it('mounts custom roles alongside standard lenses by default', () => {
+      const config = {
+        custom_roles: {
+          accessibility: {
+            name: 'Accessibility & WCAG',
+            prompt: 'Verify WCAG 2.1 AA checklist, keyboard navigation, and ARIA labels.',
+            model: 'claude-3.7-sonnet',
+            reasoningEffort: 'medium',
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+      // 5 standard lenses + 1 custom role = 6
+      assert.equal(plan.length, 6);
+      const roleIds = plan.map((p) => p.lensId);
+      assert.ok(roleIds.includes('accessibility'));
+      assert.ok(roleIds.includes('correctness'));
+      assert.ok(roleIds.includes('security'));
+
+      const a11y = plan.find((p) => p.lensId === 'accessibility');
+      assert.equal(a11y.lensDef.name, 'Accessibility & WCAG');
+      assert.equal(a11y.lensDef.instructions, 'Verify WCAG 2.1 AA checklist, keyboard navigation, and ARIA labels.');
+      assert.equal(a11y.model, 'claude-3.7-sonnet');
+      assert.equal(a11y.reasoningEffort, 'medium');
+      assert.equal(a11y.lensDef.isCustomRole, true);
+    });
+
+    it('supports replace_standard_roles: true (executing only custom roles)', () => {
+      const config = {
+        custom_roles: {
+          accessibility: {
+            name: 'Accessibility',
+            prompt: 'Check accessibility.',
+          },
+          migrations: {
+            name: 'Migrations',
+            prompt: 'Check DB migrations.',
+          },
+        },
+        replace_standard_roles: true,
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+      assert.equal(plan.length, 2);
+      const roleIds = plan.map((p) => p.lensId);
+      assert.deepEqual(roleIds, ['accessibility', 'migrations']);
+    });
+
+    it('supports enabled_roles filtering (executing only requested role IDs)', () => {
+      const config = {
+        custom_roles: {
+          accessibility: { prompt: 'Check a11y.' },
+          migrations: { prompt: 'Check migrations.' },
+        },
+        enabled_roles: ['correctness', 'accessibility'],
+      };
+
+      const plan = resolveLensPlan({ mode: 'full', config });
+      assert.equal(plan.length, 2);
+      const roleIds = plan.map((p) => p.lensId);
+      assert.deepEqual(roleIds, ['correctness', 'accessibility']);
+    });
+
+    it('supports overriding a standard lens definition with a custom role of the same ID', () => {
+      const config = {
+        custom_roles: {
+          security: {
+            name: 'Custom Domain Security',
+            prompt: 'Company-specific security rules: check HMAC signatures and sandbox escapes.',
+            model: 'gpt-4o',
+            reasoningEffort: 'high',
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced', config });
+      assert.equal(plan.length, 5);
+      const sec = plan.find((p) => p.lensId === 'security');
+      assert.equal(sec.lensDef.name, 'Custom Domain Security');
+      assert.equal(sec.lensDef.instructions, 'Company-specific security rules: check HMAC signatures and sandbox escapes.');
+      assert.equal(sec.model, 'gpt-4o');
+      assert.equal(sec.reasoningEffort, 'high');
+      assert.equal(sec.lensDef.isCustomRole, true);
+    });
+
+    it('respects custom role model, reasoningEffort, tier, and fallbacks', () => {
+      const config = {
+        custom_roles: {
+          specialist: {
+            name: 'Specialist',
+            prompt: 'Custom rules',
+            tier: 'heavy',
+            model: 'custom-model',
+            reasoningEffort: 'low',
+            fallbacks: ['fb-1', 'fb-2'],
+          },
+        },
+      };
+
+      const plan = resolveLensPlan({ mode: 'quick', config });
+      const item = plan.find((p) => p.lensId === 'specialist');
+      assert.ok(item);
+      assert.equal(item.tier, 'heavy');
+      assert.equal(item.model, 'custom-model');
+      assert.equal(item.reasoningEffort, 'low');
+      assert.deepEqual(item.fallbacks, ['fb-1', 'fb-2']);
+    });
+
+    it('supports runtime role options passed directly to resolveLensPlan', () => {
+      const plan = resolveLensPlan({
+        mode: 'balanced',
+        customRoles: {
+          a11y: { prompt: 'Direct runtime role' },
+        },
+        replaceStandardRoles: true,
+      });
+
+      assert.equal(plan.length, 1);
+      assert.equal(plan[0].lensId, 'a11y');
+      assert.equal(plan[0].lensDef.instructions, 'Direct runtime role');
+    });
+
+    it('supports positional argument backward compatibility (modeObj, config)', () => {
+      const config = {
+        tiers: { light: 'model-light', medium: 'model-medium', heavy: 'model-heavy' },
+      };
+      const plan = resolveLensPlan(REVIEW_MODES.quick, config);
+      assert.equal(plan.length, 3);
+      assert.equal(plan[0].model, 'model-light');
+    });
+
+    it('throws error when unknown role ID is explicitly requested', () => {
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', roles: ['nonexistent_role'] }),
+        /Unknown review role/i
+      );
+
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', config: { enabled_roles: ['missing_role'] } }),
+        /Unknown review role/i
+      );
+    });
+
+    it('throws error when execution plan schedules zero lenses', () => {
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', replaceStandardRoles: true, customRoles: {} }),
+        /No review roles scheduled|Cannot execute review with zero lenses/i
+      );
+
+      assert.throws(
+        () => resolveLensPlan({ mode: 'balanced', config: { replace_standard_roles: true, custom_roles: {} } }),
+        /No review roles scheduled|Cannot execute review with zero lenses/i
+      );
+    });
+
+    it('normalizes and sanitizes runtime customRoles passed to resolveLensPlan', () => {
+      // 1. Promptless role is ignored and rejected if requested
+      assert.throws(
+        () =>
+          resolveLensPlan({
+            mode: 'balanced',
+            roles: ['empty_role'],
+            customRoles: {
+              empty_role: { name: 'Empty', prompt: '   ' },
+            },
+          }),
+        /Unknown review role/i
+      );
+
+      // 2. Invalid tier falls back to mode tier and malformed fallbacks are sanitized
+      const plan = resolveLensPlan({
+        mode: 'quick',
+        replaceStandardRoles: true,
+        customRoles: {
+          test_role: {
+            prompt: 'Valid prompt',
+            tier: 'invalid-tier',
+            fallbacks: ['valid-fallback', '', 123, null],
+          },
+        },
+      });
+
+      assert.equal(plan.length, 1);
+      assert.equal(plan[0].lensId, 'test_role');
+      assert.equal(plan[0].tier, 'light');
+      assert.deepEqual(plan[0].fallbacks, ['valid-fallback']);
+    });
+
+    it('deduplicates role IDs when duplicate roles are specified in CLI or config', () => {
+      const planFromList = resolveLensPlan({
+        mode: 'balanced',
+        roles: ['security', 'security', 'security'],
+      });
+      assert.equal(planFromList.length, 1);
+      assert.equal(planFromList[0].lensId, 'security');
+
+      const planFromConfig = resolveLensPlan({
+        mode: 'balanced',
+        config: {
+          enabled_roles: ['correctness', 'correctness'],
+        },
+      });
+      assert.equal(planFromConfig.length, 1);
+      assert.equal(planFromConfig[0].lensId, 'correctness');
+    });
   });
 
   describe('dispatchSubagentsParallel', () => {
@@ -637,6 +844,66 @@ Thinking: Analyzing diff for security vulnerabilities...
       assert.equal(output.findings[0].filePath, 'src/user.js');
       assert.equal(output.findings[0].line, 105);
       assert.equal(output.findings[0].lens, 'security');
+    });
+
+    it('executes custom roles, tags findings with custom role lensId, and isolates errors', async () => {
+      const plan = [
+        {
+          lensId: 'accessibility',
+          lensDef: {
+            id: 'accessibility',
+            name: 'Accessibility & WCAG',
+            instructions: 'Check keyboard navigation and ARIA.',
+            isCustomRole: true,
+          },
+          tier: 'medium',
+          model: 'claude-3.5-sonnet',
+        },
+        {
+          lensId: 'broken_role',
+          lensDef: {
+            id: 'broken_role',
+            name: 'Broken Role',
+            instructions: 'Fails execution.',
+            isCustomRole: true,
+          },
+          tier: 'medium',
+          model: 'claude-3.5-sonnet',
+        },
+      ];
+
+      const runnerFn = async ({ lens }) => {
+        if (lens.id === 'broken_role') {
+          throw new Error('Custom role failed to parse schema');
+        }
+        return `
+<<<PR_REVIEW_JSON>>>
+[
+  {
+    "title": "Missing aria-label on icon button",
+    "severity": "P2",
+    "file": "src/button.js",
+    "line": 15,
+    "confidence": 0.9,
+    "body": "Add aria-label attribute."
+  }
+]
+<<<END_PR_REVIEW_JSON>>>`;
+      };
+
+      const output = await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+      });
+
+      assert.equal(output.results.length, 2);
+      assert.equal(output.errors.length, 1);
+      assert.equal(output.errors[0].lensId, 'broken_role');
+      assert.equal(output.findings.length, 1);
+      assert.equal(output.findings[0].title, 'Missing aria-label on icon button');
+      assert.equal(output.findings[0].lens, 'accessibility');
+      assert.equal(output.findings[0].file, 'src/button.js');
     });
   });
 

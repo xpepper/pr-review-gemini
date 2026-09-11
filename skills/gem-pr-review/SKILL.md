@@ -73,6 +73,56 @@ Each specialist lens inspects the unified diff through an independent, focused p
 
 ---
 
+## Pluggable Custom Review Roles & Specialist Lenses
+
+In addition to standard built-in lenses, teams and users can plug in domain-specific custom review roles via `.github/gem-pr-review.json` (or `~/.copilot/gem-pr-review.json`) under `custom_roles` (or `roles`).
+
+### 1. Custom Role Definition Schema
+Each role in `custom_roles` can specify:
+- `name`: Human-readable display name (defaults to title-cased ID, e.g. `accessibility` -> `Accessibility`).
+- `prompt` (or `instructions`): Domain-specific checklist and evaluation instructions provided to the specialist subagent.
+- `model`: Model override for this specialist role (e.g. `"gpt-4o"`, `"claude-3.7-sonnet"`).
+- `reasoningEffort`: Model reasoning effort level (`off`, `low`, `medium`, `high`).
+- `tier`: Fallback tier (`light`, `medium`, `heavy`).
+- `fallbacks`: Chain of backup models attempted if primary model hits quota or rate limits.
+
+```json
+{
+  "custom_roles": {
+    "accessibility": {
+      "name": "Accessibility & WCAG",
+      "prompt": "Evaluate WCAG 2.1 AA compliance, ARIA attributes, semantic HTML tags, keyboard navigation traps, focus states, and screen reader announcements.",
+      "model": "gpt-4o",
+      "reasoningEffort": "medium"
+    },
+    "database_migrations": {
+      "name": "Database & Migrations",
+      "prompt": "Verify zero-downtime migrations, column additions with defaults, lock times, missing foreign key indexes, and backward-compatible data transforms.",
+      "tier": "heavy",
+      "reasoningEffort": "high"
+    }
+  }
+}
+```
+
+### 2. Flexible Role Composition
+By default, custom roles run **alongside** the standard specialist lenses for the active mode (`balanced`, `quick`, `full`, `deep`).
+
+- **Replace Standard Roles**: Set `"replace_standard_roles": true` in configuration or pass CLI `--replace-standard-roles` to execute *only* the custom or explicitly selected roles and skip all standard lenses.
+- **Filter Active Roles**: Specify `"enabled_roles": ["accessibility", "security"]` in configuration or pass CLI `--role accessibility --role security` to run only the targeted subset of standard and custom roles.
+- **Standard Lens Override**: Defining a custom role with a standard lens ID (e.g. `"security"`) overrides that standard lens's prompt and configuration while preserving its placement in the active mode.
+
+### 3. CLI Flags & MCP Integration
+- **CLI Options (`scripts/dogfood-review.mjs` & `scripts/self-review.mjs`)**:
+  - `--role <id>`: Execute specific standard lens or custom role ID (repeatable or comma-separated: `--role=a11y,perf` or `--role a11y --role perf`).
+  - `--replace-standard-roles`: Skip standard mode lenses and execute only the selected custom roles.
+- **MCP Tool Parameters (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`)**:
+  - `roles`: `string[]` — Optional list of review role IDs to execute.
+  - `replaceStandardRoles`: `boolean` — Whether to skip standard lenses and only execute custom roles.
+  - `customRoles`: `object` — Optional dictionary of runtime custom role definitions `{ [roleId]: { name, prompt, model, reasoningEffort } }`.
+
+---
+
 ## Structured Findings Contract
 
 Reviewers must format findings using structured representations so they can be parsed deterministically:

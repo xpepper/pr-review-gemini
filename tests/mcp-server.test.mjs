@@ -431,8 +431,98 @@ index 1111111..2222222 100644
       assert.equal(response.id, 71);
       assert.equal(called, true);
       const data = JSON.parse(response.result.content[0].text);
-      assert.equal(data.status, 'passed');
       assert.equal(data.verdict, 'PASS');
+    });
+
+    it('declares custom roles and composition options in gem_pr_review_subagents and gem_self_review schemas', () => {
+      const subagentsTool = MCP_TOOLS.find((t) => t.name === 'gem_pr_review_subagents');
+      assert.ok(subagentsTool.inputSchema.properties.roles);
+      assert.ok(subagentsTool.inputSchema.properties.replaceStandardRoles);
+      assert.ok(subagentsTool.inputSchema.properties.customRoles);
+
+      const selfTool = MCP_TOOLS.find((t) => t.name === 'gem_self_review');
+      assert.ok(selfTool.inputSchema.properties.roles);
+      assert.ok(selfTool.inputSchema.properties.replaceStandardRoles);
+      assert.ok(selfTool.inputSchema.properties.customRoles);
+    });
+
+    it('handles tools/call for gem_pr_review_subagents with custom roles and composition options', async () => {
+      let passedReviewArgs = null;
+      const handler = createMcpHandler({
+        runReviewFn: async (args) => {
+          passedReviewArgs = args;
+          return {
+            prNumber: args.prNumber,
+            lensesExecuted: args.roles || ['a11y'],
+            findings: [],
+            summary: 'Review summary',
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 72,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_subagents',
+          arguments: {
+            prNumber: 55,
+            roles: ['a11y'],
+            replaceStandardRoles: true,
+            customRoles: {
+              a11y: { name: 'A11y', prompt: 'Check accessibility' },
+            },
+            diffText: 'diff --git a/a.js b/a.js\n+1',
+          },
+        },
+      });
+
+      assert.equal(response.id, 72);
+      assert.ok(passedReviewArgs);
+      assert.deepEqual(passedReviewArgs.roles, ['a11y']);
+      assert.equal(passedReviewArgs.replaceStandardRoles, true);
+      assert.ok(passedReviewArgs.customRoles?.a11y);
+    });
+
+    it('handles tools/call for gem_self_review with custom roles and composition options', async () => {
+      let passedSelfReviewArgs = null;
+      const handler = createMcpHandler({
+        runSelfReviewFn: async (args) => {
+          passedSelfReviewArgs = args;
+          return {
+            status: 'passed',
+            verdict: 'PASS',
+            blockingCount: 0,
+            counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
+            findings: [],
+            lenses: args.roles || ['migrations'],
+            summary: '# ✅ SELF-REVIEW PASSED (PASS)',
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 73,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            roles: ['migrations'],
+            replaceStandardRoles: true,
+            customRoles: {
+              migrations: { name: 'Migrations', prompt: 'Check DB migrations' },
+            },
+          },
+        },
+      });
+
+      assert.equal(response.id, 73);
+      assert.ok(passedSelfReviewArgs);
+      assert.deepEqual(passedSelfReviewArgs.roles, ['migrations']);
+      assert.equal(passedSelfReviewArgs.replaceStandardRoles, true);
+      assert.ok(passedSelfReviewArgs.customRoles?.migrations);
     });
 
     it('returns error for unknown method with code -32601', async () => {

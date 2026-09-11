@@ -77,6 +77,20 @@ export const MCP_TOOLS = [
           type: 'string',
           description: 'Optional repository in owner/repo format',
         },
+        roles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of review role IDs to execute (standard lenses or custom roles)',
+        },
+        replaceStandardRoles: {
+          type: 'boolean',
+          description: 'If true, only executes custom/specified roles and skips standard lenses',
+          default: false,
+        },
+        customRoles: {
+          type: 'object',
+          description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
+        },
       },
       required: ['prNumber'],
     },
@@ -321,6 +335,20 @@ export const MCP_TOOLS = [
           type: 'string',
           description: 'Optional additional instructions for review lenses',
         },
+        roles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of review role IDs to execute (standard lenses or custom roles)',
+        },
+        replaceStandardRoles: {
+          type: 'boolean',
+          description: 'If true, only executes custom/specified roles and skips standard lenses',
+          default: false,
+        },
+        customRoles: {
+          type: 'object',
+          description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
+        },
       },
     },
   },
@@ -361,6 +389,20 @@ export const MCP_TOOLS = [
         customInstructions: {
           type: 'string',
           description: 'Optional additional instructions for review lenses',
+        },
+        roles: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional list of review role IDs to execute (standard lenses or custom roles)',
+        },
+        replaceStandardRoles: {
+          type: 'boolean',
+          description: 'If true, only executes custom/specified roles and skips standard lenses',
+          default: false,
+        },
+        customRoles: {
+          type: 'object',
+          description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
       },
     },
@@ -571,6 +613,9 @@ export function createMcpHandler(options = {}) {
                 repo: args.repo,
                 runnerFn: runner,
                 cwd,
+                roles: args.roles || args.enabledRoles,
+                replaceStandardRoles: args.replaceStandardRoles,
+                customRoles: args.customRoles,
               });
 
               return {
@@ -792,6 +837,9 @@ export function createMcpHandler(options = {}) {
                 failOn: args.failOn || 'P1',
                 customInstructions: args.customInstructions,
                 runnerFn: runner,
+                roles: args.roles || args.enabledRoles,
+                replaceStandardRoles: args.replaceStandardRoles,
+                customRoles: args.customRoles,
               });
 
               return {

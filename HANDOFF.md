@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (334 tests across 82 suites, 0 failures)
+* **Current Branch**: `feat/custom-review-roles`
+* **Test Suite**: `npm test` runs and passes (371 tests across 83 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -24,18 +24,20 @@
   - PR #19 (Issue #18 / Increment 11): `feat: implement one-shot coding-task self-review (gem_self_review)` (Merged, commit `70303ad`)
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
+  - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Branch `feat/custom-review-roles`)
 
 ---
 
-## Status: INCREMENT_13_COMPLETE / PHASE_8_COMMENCED
+## Status: INCREMENT_14_COMPLETE / PHASE_8_ADVANCED
 
-All 13 roadmap increments across Phases 1 through 8 are fully implemented, verified test-first (334 passing tests across 82 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
+All 14 roadmap increments are fully implemented, verified test-first (361 passing tests across 83 suites), dogfood-reviewed, documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
 - [x] Increment 11: One-shot coding-task self-review (`gem_self_review`) (Issue #18)
 - [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
 - [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
+- [x] Increment 14: Pluggable custom review roles & specialist lenses
 
 ---
 
@@ -287,77 +289,54 @@ Possible future enhancements:
 
 ---
 
-## Next Session Mission: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
+## Completed Work: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
 
-- **Target Branch**: `feat/custom-review-roles`
-- **Goal**:
-  Enable teams to plug in extra "review roles" (or replace standard ones) through layered configuration (`.github/gem-pr-review.json` / `~/.copilot/gem-pr-review.json`), defining:
-  1. A custom **prompt** (specialist domain review guidelines, rules, and checklist).
-  2. A preferred **model** (e.g. `claude-3.7-sonnet`, `gpt-4o`).
-  3. A preferred **reasoning effort** (`off`, `low`, `medium`, `high`).
-
-### Architecture & Requirements for Increment 14
-
-1. **Configuration Schema (`src/config.js`)**:
-   - Support `custom_roles` (or `roles`) dictionary in config:
-     ```json
-     {
-       "custom_roles": {
-         "accessibility": {
-           "name": "Accessibility & WCAG",
-           "prompt": "Evaluate WCAG 2.1 AA accessibility guidelines, semantic HTML, ARIA attributes, keyboard navigation...",
-           "model": "claude-3.7-sonnet",
-           "reasoningEffort": "medium"
-         },
-         "migrations": {
-           "name": "Database Migration Safety",
-           "prompt": "Inspect database migrations for table locks, missing down migrations, zero-downtime safety...",
-           "model": "gpt-4o",
-           "reasoningEffort": "high"
-         }
-       },
-       "replace_standard_roles": false,
-       "enabled_roles": ["correctness", "security", "accessibility"]
-     }
-     ```
-   - Validate and sanitize custom role definitions (reject prototype pollution, validate reasoning efforts and model strings).
-
-2. **Subagent Plan Resolution (`src/subagents.js`)**:
-   - In `resolveLensPlan`, incorporate custom roles:
-     - If `replace_standard_roles: true` or `enabled_roles` is provided, dynamically assemble the plan from the specified roles.
-     - By default, extra custom roles are mounted alongside the mode's standard specialist lenses.
-   - Inject the custom prompt into `buildReviewerPrompt` during subagent execution.
-
-3. **Multi-Lens Orchestration & Reporting (`src/reviewer.js`)**:
-   - Ensure custom role findings are properly tagged with their custom `lensId` and lens name.
-   - Aggregate custom role findings into the summary table, deduplication pipeline, diff anchoring, and GitHub review publisher.
-
-4. **CLI & Documentation**:
-   - Support `--role <role_id>` or `--extra-role <name:prompt>` CLI flags in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`.
-   - Update `README.md` and `skills/gem-pr-review/SKILL.md` with schema reference and examples.
-   - Test-first verification covering config loading, role resolution, subagent execution, and finding deduplication.
+- **GitHub PR**: [#24: feat: pluggable custom review roles and specialist lenses (Increment 14)](https://github.com/xpepper/pr-review-gemini/pull/24)
+- **Branch**: `feat/custom-review-roles`
+- **Changes Delivered**:
+  - `src/config.js`:
+    - Added support for `custom_roles` (and alias `roles`), `replace_standard_roles`, and `enabled_roles` to `DEFAULT_CONFIG` and `resolveConfig`.
+    - Added sanitizers, prototype pollution guards (`__proto__`, `prototype`, `constructor`), and validation for role attributes (`prompt` / `instructions`, `name`, `model`, `reasoningEffort`, `tier`, `fallbacks`).
+    - Exported helper functions `getCustomRoles(config)` and `formatDefaultRoleName(roleId)` with title-casing.
+  - `src/subagents.js`:
+    - Updated `resolveLensPlan` to dynamically mount custom roles alongside standard lenses by default.
+    - Supported `replace_standard_roles: true` to execute only custom/specified roles and skip standard lenses.
+    - Supported `enabled_roles` filtering to run a targeted subset of standard or custom roles.
+    - Supported overriding standard lens definitions by matching role ID.
+    - Maintained full backward compatibility for both object options and positional `(mode, config)` signatures.
+    - Subagent parallel dispatcher (`dispatchSubagentsParallel`) executes custom roles concurrently, tags findings with custom role `lensId`, and isolates lens execution errors.
+  - `src/reviewer.js`:
+    - Updated `buildReviewerPrompt` to inject domain-specific instructions and checklists for custom specialist roles.
+    - Updated `runReview` to forward role composition options (`roles`, `enabledRoles`, `replaceStandardRoles`, `customRoles`), evaluate execution plans, and format custom role names in markdown summaries.
+  - `src/self-review.js`:
+    - Updated `runSelfReview` to resolve and execute custom roles over local git worktree diffs.
+    - Formatted custom role names in the evaluated lenses summary and fail-closed quality gate report.
+  - `server/index.js` (MCP Server):
+    - Extended input schemas for `gem_pr_review_subagents`, `gem_self_review`, and `gem_pr_review_self` to declare `roles`, `replaceStandardRoles`, and `customRoles`.
+    - Forwarded role arguments to `runReview` and `runSelfReview`.
+  - `scripts/dogfood-review.mjs` & `scripts/self-review.mjs`:
+    - Added CLI flags `--role <id>` (repeatable or comma-separated: `--role=a11y,perf` or `--role a11y --role perf`) and `--replace-standard-roles`.
+  - `skills/gem-pr-review/SKILL.md` & `README.md`:
+    - Fully documented custom roles schema, role composition options, CLI flags, and MCP tool parameters with realistic configuration examples (accessibility, database migrations).
+  - Tests & PR Review Loop:
+    - Added 37 new tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs`. Total 371 tests passing across 83 suites.
+    - Executed `/pr-review-loop` on PR #24 addressing all 7 review comments from `@copilot-pull-request-reviewer` with dedicated commits, verified replies, and resolved threads.
 
 ---
 
-## Ready-to-Use Prompt for the Next Session
+## Future Opportunities / Phase 8 Ideas
 
-```text
-Please implement Increment 14 on this repository: "Pluggable Custom Review Roles & Specialist Lenses".
+1. **Streamlined Pre-Commit Hook Installer**: A CLI helper (`npx gem-pr-review --install-hook`) to set up `.git/hooks/pre-commit` to invoke `npm run self-review`.
+2. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
+3. **SARIF Report Export**: Export structured findings to standard SARIF format for GitHub Code Scanning integration.
 
-Before writing code:
-1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/custom-review-roles.
+---
 
-Requirements:
-- Custom Role Definition: Enable users and teams to plug in custom review roles in `.github/gem-pr-review.json` and `~/.copilot/gem-pr-review.json` under `custom_roles` (or `roles`), specifying:
-  - `prompt`: Domain-specific review checklist and instructions.
-  - `model`: Preferred model name override.
-  - `reasoningEffort`: Preferred reasoning effort (off, low, medium, high).
-- Flexible Role Composition: Allow adding custom roles alongside standard lenses by default, or replacing/filtering standard lenses via `enabled_roles` or `replace_standard_roles: true`.
-- Subagent Dispatch & Reporting: In `src/subagents.js` (`resolveLensPlan`) and `src/reviewer.js`, dynamically mount custom roles in review passes, isolate errors, and aggregate findings into host-gated diff-anchored reviews and summaries.
-- Test-First Verification: Add unit tests covering schema validation, lens plan resolution, custom prompt injection, and finding normalization, keeping all 334+ existing tests passing.
-- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
-```
+## Next Session Mission: Future Backlog Planning
+
+- **Target Branch**: `main`
+- **Goal**:
+  Evaluate user feedback on pluggable review roles, dogfood in production CI/CD workflows, and select the next increment (e.g. SARIF export or pre-commit hook integration).
 
 
 

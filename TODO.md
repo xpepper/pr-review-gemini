@@ -6,22 +6,25 @@
 
 ---
 
-## Active Next Task: Increment 14 — Pluggable Custom Review Roles & Specialist Lenses
-- [ ] Configuration schema support in `src/config.js` for custom review roles (`custom_roles` / `lenses`):
-  - Custom `prompt`: Specialist domain guidelines, requirements, and review checklist.
-  - Custom `model`: Preferred model name override.
-  - Custom `reasoningEffort`: Preferred thinking level (`off`, `low`, `medium`, `high`).
-- [ ] Flexible role composition:
-  - Add extra custom review roles alongside standard lenses (e.g., Accessibility/a11y, Database migrations, Compliance).
-  - Ability to replace or filter standard lenses (`enabled_roles` or `replace_standard_roles: true`).
-- [ ] Dynamic lens plan resolution in `src/subagents.js` (`resolveLensPlan`) dispatching custom roles with configured models and prompts.
-- [ ] Seamless integration into multi-lens summary reporting, deduplication, and diff anchoring in `src/reviewer.js`.
-- [ ] Unit tests covering config parsing, validation, lens planning, and subagent dispatch.
-- [ ] Documentation and example configurations in `README.md` and `skills/gem-pr-review/SKILL.md`.
+## Active Next Task: Backlog / Increment 15 Planning
+- [ ] Determine next feature focus or maintenance items (e.g. batch multi-PR reviews, enhanced SARIF output, custom rule linters)
+- [ ] Monitor dogfood review metrics and user feedback
 
 ---
 
 ## Completed Increments
+- [x] **Increment 14: Pluggable Custom Review Roles & Specialist Lenses**
+  - [x] Implemented layered configuration support in `src/config.js` for `custom_roles` (and alias `roles`), `replace_standard_roles`, and `enabled_roles` with prototype pollution guards and sanitizers.
+  - [x] Exported `getCustomRoles` and `formatDefaultRoleName` helpers with backward-compatible schemas.
+  - [x] Updated dynamic lens planning in `src/subagents.js` (`resolveLensPlan`) supporting default mounting alongside standard lenses, replacing standard lenses (`replace_standard_roles: true`), filtering active roles (`enabled_roles`), and standard lens definition override by ID.
+  - [x] Enhanced prompt builder in `src/reviewer.js` (`buildReviewerPrompt`) to inject domain-specific checklists and guidelines for custom specialist roles.
+  - [x] Subagent parallel dispatcher (`dispatchSubagentsParallel`) executes custom roles concurrently, tags findings with custom role `lensId`, and isolates lens errors.
+  - [x] Orchestrator integration in `runReview` and `runSelfReview` passing role options and formatting summary reports with human-readable custom role names.
+  - [x] MCP tools extended in `server/index.js` (`gem_pr_review_subagents`, `gem_self_review`, `gem_pr_review_self`) with `roles`, `replaceStandardRoles`, and `customRoles` parameters.
+  - [x] CLI flags added to `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`: `--role <id>` and `--replace-standard-roles`.
+  - [x] 37 new unit and integration tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs` (371 total tests passing across 83 suites).
+  - [x] Addressed all 7 review comments on PR #24 from @copilot-pull-request-reviewer; all review threads verified and resolved.
+  - [x] Documented in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 13 / Issue #22: Reusable GitHub Action & Automated CI Review Workflow (action.yml)**
   - [x] Defined composite GitHub Action manifest (`action.yml`) at repository root with inputs (`github_token`, `pr_number`, `mode`, `fail_on`, `incremental`, `action`, `select`) and outputs (`verdict`, `findings_count`, `blocking_count`, `summary`).
   - [x] Implemented CI event payload resolution (`parseEventPayload`, `resolveCiEnvironment`) in `src/ci.js` (auto-extracting PR number, repository, and commit SHAs from `GITHUB_EVENT_PATH` and auto-selecting `--incremental` on `synchronize` events).
