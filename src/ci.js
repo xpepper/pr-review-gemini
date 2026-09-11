@@ -863,9 +863,11 @@ export function formatCompletionReply({
   ciEnv = {},
   verificationResult = null,
 } = {}) {
-  const verdict = qualityGateResult.verdict || 'PASS';
-  const passed = qualityGateResult.passed !== false;
+  const verificationPassed = !verificationResult || verificationResult.status === 'passed';
+  const qualityGatePassed = qualityGateResult.passed !== false;
+  const passed = qualityGatePassed && verificationPassed;
   const icon = passed ? '✅' : '❌';
+  const verdict = passed ? (qualityGateResult.verdict || 'PASS') : 'FAIL';
   const findings = qualityGateResult.totalFindings ?? 0;
   const blocking = qualityGateResult.blockingCount ?? 0;
   const mode = ciEnv.mode || 'balanced';
@@ -876,11 +878,22 @@ export function formatCompletionReply({
   if (verificationResult) {
     const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
     verifyLine = `\n> - **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`;
+    if (verificationResult.error) {
+      verifyLine += ` — ${verificationResult.error}`;
+    } else if (verificationResult.summary && verificationResult.status !== 'passed') {
+      verifyLine += ` — ${verificationResult.summary}`;
+    }
   }
+
+  const reason = passed
+    ? 'Passed'
+    : !qualityGatePassed
+    ? 'Failed quality gate'
+    : 'Failed verification';
 
   return `> ${icon} **Gem PR Review Complete**
 >
-> - **Verdict**: \`${verdict}\` (${passed ? 'Passed' : 'Failed quality gate'})
+> - **Verdict**: \`${verdict}\` (${reason})
 > - **Mode**: \`${mode}\`${incremental}
 > - **Findings**: ${findings} detected (${blocking} blocking)
 > - **Quality Gate (fail_on)**: \`${failOn}\`${verifyLine}`;

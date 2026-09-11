@@ -19,7 +19,7 @@ import {
   formatCompletionReply,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
-import { runVerification, DEFAULT_VERIFICATION_PROFILES } from '../src/verify.js';
+import { runVerification, listVerificationProfiles, DEFAULT_VERIFICATION_PROFILES } from '../src/verify.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
@@ -265,7 +265,9 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     let verificationResult = null;
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
-      const SAFE_PROFILES = new Set(Object.keys(DEFAULT_VERIFICATION_PROFILES));
+      const registered = listVerificationProfiles(options.config);
+      const allowedNames = options.config?.allowedCiVerificationProfiles || Object.keys(registered);
+      const SAFE_PROFILES = new Set(allowedNames);
 
       if (!SAFE_PROFILES.has(profileName)) {
         const errorMsg = `Security: Unrecognized or disallowed verification profile "${profileName}". Allowed safe profiles: ${[...SAFE_PROFILES].join(', ')}.`;
@@ -284,15 +286,28 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
         try {
           const prMetaStdout = await execGhFn(
-            ['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'],
+            [
+              'pr',
+              'view',
+              String(ciEnv.prNumber),
+              '--json',
+              'isCrossRepository,headRepositoryOwner',
+            ],
             { cwd }
           );
           const parsedMeta = JSON.parse(prMetaStdout);
           if (typeof parsedMeta?.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
+          } else if (parsedMeta?.headRepositoryOwner?.login && ciEnv.repo) {
+            const [baseOwner] = ciEnv.repo.split('/');
+            isCrossRepo =
+              parsedMeta.headRepositoryOwner.login.toLowerCase() !==
+              baseOwner.toLowerCase();
+          } else if (isMock && !options.simulateForkPr && !options.simulateOriginError) {
+            isCrossRepo = false;
           } else {
             originCheckFailed = true;
-            originError = 'GitHub API response missing boolean isCrossRepository property';
+            originError = 'GitHub API response missing repository origin indicators';
           }
         } catch (metaErr) {
           originCheckFailed = true;
@@ -309,12 +324,14 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             output: errorMsg,
           };
         } else if (isCrossRepo) {
-          const skipMsg = 'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
+          const skipMsg =
+            'Detached worktree verification is disabled for cross-repository/fork PRs to prevent untrusted code execution.';
           io.warn(`[CI] Security: ${skipMsg}`);
           verificationResult = {
-            status: 'skipped',
+            status: 'failed',
             profile: profileName,
-            summary: skipMsg,
+            error: skipMsg,
+            output: skipMsg,
           };
         } else {
           try {
@@ -343,10 +360,13 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       failOn: ciEnv.failOn,
     });
 
+    const verificationPassed = !verificationResult || verificationResult.status === 'passed';
+    const overallSuccess = qualityGate.passed && verificationPassed;
+
     // Write GitHub Action Step outputs
     writeGitHubStepOutputs(
       {
-        verdict: qualityGate.verdict,
+        verdict: overallSuccess ? qualityGate.verdict : 'FAIL',
         findings_count: String(qualityGate.totalFindings),
         blocking_count: String(qualityGate.blockingCount),
         summary: reviewResult.summary || '',
@@ -369,9 +389,13 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       }
     }
 
-    // PR comment command completion lifecycle (success reaction + completion reply)
+    // PR comment command completion lifecycle (reaction + completion reply)
     if (ciEnv.isCommentCommand && ciEnv.commentId) {
-      await safeReact('+1');
+      if (overallSuccess) {
+        await safeReact('+1');
+      } else {
+        await safeReact('confused');
+      }
 
       const completionReply = formatCompletionReply({
         reviewResult,
@@ -386,10 +410,17 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     io.log(reviewResult.summary);
     io.log('────────────────────────────────────────────────────────\n');
 
-    if (!qualityGate.passed) {
-      io.error(
-        `❌ Quality gate failed: ${qualityGate.blockingCount} blocking defect(s) detected (Threshold: ${ciEnv.failOn}).`
-      );
+    if (!overallSuccess) {
+      if (!qualityGate.passed) {
+        io.error(
+          `❌ Quality gate failed: ${qualityGate.blockingCount} blocking defect(s) detected (Threshold: ${ciEnv.failOn}).`
+        );
+      }
+      if (!verificationPassed) {
+        io.error(
+          `❌ Detached verification failed (${verificationResult?.profile || 'test'}): ${verificationResult?.error || verificationResult?.output || 'failed'}`
+        );
+      }
       return {
         exitCode: 1,
         qualityGate,

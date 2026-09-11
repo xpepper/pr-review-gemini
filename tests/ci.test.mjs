@@ -983,7 +983,7 @@ describe('CI Event Payload & Environment Resolution', () => {
           GITHUB_EVENT_PATH: tmpEvent,
         }, silentIo);
 
-        assert.equal(result.exitCode, 0);
+        assert.equal(result.exitCode, 1);
         assert.equal(verificationExecuted, false, 'Should not execute verification for disallowed profile');
         assert.equal(result.verificationResult?.status, 'failed');
         assert.match(result.verificationResult?.error, /disallowed verification profile/i);
@@ -992,7 +992,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
-    it('skips detached worktree verification on cross-repository fork PRs for security', async () => {
+    it('fails closed and blocks detached worktree verification on cross-repository fork PRs', async () => {
       const tmpEvent = path.join(os.tmpdir(), `event-fork-${Date.now()}.json`);
       fs.writeFileSync(tmpEvent, JSON.stringify({
         action: 'created',
@@ -1035,10 +1035,10 @@ describe('CI Event Payload & Environment Resolution', () => {
           GITHUB_EVENT_PATH: tmpEvent,
         }, silentIo);
 
-        assert.equal(result.exitCode, 0);
+        assert.equal(result.exitCode, 1, 'Must fail closed when verification cannot be executed');
         assert.equal(verificationExecuted, false, 'Must not execute verification on cross-repository fork PR');
-        assert.equal(result.verificationResult?.status, 'skipped');
-        assert.match(result.verificationResult?.summary, /cross-repository\/fork/i);
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /cross-repository\/fork/i);
       } finally {
         fs.unlinkSync(tmpEvent);
       }
@@ -1071,7 +1071,7 @@ describe('CI Event Payload & Environment Resolution', () => {
 
         const customExecGh = async (args) => {
           if (args[0] === 'pr' && args[1] === 'view') {
-            if (args.includes('isCrossRepository')) {
+            if (args.some(a => String(a).includes('isCrossRepository'))) {
               throw new Error('API rate limit exceeded');
             }
             return JSON.stringify({
@@ -1092,7 +1092,7 @@ describe('CI Event Payload & Environment Resolution', () => {
           GITHUB_EVENT_PATH: tmpEvent,
         }, silentIo);
 
-        assert.equal(result.exitCode, 0);
+        assert.equal(result.exitCode, 1, 'Must fail closed when PR origin query fails');
         assert.equal(verificationExecuted, false, 'Must not execute verification when origin cannot be confirmed');
         assert.equal(result.verificationResult?.status, 'failed');
         assert.match(result.verificationResult?.error, /Unable to verify PR repository origin/i);
@@ -1101,7 +1101,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
-    it('rejects custom profiles from config and restricts execution to canonical safe profiles in CI', async () => {
+    it('allows custom verification profile when defined in repository config', async () => {
       const tmpEvent = path.join(os.tmpdir(), `event-custom-prof-${Date.now()}.json`);
       fs.writeFileSync(tmpEvent, JSON.stringify({
         action: 'created',
@@ -1121,8 +1121,10 @@ describe('CI Event Payload & Environment Resolution', () => {
 
       try {
         let verificationExecuted = false;
-        const mockVerification = async () => {
+        let executedProfile = null;
+        const mockVerification = async ({ profileName }) => {
           verificationExecuted = true;
+          executedProfile = profileName;
           return { status: 'passed' };
         };
 
@@ -1139,9 +1141,53 @@ describe('CI Event Payload & Environment Resolution', () => {
         }, silentIo);
 
         assert.equal(result.exitCode, 0);
-        assert.equal(verificationExecuted, false, 'Should reject custom profile in CI');
+        assert.equal(verificationExecuted, true, 'Should execute custom profile defined in repo config');
+        assert.equal(executedProfile, 'custom_deploy');
+        assert.equal(result.verificationResult?.status, 'passed');
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
+    it('enforces allowedCiVerificationProfiles restriction when specified in config', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-ci-restrict-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 23,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/23' },
+        },
+        comment: {
+          id: 782,
+          body: '/gem-review --quick --verify=lint',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          config: {
+            allowedCiVerificationProfiles: ['test', 'build'],
+          },
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        assert.equal(verificationExecuted, false, 'Should reject profile outside allowedCiVerificationProfiles');
         assert.equal(result.verificationResult?.status, 'failed');
-        assert.match(result.verificationResult?.error, /disallowed verification profile "custom_deploy"/i);
+        assert.match(result.verificationResult?.error, /disallowed verification profile "lint"/i);
       } finally {
         fs.unlinkSync(tmpEvent);
       }
@@ -1516,6 +1562,18 @@ Hope that helps!
         assert.match(text, /quick/);
         assert.match(text, /incremental/);
         assert.match(text, /3 detected/);
+      });
+
+      it('formatCompletionReply formats failure summary when verification fails', () => {
+        const text = formatCompletionReply({
+          qualityGateResult: { verdict: 'PASS', passed: true, totalFindings: 0, blockingCount: 0 },
+          ciEnv: { mode: 'balanced', incremental: false, failOn: 'P1' },
+          verificationResult: { status: 'failed', profile: 'test', error: 'Test suite failed with exit code 1' },
+        });
+
+        assert.match(text, /FAIL/);
+        assert.match(text, /Failed verification/);
+        assert.match(text, /Test suite failed with exit code 1/);
       });
     });
   });
