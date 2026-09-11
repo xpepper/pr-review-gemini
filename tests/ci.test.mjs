@@ -599,6 +599,38 @@ describe('CI Event Payload & Environment Resolution', () => {
       fs.unlinkSync(tmpOut);
     });
 
+    it('writes verification_status to GITHUB_OUTPUT distinguishing verification failure from quality gate failure', async () => {
+      const tmpOut = path.join(os.tmpdir(), `gh-out-verify-${Date.now()}.txt`);
+
+      const result = await runCiAction({
+        prNumber: 44,
+        failOn: 'P1',
+        action: 'dry-run',
+        mock: true,
+        mockFindings: [],
+        verify: 'test',
+        runVerificationFn: async () => ({
+          status: 'failed',
+          profile: 'test',
+          error: 'Tests failed with exit code 1',
+        }),
+      }, {
+        GITHUB_OUTPUT: tmpOut,
+      }, silentIo);
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.qualityGate.passed, true);
+      assert.equal(result.qualityGate.blockingCount, 0);
+      assert.equal(result.verificationResult?.status, 'failed');
+
+      const outContent = fs.readFileSync(tmpOut, 'utf8');
+      assert.match(outContent, /verdict=FAIL/);
+      assert.match(outContent, /blocking_count=0/);
+      assert.match(outContent, /verification_status=failed/);
+
+      fs.unlinkSync(tmpOut);
+    });
+
     it('returns exitCode 1 when PR number is missing', async () => {
       const result = await runCiAction({}, {
         // no prNumber, no GITHUB_EVENT_PATH

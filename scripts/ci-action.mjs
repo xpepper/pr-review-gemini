@@ -176,6 +176,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         verdict: 'FAIL',
         findings_count: '0',
         blocking_count: '0',
+        verification_status: 'none',
         summary: errorMsg,
       },
       { outputFile: env.GITHUB_OUTPUT }
@@ -424,6 +425,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         verdict: overallSuccess ? qualityGate.verdict : 'FAIL',
         findings_count: String(qualityGate.totalFindings),
         blocking_count: String(qualityGate.blockingCount),
+        verification_status: verificationResult ? verificationResult.status : 'none',
         summary: reviewResult.summary || '',
       },
       { outputFile: env.GITHUB_OUTPUT }
@@ -505,6 +507,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         verdict: 'FAIL',
         findings_count: '0',
         blocking_count: '1',
+        verification_status: 'none',
         summary: errorMsg,
       },
       { outputFile: env.GITHUB_OUTPUT }

@@ -43,6 +43,9 @@ outputs:
   blocking_count:
     description: 'Number of blocking findings that met or exceeded the fail_on threshold'
     value: ${{ steps.review.outputs.blocking_count }}
+  verification_status:
+    description: 'Detached worktree verification status (passed, failed, or none)'
+    value: ${{ steps.review.outputs.verification_status }}
   summary:
     description: 'Markdown review summary'
     value: ${{ steps.review.outputs.summary }}
