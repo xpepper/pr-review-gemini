@@ -16,7 +16,20 @@ import {
 import { runReview } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
-import { runIfDirect } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect } from '../src/cli.js';
+
+export function printUsage(output = console.log) {
+  output(`
+Usage: node scripts/ci-action.mjs [options]
+
+Runs multi-lens AI code review on GitHub pull requests inside GitHub Actions,
+enforcing automated CI quality gates (fail_on) and publishing step outputs.
+
+Options:
+  -v, --version     Display version information
+  --help, -h        Display this help message
+`);
+}
 
 const MOCK_DIFF = `diff --git a/src/sample.js b/src/sample.js
 index 1111111..2222222 100644
@@ -219,8 +232,10 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 }
 
 export async function main() {
-  const isVersion = process.argv.includes('-v') || process.argv.includes('--version');
-  const result = await runCiAction({ version: isVersion }, process.env, console);
+  const rawArgs = process.argv.slice(2);
+  handleCommonFlags(rawArgs, { printUsage });
+
+  const result = await runCiAction({}, process.env, console);
   process.exit(result.exitCode);
 }
 

@@ -773,6 +773,7 @@ npm test
       { name: 'dogfood-pr.mjs', path: path.resolve('scripts/dogfood-pr.mjs'), expectedUsage: /Usage: npm run dogfood:pr/ },
       { name: 'dogfood-review.mjs', path: path.resolve('scripts/dogfood-review.mjs'), expectedUsage: /Usage: node scripts\/dogfood-review\.mjs/ },
       { name: 'self-review.mjs', path: path.resolve('scripts/self-review.mjs'), expectedUsage: /Usage: node scripts\/self-review\.mjs/ },
+      { name: 'ci-action.mjs', path: path.resolve('scripts/ci-action.mjs'), expectedUsage: /Usage: node scripts\/ci-action\.mjs/ },
       { name: 'bump-version.mjs', path: path.resolve('scripts/bump-version.mjs'), expectedUsage: /Usage: node scripts\/bump-version\.mjs/ },
     ];
 
