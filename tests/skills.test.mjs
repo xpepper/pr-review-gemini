@@ -134,5 +134,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /--replace-standard-roles/i, 'Should document --replace-standard-roles CLI flag');
     assert.match(content, /reasoningEffort/i, 'Should document reasoningEffort');
   });
+
+  it('documents semantic versioning, release management, and manifest synchronization', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /semantic versioning|bump-version/i, 'Should document semantic versioning');
+    assert.match(content, /bump-version\.mjs/i, 'Should mention scripts/bump-version.mjs');
+    assert.match(content, /--version|-v/i, 'Should mention --version flag');
+    assert.match(content, /manifest/i, 'Should mention manifest synchronization');
+  });
 });
 
