@@ -46,6 +46,7 @@ Options:
   --role <id>       Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --cache-dir <dir> Custom directory for session cache (defaults to .gem-pr-cache)
+  --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
   --mock            Use synthetic runner for testing without inference
@@ -74,6 +75,7 @@ export function parseCliArgs(args) {
   let showVersion = false;
   const roles = [];
   let replaceStandardRoles = false;
+  let guidelinesPath = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -130,6 +132,12 @@ export function parseCliArgs(args) {
       const { value, nextIndex } = readOptionValue(args, i, '--repo');
       repo = value;
       i = nextIndex;
+    } else if (arg.startsWith('--guidelines=')) {
+      guidelinesPath = arg.slice('--guidelines='.length);
+    } else if (arg === '--guidelines') {
+      const { value, nextIndex } = readOptionValue(args, i, '--guidelines');
+      guidelinesPath = value;
+      i = nextIndex;
     } else if (arg.startsWith('--model=')) {
       model = arg.slice('--model='.length);
     } else if (arg === '--model') {
@@ -156,6 +164,7 @@ export function parseCliArgs(args) {
     interactive,
     select,
     cacheDir,
+    guidelinesPath,
     repo,
     model,
     mock,
@@ -201,6 +210,7 @@ export async function main() {
     incremental,
     roles,
     replaceStandardRoles,
+    guidelinesPath,
   } = parseCliArgs(rawArgs);
 
   if (self) {
@@ -216,6 +226,7 @@ export async function main() {
         runnerFn,
         roles,
         replaceStandardRoles,
+        guidelinesPath,
       });
 
       console.log(result.summary);
@@ -367,6 +378,7 @@ export async function main() {
       cacheDir,
       roles,
       replaceStandardRoles,
+      guidelinesPath,
     });
 
     console.log('\n────────────────────────────────────────────────────────');

@@ -1463,6 +1463,19 @@ echo "prior test"
       assert.equal(parsed.showHelp, true);
       const parsedVer = parseCliArgs(['--version']);
       assert.equal(parsedVer.showVersion, true);
+
+      const parsedGuidelines = parseCliArgs(['--guidelines', 'custom-guidelines.md']);
+      assert.equal(parsedGuidelines.guidelinesPath, 'custom-guidelines.md');
+      const parsedGuidelinesEq = parseCliArgs(['--guidelines=custom-guidelines.md']);
+      assert.equal(parsedGuidelinesEq.guidelinesPath, 'custom-guidelines.md');
+    });
+
+    it('parses --guidelines in self-review.mjs parseCliArgs', async () => {
+      const { parseCliArgs } = await import('../scripts/self-review.mjs');
+      const parsed1 = parseCliArgs(['--guidelines', 'custom.md']);
+      assert.equal(parsed1.guidelinesPath, 'custom.md');
+      const parsed2 = parseCliArgs(['--guidelines=custom.md']);
+      assert.equal(parsed2.guidelinesPath, 'custom.md');
     });
 
     it('readOptionValue extracts argument value and throws on missing or flag-like values', () => {

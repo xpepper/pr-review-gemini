@@ -18,6 +18,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
+import { loadGuidelines } from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -115,6 +116,7 @@ export function formatSelfReviewSummary({
   emptyDiff = false,
   executionErrors = [],
   customRoles = {},
+  guidelines = null,
 }) {
   const isPass = status === 'passed';
   const banner = isPass
@@ -156,6 +158,10 @@ Self-review failed closed due to execution errors during specialist subagent ana
 
   const countSummary = `${counts.P0} P0, ${counts.P1} P1, ${counts.P2} P2, ${counts.P3} P3, ${counts.nit} nit`;
   const blockingCount = blockingFindings.length;
+  let guidelinesLine = '';
+  if (guidelines?.found) {
+    guidelinesLine = `\n- **Repository Guidelines**: \`${guidelines.relativePath}\`${guidelines.truncated ? ' ⚠️ (truncated)' : ''}`;
+  }
 
   if (isPass) {
     let findingsSection = '';
@@ -178,7 +184,7 @@ Self-review failed closed due to execution errors during specialist subagent ana
       : 'No blocking defects detected across evaluated specialist lenses. Working tree changes look clean and ready to commit.';
 
     return `${header}
-**Findings**: 0 blocking | ${findings.length} advisory (${countSummary})
+**Findings**: 0 blocking | ${findings.length} advisory (${countSummary})${guidelinesLine}
 
 ${noDefectsMsg}${findingsSection}${lensList}`;
   }
@@ -190,7 +196,7 @@ ${noDefectsMsg}${findingsSection}${lensList}`;
   });
 
   return `${header}
-**Findings**: ${blockingCount} blocking ${blockingCount === 1 ? 'issue' : 'issues'} detected (${countSummary})
+**Findings**: ${blockingCount} blocking ${blockingCount === 1 ? 'issue' : 'issues'} detected (${countSummary})${guidelinesLine}
 
 > ⚠️ **Action Required**: The fail-closed safety gate blocked completion due to ${blockingCount} high-severity defect${blockingCount === 1 ? '' : 's'}.
 > Please address the remediation steps below before finalizing your task or committing.
@@ -237,6 +243,30 @@ export async function runSelfReview(options = {}) {
   const modeObj = resolveReviewMode(rawMode);
   const resolvedConfig = options.config || loadConfig({ cwd });
 
+  // Load repository review guidelines
+  let activeGuidelines = options.repoGuidelines || null;
+  if (!activeGuidelines) {
+    try {
+      activeGuidelines = loadGuidelines({
+        cwd,
+        config: resolvedConfig,
+        guidelinesPath: options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path,
+      });
+    } catch {
+      activeGuidelines = null;
+    }
+  }
+
+  const guidelinesSummary = activeGuidelines
+    ? {
+        enabled: activeGuidelines.enabled !== false,
+        found: Boolean(activeGuidelines.found),
+        path: activeGuidelines.relativePath || null,
+        byteSize: activeGuidelines.byteSize || 0,
+        truncated: Boolean(activeGuidelines.truncated),
+      }
+    : null;
+
   // 1. Acquire diff
   let diffText = options.diffText;
   if (diffText === undefined || diffText === null) {
@@ -263,6 +293,7 @@ export async function runSelfReview(options = {}) {
       diffStats: emptyStats,
       lenses: modeObj.lenses,
       emptyDiff: true,
+      guidelines: activeGuidelines,
     });
 
     return {
@@ -277,6 +308,7 @@ export async function runSelfReview(options = {}) {
       diffStats: emptyStats,
       remediation: [],
       summary,
+      guidelines: guidelinesSummary,
     };
   }
 
@@ -327,6 +359,7 @@ export async function runSelfReview(options = {}) {
       diffTransport,
       runnerFn: runner,
       config: resolvedConfig,
+      repoGuidelines: activeGuidelines,
     });
 
     const lensResults = dispatchOutput.results || [];
@@ -344,6 +377,7 @@ export async function runSelfReview(options = {}) {
         lenses: executedLenses,
         executionErrors,
         customRoles: allCustomRoles,
+        guidelines: activeGuidelines,
       });
 
       return {
@@ -359,6 +393,7 @@ export async function runSelfReview(options = {}) {
         remediation: [],
         executionErrors,
         summary,
+        guidelines: guidelinesSummary,
       };
     }
 
@@ -398,6 +433,7 @@ export async function runSelfReview(options = {}) {
       remediation: verdict.remediation,
       executionErrors,
       customRoles: allCustomRoles,
+      guidelines: activeGuidelines,
     });
 
     return {
@@ -412,6 +448,7 @@ export async function runSelfReview(options = {}) {
       diffStats: manifest,
       remediation: verdict.remediation,
       summary,
+      guidelines: guidelinesSummary,
     };
   } finally {
     if (fileBackedDiff?.cleanup) {

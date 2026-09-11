@@ -499,3 +499,13 @@ export function getFallbackModels(config, { tier, lensId } = {}) {
 export function getCustomRoles(config) {
   return config?.custom_roles || {};
 }
+
+export {
+  DEFAULT_GUIDELINE_FILENAMES,
+  MAX_GUIDELINES_BYTES,
+  discoverGuidelinesFile,
+  readGuidelinesFile,
+  parseGuidelines,
+  resolveGuidelinesForLens,
+  loadGuidelines,
+} from './guidelines.js';

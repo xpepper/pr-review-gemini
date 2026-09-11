@@ -88,6 +88,15 @@ import {
   evaluateCalibrationFinding,
   evaluateCalibrationSuite,
 } from './calibration.js';
+import {
+  loadGuidelines,
+  discoverGuidelinesFile,
+  readGuidelinesFile,
+  parseGuidelines,
+  resolveGuidelinesForLens,
+  DEFAULT_GUIDELINE_FILENAMES,
+  MAX_GUIDELINES_BYTES,
+} from './guidelines.js';
 
 export {
   resolveLensPlan,
@@ -148,6 +157,13 @@ export {
   CALIBRATION_BENCHMARKS,
   evaluateCalibrationFinding,
   evaluateCalibrationSuite,
+  loadGuidelines,
+  discoverGuidelinesFile,
+  readGuidelinesFile,
+  parseGuidelines,
+  resolveGuidelinesForLens,
+  DEFAULT_GUIDELINE_FILENAMES,
+  MAX_GUIDELINES_BYTES,
 };
 
 export const REVIEW_MODES = {
@@ -269,10 +285,27 @@ export function buildReviewerPrompt({
   prMetadata,
   customInstructions,
   diffTransport,
+  repoGuidelines,
 }) {
   const lensDef = typeof lens === 'string' ? LENS_DEFINITIONS[lens] : lens;
   const lensName = lensDef?.name || 'Code Review';
   const instructions = lensDef?.instructions || lensDef?.prompt || '';
+  const lensId = lensDef?.id || (typeof lens === 'string' ? lens : 'general');
+
+  let resolvedGuidelines = '';
+  if (typeof repoGuidelines === 'string') {
+    resolvedGuidelines = repoGuidelines.trim();
+  } else if (repoGuidelines && typeof repoGuidelines === 'object') {
+    if (typeof repoGuidelines.formatForLens === 'function') {
+      resolvedGuidelines = repoGuidelines.formatForLens(lensId, { lensName }).trim();
+    } else if (typeof repoGuidelines.content === 'string') {
+      resolvedGuidelines = repoGuidelines.content.trim();
+    }
+  }
+
+  const guidelinesBlock = resolvedGuidelines
+    ? `## Repository Review Guidelines & Invariants:\n${resolvedGuidelines}\n\n`
+    : '';
 
   const prContext = prMetadata
     ? `Pull Request Context:\n- PR #${prMetadata.number ?? ''}: ${prMetadata.title ?? ''}\n`
@@ -331,7 +364,7 @@ ${diffText}
 
 ${instructions}
 
-${prContext}${customBlock}## Structured Output Contract
+${guidelinesBlock}${prContext}${customBlock}## Structured Output Contract
 
 Review the unified diff below. If you identify defects within your specialization with high confidence (>= 0.7), report them using the following JSON envelope:
 
@@ -444,6 +477,8 @@ export async function runReview({
   enabledRoles,
   replaceStandardRoles,
   customRoles,
+  guidelinesPath,
+  repoGuidelines,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -452,6 +487,30 @@ export async function runReview({
 
   const resolvedConfig = config || (await loadConfig({ cwd }));
   const resolvedMode = resolveReviewMode(mode);
+
+  // Discover and load repository review guidelines
+  let activeGuidelines = repoGuidelines || null;
+  if (!activeGuidelines) {
+    try {
+      activeGuidelines = loadGuidelines({
+        cwd,
+        config: resolvedConfig,
+        guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+      });
+    } catch {
+      activeGuidelines = null;
+    }
+  }
+
+  const guidelinesSummary = activeGuidelines
+    ? {
+        enabled: activeGuidelines.enabled !== false,
+        found: Boolean(activeGuidelines.found),
+        path: activeGuidelines.relativePath || null,
+        byteSize: activeGuidelines.byteSize || 0,
+        truncated: Boolean(activeGuidelines.truncated),
+      }
+    : null;
 
   // 1. Retrieve diff if not provided directly
   let unifiedDiffText = diffText;
@@ -552,6 +611,7 @@ export async function runReview({
                 isLarge: false,
                 byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
               },
+          guidelines: guidelinesSummary,
         };
       }
 
@@ -597,6 +657,7 @@ export async function runReview({
         runnerFn,
         diffTransport,
         config: resolvedConfig,
+        repoGuidelines: activeGuidelines,
       });
       allFindings = subagentResult.findings;
       subagentErrors = subagentResult.errors;
@@ -631,12 +692,15 @@ export async function runReview({
       .join(' | ') || 'None';
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
+    const guidelinesLine = activeGuidelines?.found
+      ? `- **Repository Guidelines**: \`${activeGuidelines.relativePath}\`${activeGuidelines.truncated ? ' ⚠️ (truncated)' : ''}\n`
+      : '';
     let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Specialist Lenses Inspected**: ${lensesList}
 - **Total Findings**: ${deduplicated.length} (${countsSummary})
-${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
+${guidelinesLine}${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
 ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
 
     if (revalidation) {
@@ -722,6 +786,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         published: true,
         diffTransport: transportInfo,
         cached: Boolean(cachedRecord),
+        guidelines: guidelinesSummary,
       };
     }
 
@@ -749,6 +814,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       published: false,
       diffTransport: transportInfo,
       cached: Boolean(cachedRecord),
+      guidelines: guidelinesSummary,
     };
   } finally {
     if (autoCreatedTransport && diffTransport) {

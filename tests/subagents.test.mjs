@@ -1315,5 +1315,37 @@ index 1111111..2222222 100644
       assert.equal(output.errors[0].lensId, 'correctness');
       assert.match(output.errors[0].error.message, /not available/);
     });
+
+    it('injects repository review guidelines into subagent prompt during parallel execution (Increment 19)', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'security',
+          lensDef: LENS_DEFINITIONS.security,
+          tier: 'heavy',
+          model: 'claude-3.7-sonnet',
+        },
+      ];
+
+      let receivedPrompt = '';
+      const runnerFn = async ({ prompt }) => {
+        receivedPrompt = prompt;
+        return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+      };
+
+      const guidelines = {
+        formatForLens: () => 'Security Invariant: No hardcoded secrets.',
+      };
+
+      await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+        repoGuidelines: guidelines,
+      });
+
+      assert.match(receivedPrompt, /## Repository Review Guidelines & Invariants:/);
+      assert.match(receivedPrompt, /Security Invariant: No hardcoded secrets\./);
+    });
   });
 });

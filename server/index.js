@@ -36,6 +36,7 @@ import {
   formatVerificationSummary,
 } from '../src/verify.js';
 import { runSelfReview } from '../src/self-review.js';
+import { loadGuidelines } from '../src/guidelines.js';
 import { PLUGIN_VERSION } from '../src/version.js';
 
 export const MCP_TOOLS = [
@@ -91,6 +92,10 @@ export const MCP_TOOLS = [
         customRoles: {
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
+        },
+        guidelinesPath: {
+          type: 'string',
+          description: 'Optional custom path to repository review guidelines markdown file',
         },
       },
       required: ['prNumber'],
@@ -350,6 +355,10 @@ export const MCP_TOOLS = [
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
+        guidelinesPath: {
+          type: 'string',
+          description: 'Optional custom path to repository review guidelines markdown file',
+        },
       },
     },
   },
@@ -405,6 +414,45 @@ export const MCP_TOOLS = [
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
+        guidelinesPath: {
+          type: 'string',
+          description: 'Optional custom path to repository review guidelines markdown file',
+        },
+      },
+    },
+  },
+  {
+    name: 'gem_pr_review_guidelines',
+    description:
+      'Inspects and parses repository review guidelines and domain invariants (.github/gem-pr-review.md).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Optional custom path to guidelines file (defaults to .github/gem-pr-review.md)',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Optional workspace directory to search from',
+        },
+      },
+    },
+  },
+  {
+    name: 'pr_review_guidelines',
+    description: 'Alias for gem_pr_review_guidelines.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Optional custom path to guidelines file (defaults to .github/gem-pr-review.md)',
+        },
+        cwd: {
+          type: 'string',
+          description: 'Optional workspace directory to search from',
+        },
       },
     },
   },
@@ -427,6 +475,7 @@ export function createMcpHandler(options = {}) {
     runVerificationFn = runVerification,
     listVerificationProfilesFn = listVerificationProfiles,
     createHostSupervisedDiffReaderFn = createHostSupervisedDiffReader,
+    loadGuidelinesFn = loadGuidelines,
     runnerFn,
     cwd = process.cwd(),
   } = options;
@@ -617,6 +666,7 @@ export function createMcpHandler(options = {}) {
                 roles: args.roles || args.enabledRoles,
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
+                guidelinesPath: args.guidelinesPath,
               });
 
               return {
@@ -841,6 +891,7 @@ export function createMcpHandler(options = {}) {
                 roles: args.roles || args.enabledRoles,
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
+                guidelinesPath: args.guidelinesPath,
               });
 
               return {
@@ -851,6 +902,45 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(selfReviewResult, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_pr_review_guidelines' ||
+              toolName === 'pr_review_guidelines'
+            ) {
+              const targetCwd = args.cwd || cwd;
+              const config = loadConfig(targetCwd);
+              const guidelines = loadGuidelinesFn({
+                cwd: targetCwd,
+                config,
+                guidelinesPath: args.path,
+              });
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(
+                        {
+                          enabled: guidelines.enabled,
+                          found: guidelines.found,
+                          path: guidelines.path,
+                          relativePath: guidelines.relativePath,
+                          byteSize: guidelines.byteSize,
+                          truncated: guidelines.truncated,
+                          rawContent: guidelines.rawContent,
+                          parsed: guidelines.parsed,
+                        },
+                        null,
+                        2
+                      ),
                     },
                   ],
                 },

@@ -6,23 +6,27 @@
 
 ---
 
-## Active Mission: Increment 19 — Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)
-- [ ] Research & design repository review guidelines ingestion (`.github/gem-pr-review.md`, `.github/review-instructions.md`, or configured guideline paths)
-- [ ] Implement guidelines loader in `src/config.js` and `src/reviewer.js` to dynamically parse and inject repo guidelines into subagent prompts
-- [ ] Support guideline priority levels: architectural rules, codebase invariants, banned patterns, and domain-specific checklists
-- [ ] Add project memory persistence across reviews: record recurrent patterns and review preferences
-- [ ] Expose configuration options in `~/.copilot/gem-pr-review.json` and `.github/gem-pr-review.json`
-- [ ] Add unit and integration tests verifying guideline parsing, subagent prompt injection, and cache behavior
-- [ ] Open Pull Request on GitHub and run automated multi-lens dogfood reviews
+## Active Mission: Increment 20 — PR Review Thread Conversation Replies & Automated Resolution
+- [ ] Implement review thread discovery and discussion state tracker in `src/prior.js` / `src/reviewer.js`
+- [ ] Support conversational multi-turn replies to inline review findings
+- [ ] Automate thread resolution verification against head diff
+- [ ] Support `/gem-review resolve` and auto-close verified comment threads
 
-### Future Capabilities (Post-Increment 19 Roadmap)
-- [ ] Increment 20: PR Review Thread Conversation Replies & Automated Resolution
+### Future Capabilities (Post-Increment 20 Roadmap)
 - [ ] Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
 
 ## Completed Increments
+- [x] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
+  - [x] Implemented guidelines discovery in `src/guidelines.js` with priority order (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path).
+  - [x] Implemented markdown section parser (`parseGuidelines`) routing global rules and lens/role specific sections (`## Security`, `## Performance`, `## Lens: <id>`, `## Role: <id>`).
+  - [x] Injected prioritized guidelines block into subagent prompts in `src/reviewer.js` and `src/subagents.js`.
+  - [x] Integrated into `runSelfReview` (`src/self-review.js`), CI GitHub Action (`action.yml`, `src/ci.js`, `scripts/ci-action.mjs`), and CLI runners (`--guidelines <path>`).
+  - [x] Implemented MCP inspection tools `gem_pr_review_guidelines` and `pr_review_guidelines` in `server/index.js`.
+  - [x] Enforced safe 64 KB truncation with warning notice and sanitized repository-relative paths (zero machine path leakage).
+  - [x] Verified with comprehensive unit and integration test suite across all modules.
 - [x] **Increment 18 / Issue #31: Interactive PR Comment Command Dispatcher (/gem-review) (PR #32)**
   - [x] Implemented comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
   - [x] Implemented author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions.

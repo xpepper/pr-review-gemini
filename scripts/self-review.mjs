@@ -32,6 +32,7 @@ Options:
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
   --role <id>         Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
+  --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
   --install-hook      Install git pre-commit hook to run self-review before commits
   --uninstall-hook    Remove self-review git pre-commit hook
   --command <cmd>     Custom command for pre-commit hook [default: 'npm run self-review']
@@ -54,6 +55,7 @@ export function parseCliArgs(args) {
   let installHook = false;
   let uninstallHook = false;
   let command;
+  let guidelinesPath = null;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -79,6 +81,12 @@ export function parseCliArgs(args) {
       if (!command) {
         throw new Error('Option --command requires a non-empty command string');
       }
+      i = nextIndex;
+    } else if (arg.startsWith('--guidelines=')) {
+      guidelinesPath = arg.slice('--guidelines='.length);
+    } else if (arg === '--guidelines') {
+      const { value, nextIndex } = readOptionValue(args, i, '--guidelines');
+      guidelinesPath = value;
       i = nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
@@ -132,6 +140,7 @@ export function parseCliArgs(args) {
     installHook,
     uninstallHook,
     command,
+    guidelinesPath,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
@@ -193,6 +202,7 @@ export async function main() {
       runnerFn,
       roles: parsed.roles,
       replaceStandardRoles: parsed.replaceStandardRoles,
+      guidelinesPath: parsed.guidelinesPath,
     });
 
     if (parsed.json) {

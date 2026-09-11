@@ -510,6 +510,7 @@ export async function dispatchSubagentsParallel({
   runnerFn,
   diffTransport,
   config,
+  repoGuidelines,
 }) {
   if (!Array.isArray(plan) || plan.length === 0) {
     return { results: [], findings: [], errors: [] };
@@ -529,12 +530,20 @@ export async function dispatchSubagentsParallel({
 
   try {
     const tasks = plan.map(async (item) => {
+      const lensGuidelines =
+        typeof repoGuidelines === 'string'
+          ? repoGuidelines
+          : repoGuidelines?.formatForLens
+            ? repoGuidelines.formatForLens(item.lensId, { lensName: item.lensDef?.name })
+            : repoGuidelines?.content || '';
+
       const prompt = buildReviewerPrompt({
         lens: item.lensDef,
         diffText,
         prMetadata,
         customInstructions,
         diffTransport: activeTransport,
+        repoGuidelines: lensGuidelines,
       });
 
       const sdkTools = activeTransport?.reader

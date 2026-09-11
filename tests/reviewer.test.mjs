@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import {
   REVIEW_MODES,
   LENS_DEFINITIONS,
@@ -103,6 +106,38 @@ describe('Reviewer Core & Orchestration', () => {
       });
 
       assert.match(prompt, /Strictly inspect for TypeScript-safe patterns/);
+    });
+
+    it('injects repository review guidelines into prompt when provided as string', () => {
+      const prompt = buildReviewerPrompt({
+        lens: 'security',
+        diffText: 'diff --git a/index.js b/index.js\n+console.log(1);',
+        repoGuidelines: 'All input parameters must be validated with zod schema.',
+      });
+
+      assert.match(prompt, /## Repository Review Guidelines & Invariants:/);
+      assert.match(prompt, /All input parameters must be validated with zod schema\./);
+    });
+
+    it('resolves and injects lens-specific guidelines from structured guidelines object', () => {
+      const fakeGuidelines = {
+        formatForLens: (lensId) => {
+          if (lensId === 'security') {
+            return 'Global Rule 1\n\n### Specific Instructions for Security:\nVerify JWT signature algorithms.';
+          }
+          return 'Global Rule 1';
+        },
+      };
+
+      const prompt = buildReviewerPrompt({
+        lens: 'security',
+        diffText: 'diff --git a/index.js b/index.js\n+console.log(1);',
+        repoGuidelines: fakeGuidelines,
+      });
+
+      assert.match(prompt, /## Repository Review Guidelines & Invariants:/);
+      assert.match(prompt, /Global Rule 1/);
+      assert.match(prompt, /Verify JWT signature algorithms\./);
     });
 
     it('builds prompt for custom review role using custom lens object with domain prompt', () => {
@@ -641,6 +676,72 @@ Race condition on state initialization.
       assert.deepEqual(result.lensesExecuted, ['database_migrations']);
       assert.match(result.summary, /Database Migrations/);
       assert.doesNotMatch(result.summary, /database_migrations/);
+    });
+
+    it('discovers repository guidelines from .github/gem-pr-review.md and includes in summary and result', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-'));
+      try {
+        const ghDir = path.join(tmpRepo, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ghDir, 'gem-pr-review.md'),
+          '# Architecture Invariants\n- Never leak internal tokens.'
+        );
+
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const result = await runReview({
+          prNumber: 200,
+          diffText: sampleDiff,
+          cwd: tmpRepo,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.path, '.github/gem-pr-review.md');
+        assert.match(result.summary, /Repository Guidelines.*\.github\/gem-pr-review\.md/);
+        assert.match(dispatchedPrompt, /## Repository Review Guidelines & Invariants:/);
+        assert.match(dispatchedPrompt, /Never leak internal tokens\./);
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
+
+    it('supports custom guidelinesPath override in runReview', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-custom-'));
+      try {
+        const customRulesFile = path.join(tmpRepo, 'custom-rules.md');
+        fs.writeFileSync(customRulesFile, '# Custom Rules\n- Enforce immutability.');
+
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const result = await runReview({
+          prNumber: 201,
+          diffText: sampleDiff,
+          cwd: tmpRepo,
+          guidelinesPath: 'custom-rules.md',
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.path, 'custom-rules.md');
+        assert.match(result.summary, /Repository Guidelines.*custom-rules\.md/);
+        assert.match(dispatchedPrompt, /Enforce immutability\./);
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
     });
   });
 });
