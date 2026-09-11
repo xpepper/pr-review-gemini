@@ -1177,10 +1177,12 @@ describe('CI Event Payload & Environment Resolution', () => {
         let verificationExecuted = false;
         let executedProfile = null;
         let passedConfig = null;
-        const mockVerification = async ({ profileName, config }) => {
+        let passedHeadSha = null;
+        const mockVerification = async ({ profileName, config, headSha }) => {
           verificationExecuted = true;
           executedProfile = profileName;
           passedConfig = config;
+          passedHeadSha = headSha;
           return { status: 'passed' };
         };
 
@@ -1200,6 +1202,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(result.exitCode, 0);
         assert.equal(verificationExecuted, true, 'Should execute custom profile defined in repo config');
         assert.equal(executedProfile, 'custom_deploy');
+        assert.equal(passedHeadSha, 'ci-mock-head-sha');
         assert.deepEqual(passedConfig?.verificationProfiles?.custom_deploy, { command: 'npm run deploy:preview' });
         assert.equal(result.verificationResult?.status, 'passed');
       } finally {
@@ -1263,7 +1266,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         },
         comment: {
           id: 781,
-          body: '/gem-review --quick --verify=ghost',
+          body: '/gem-review --quick --verify=broken',
           author_association: 'MEMBER',
           user: { login: 'member' },
         },
@@ -1281,8 +1284,11 @@ describe('CI Event Payload & Environment Resolution', () => {
         const result = await runCiAction({
           mock: true,
           config: {
-            allowedCiVerificationProfiles: ['ghost'],
-            // ghost is intentionally not configured in verificationProfiles
+            enableCustomCiProfiles: true,
+            verificationProfiles: {
+              broken: null,
+            },
+            allowedCiVerificationProfiles: ['broken'],
           },
           runVerificationFn: mockVerification,
         }, {
@@ -1292,7 +1298,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(result.exitCode, 1);
         assert.equal(verificationExecuted, false, 'Should not execute verification on profile resolution failure');
         assert.equal(result.verificationResult?.status, 'failed');
-        assert.match(result.verificationResult?.error, /failed to resolve: Unknown verification profile: "ghost"/i);
+        assert.match(result.verificationResult?.error, /failed to resolve: Unknown verification profile: "broken"/i);
       } finally {
         fs.unlinkSync(tmpEvent);
       }

@@ -273,11 +273,13 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
       const registered = listVerificationProfiles(options.config);
-      const allowedNames = options.config?.allowedCiVerificationProfiles || (
-        options.config?.enableCustomCiProfiles === true
-          ? Object.keys(registered)
-          : Object.keys(DEFAULT_VERIFICATION_PROFILES)
-      );
+      const isCustomProfileAllowed = options.config?.enableCustomCiProfiles === true;
+      const baseAllowed = isCustomProfileAllowed
+        ? Object.keys(registered)
+        : Object.keys(DEFAULT_VERIFICATION_PROFILES);
+      const allowedNames = options.config?.allowedCiVerificationProfiles
+        ? options.config.allowedCiVerificationProfiles.filter((name) => baseAllowed.includes(name))
+        : baseAllowed;
       const SAFE_PROFILES = new Set(allowedNames);
 
       if (!SAFE_PROFILES.has(profileName)) {
@@ -320,6 +322,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         let isCrossRepo = true;
         let originCheckFailed = false;
         let originError = null;
+        let headSha = null;
 
         try {
           const prMetaStdout = await execGhFn(
@@ -328,11 +331,12 @@ export async function runCiAction(options = {}, env = process.env, io = console)
               'view',
               String(ciEnv.prNumber),
               '--json',
-              'isCrossRepository,headRepository,headRepositoryOwner',
+              'isCrossRepository,headRepository,headRepositoryOwner,headRefOid',
             ],
             { cwd }
           );
           const parsedMeta = JSON.parse(prMetaStdout);
+          headSha = parsedMeta?.headRefOid || null;
           if (typeof parsedMeta?.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
           } else if (parsedMeta?.headRepository?.nameWithOwner && ciEnv.repo) {
@@ -379,6 +383,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             io.log(`Running detached worktree test verification (profile: ${profileName})...`);
             verificationResult = await runVerificationFn({
               prNumber: ciEnv.prNumber,
+              headSha,
               profileName,
               repoPath: cwd,
               execGhFn,
