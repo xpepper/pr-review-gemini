@@ -25,7 +25,7 @@
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
-  - Increment 15 (Issue #25): `feat: automated semantic versioning, release management, and manifest synchronization`
+  - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization`
 
 ---
 
