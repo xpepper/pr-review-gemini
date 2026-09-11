@@ -8,7 +8,7 @@
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
-import { PLUGIN_VERSION } from '../src/version.js';
+import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 
 export function printUsage(output = console.log) {
   output(`
@@ -106,7 +106,7 @@ export async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
 
   if (parsed.showVersion) {
-    console.log(`gem-pr-review v${PLUGIN_VERSION}`);
+    printVersionBanner();
     process.exit(0);
   }
 

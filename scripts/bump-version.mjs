@@ -16,6 +16,7 @@ import {
   isValidSemVer,
   checkManifestSync,
   getManifestVersions,
+  printVersionBanner,
 } from '../src/version.js';
 import {
   parseConventionalCommit,
@@ -315,7 +316,7 @@ export async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
 
   if (parsed.showVersion) {
-    console.log(`gem-pr-review v${VERSION}`);
+    printVersionBanner();
     process.exit(0);
   }
 

@@ -10,6 +10,8 @@ import {
   VERSION,
   PLUGIN_NAME,
   PLUGIN_VERSION,
+  formatVersionBanner,
+  printVersionBanner,
   isValidSemVer,
   parseSemVer,
   getManifestVersions,
@@ -84,6 +86,22 @@ describe('Increment 15: Central Version Module & Manifest Synchronization', () =
 
     it('current VERSION adheres to SemVer specification', () => {
       assert.equal(isValidSemVer(VERSION), true, `VERSION "${VERSION}" must be valid SemVer`);
+    });
+
+    it('formats and prints version banner consistently with formatVersionBanner and printVersionBanner', () => {
+      const banner = formatVersionBanner();
+      assert.equal(banner, `gem-pr-review v${VERSION}`);
+
+      const customBanner = formatVersionBanner('2.0.0');
+      assert.equal(customBanner, 'gem-pr-review v2.0.0');
+
+      let logged = '';
+      const mockIo = {
+        log: (msg) => { logged += msg; },
+      };
+      const printed = printVersionBanner(mockIo);
+      assert.equal(printed, `gem-pr-review v${VERSION}`);
+      assert.equal(logged, `gem-pr-review v${VERSION}`);
     });
   });
 

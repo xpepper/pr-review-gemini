@@ -22,7 +22,7 @@ import {
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
-import { PLUGIN_VERSION } from '../src/version.js';
+import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -194,7 +194,7 @@ export async function main() {
   } = parseCliArgs(process.argv.slice(2));
 
   if (showVersion) {
-    console.log(`gem-pr-review v${PLUGIN_VERSION}`);
+    printVersionBanner();
     process.exit(0);
   }
 

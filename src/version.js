@@ -40,6 +40,29 @@ export const PLUGIN_NAME = 'gem-pr-review';
 export const PLUGIN_VERSION = VERSION;
 
 /**
+ * Formats the CLI version banner string.
+ *
+ * @param {string} [version=VERSION]
+ * @returns {string}
+ */
+export function formatVersionBanner(version = VERSION) {
+  return `${PLUGIN_NAME} v${version}`;
+}
+
+/**
+ * Prints the CLI version banner to the provided logger.
+ *
+ * @param {object} [io=console]
+ * @param {string} [version=VERSION]
+ * @returns {string}
+ */
+export function printVersionBanner(io = console, version = VERSION) {
+  const banner = formatVersionBanner(version);
+  io.log(banner);
+  return banner;
+}
+
+/**
  * Official SemVer 2.0.0 validation regular expression.
  */
 export const SEMVER_REGEX =
