@@ -37,6 +37,7 @@ Usage: node scripts/bump-version.mjs [target] [options]
 
 Target:
   auto                  Automatically calculate next SemVer from conventional commits [default]
+  notes                 Generate release notes for current version without bumping manifests
   patch                 Bump patch version (0.1.0 -> 0.1.1)
   minor                 Bump minor version (0.1.0 -> 0.2.0)
   major                 Bump major version (0.1.0 -> 1.0.0)
@@ -46,6 +47,7 @@ Options:
   --check               Verify that all manifests are in sync (exits 0 if synced, 1 if drift)
   --dry-run             Preview changes without writing to manifests
   --changelog           Print generated changelog to stdout
+  --notes-file <path>   Write release notes directly to specified file
   --write-changelog     Prepend new release section to CHANGELOG.md
   --tag                 Create git commit and annotated tag for the new version
   --release             Full release: bump manifests, write changelog, commit, and tag
@@ -61,6 +63,7 @@ export function parseCliArgs(args = []) {
   let printChangelog = false;
   let writeChangelog = false;
   let createTag = false;
+  let notesFile = null;
   let showVersion = false;
   let showHelp = false;
 
@@ -76,6 +79,8 @@ export function parseCliArgs(args = []) {
       dryRun = true;
     } else if (arg === '--changelog') {
       printChangelog = true;
+    } else if (arg === '--notes-file' && args[i + 1]) {
+      notesFile = args[++i];
     } else if (arg === '--write-changelog') {
       writeChangelog = true;
     } else if (arg === '--tag') {
@@ -95,6 +100,7 @@ export function parseCliArgs(args = []) {
     printChangelog,
     writeChangelog,
     createTag,
+    notesFile,
     showVersion,
     showHelp,
   };
@@ -161,6 +167,35 @@ export async function runBump(options = {}, io = console) {
   let commits = [];
   let latestTag = null;
 
+  if (target === 'notes') {
+    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
+    commits = gitInfo.commits;
+    latestTag = gitInfo.latestTag;
+
+    const changelogText = generateChangelog({
+      version: currentVersion,
+      previousVersion: latestTag || '0.1.0',
+      commits,
+    });
+
+    if (options.notesFile) {
+      fs.writeFileSync(path.resolve(rootDir, options.notesFile), changelogText + '\n', 'utf8');
+      io.log(`📄 Wrote release notes to ${options.notesFile}`);
+    } else {
+      io.log(changelogText);
+    }
+
+    return {
+      success: true,
+      exitCode: 0,
+      currentVersion,
+      newVersion: currentVersion,
+      bumpType: 'none',
+      changelog: changelogText,
+      notesFile: options.notesFile,
+    };
+  }
+
   if (target === 'auto') {
     const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
     commits = gitInfo.commits;
@@ -206,6 +241,11 @@ export async function runBump(options = {}, io = console) {
     previousVersion: currentVersion,
     commits,
   });
+
+  if (options.notesFile) {
+    fs.writeFileSync(path.resolve(rootDir, options.notesFile), changelogText + '\n', 'utf8');
+    io.log(`📄 Wrote release notes to ${options.notesFile}`);
+  }
 
   if (options.printChangelog) {
     io.log('\n--- Generated Changelog ---');

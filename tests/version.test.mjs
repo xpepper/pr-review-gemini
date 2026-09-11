@@ -314,6 +314,27 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
         /fatal: ambiguous argument HEAD/
       );
     });
+
+    it('finds commits from previous tag when HEAD is tagged with a release tag', async () => {
+      const mockGit = async (args) => {
+        if (args[0] === 'describe' && args.includes('--exact-match')) {
+          return 'v0.2.0';
+        }
+        if (args[0] === 'describe' && args.includes('HEAD^')) {
+          return 'v0.1.0';
+        }
+        if (args[0] === 'log') {
+          assert.ok(args.includes('v0.1.0..HEAD'));
+          return `abc1234\x1ffeat: add release notes support\x1f\x1e`;
+        }
+        return '';
+      };
+
+      const result = await getGitCommitsSinceTag({ execGitFn: mockGit });
+      assert.equal(result.latestTag, 'v0.1.0');
+      assert.equal(result.commits.length, 1);
+      assert.equal(result.commits[0].subject, 'feat: add release notes support');
+    });
   });
 
   describe('Atomic Manifest Bump Utility', () => {
@@ -528,6 +549,54 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
         assert.equal(result.exitCode, 1);
         assert.match(result.error, /fatal: tag "v0\.1\.1" already exists/);
         assert.ok(loggedErrors.some((msg) => msg.includes('Git commit/tag failed')));
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('supports notes target with --notes-file to generate clean release notes', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-bump-notes-'));
+      try {
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.2.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.2.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.2.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.2.0"\n---\n# Skill'
+        );
+
+        const notesFile = path.join(tempDir, 'RELEASE_NOTES.md');
+        const mockExec = async (cmd, args) => {
+          if (cmd === 'git' && args[0] === 'describe' && args.includes('--exact-match')) {
+            return { stdout: 'v0.2.0\n' };
+          }
+          if (cmd === 'git' && args[0] === 'describe' && args.includes('HEAD^')) {
+            return { stdout: 'v0.1.0\n' };
+          }
+          if (cmd === 'git' && args[0] === 'log') {
+            return { stdout: `abc1234\x1ffeat: add automated releases\x1f\x1e` };
+          }
+          return { stdout: '', stderr: '' };
+        };
+
+        const result = await runBump(
+          {
+            target: 'notes',
+            rootDir: tempDir,
+            notesFile: 'RELEASE_NOTES.md',
+            execFileFn: mockExec,
+          },
+          { log: () => {}, warn: () => {}, error: () => {} }
+        );
+
+        assert.equal(result.success, true);
+        assert.equal(result.exitCode, 0);
+        const writtenNotes = fs.readFileSync(notesFile, 'utf8');
+        assert.match(writtenNotes, /## \[0\.2\.0\]/);
+        assert.match(writtenNotes, /add automated releases/);
+        assert.ok(!writtenNotes.includes('Analyzed'));
+        assert.ok(!writtenNotes.includes('Bumping version'));
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }

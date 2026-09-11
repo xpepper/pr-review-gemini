@@ -46,7 +46,7 @@ jobs:
       - name: Generate Release Notes
         id: notes
         run: |
-          node scripts/bump-version.mjs auto --changelog > RELEASE_NOTES.md
+          node scripts/bump-version.mjs notes --notes-file RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
       - name: Create GitHub Release

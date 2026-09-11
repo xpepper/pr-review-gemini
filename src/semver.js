@@ -306,9 +306,27 @@ export async function getGitCommitsSinceTag(options = {}) {
 
   if (!tag) {
     try {
-      const tagOutput = await execGit(['describe', '--tags', '--abbrev=0']);
-      if (tagOutput) {
-        tag = tagOutput.trim();
+      let headTag = null;
+      try {
+        headTag = await execGit(['describe', '--tags', '--exact-match', 'HEAD']);
+      } catch {
+        headTag = null;
+      }
+
+      if (headTag) {
+        // HEAD is checked out directly at a release tag.
+        // We want commits between the previous tag and HEAD.
+        try {
+          const prevTag = await execGit(['describe', '--tags', '--abbrev=0', 'HEAD^']);
+          tag = prevTag ? prevTag.trim() : null;
+        } catch {
+          tag = null;
+        }
+      } else {
+        const tagOutput = await execGit(['describe', '--tags', '--abbrev=0']);
+        if (tagOutput) {
+          tag = tagOutput.trim();
+        }
       }
     } catch {
       tag = null;
