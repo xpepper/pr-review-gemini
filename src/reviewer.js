@@ -65,6 +65,13 @@ import {
   writeGitHubStepOutputs,
   formatCiSummary,
 } from './ci.js';
+import {
+  VERSION,
+  PLUGIN_VERSION,
+  PLUGIN_NAME,
+  isValidSemVer,
+  parseSemVer,
+} from './version.js';
 
 export {
   resolveLensPlan,
@@ -106,6 +113,11 @@ export {
   formatCiSummary,
   getCustomRoles,
   formatDefaultRoleName,
+  VERSION,
+  PLUGIN_VERSION,
+  PLUGIN_NAME,
+  isValidSemVer,
+  parseSemVer,
 };
 
 export const REVIEW_MODES = {
@@ -480,7 +492,7 @@ export async function runReview({
       });
 
       if (commitRel.relationship === 'same_head') {
-        const summary = `## PR Review Summary (Mode: \`${resolvedMode.name}\` [Incremental])
+        const summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${resolvedMode.name}\` [Incremental])
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Status**: ℹ️ PR head commit (${currentHeadSha || 'unknown'}) has not changed since the last review. No new commits to evaluate.`;
@@ -592,7 +604,7 @@ export async function runReview({
       .join(' | ') || 'None';
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
-    let summary = `## PR Review Summary (Mode: \`${modeLabel}\`)
+    let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Specialist Lenses Inspected**: ${lensesList}
