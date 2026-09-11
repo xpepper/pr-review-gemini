@@ -177,5 +177,30 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(readmeContent, /Model Catalog & Auto Fallback Resilience|Model Catalog Resilience/i, 'README should document model catalog resilience');
     assert.match(readmeContent, /fallback_to_auto/i, 'README should document fallback_to_auto');
   });
+
+  it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Centralized CLI Infrastructure/i, 'Should document Centralized CLI Infrastructure');
+    assert.match(content, /runIfDirect/i, 'Should document runIfDirect');
+    assert.match(content, /handleCommonFlags/i, 'Should document handleCommonFlags');
+    assert.match(content, /isDirectRun/i, 'Should document isDirectRun');
+    assert.match(content, /npm run install-hook/i, 'Should document npm run install-hook');
+    assert.match(content, /--install-hook/i, 'Should document --install-hook');
+    assert.match(content, /--uninstall-hook/i, 'Should document --uninstall-hook');
+  });
+
+  it('documents centralized CLI infrastructure and pre-commit hook installer in README.md (Increment 17)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Centralized CLI Infrastructure/i, 'README should document Centralized CLI Infrastructure');
+    assert.match(readmeContent, /npm run install-hook/i, 'README should document npm run install-hook');
+    assert.match(readmeContent, /isDirectRun/i, 'README should document isDirectRun');
+    assert.match(readmeContent, /runIfDirect/i, 'README should document runIfDirect');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
+
 

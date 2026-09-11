@@ -6,22 +6,10 @@
 
 ---
 
-## Active Next Task: Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation
-- [ ] **Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication**
-  - [ ] Implement centralized CLI helper module (`src/cli.js`):
-    - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections and proper exit codes.
-    - `handleCommonFlags(argv, options)`: Unified `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`) dispatch.
-    - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection replacing duplicate boilerplate.
-    - `formatCliError(err)`: Standardized terminal error presentation.
-  - [ ] Refactor sibling CLI entrypoints in `scripts/` to consume `src/cli.js`:
-    - `scripts/dogfood-pr.mjs`
-    - `scripts/dogfood-review.mjs`
-    - `scripts/self-review.mjs`
-    - `scripts/ci-action.mjs`
-    - `scripts/bump-version.mjs`
-  - [ ] Add pre-commit hook installer (`npm run install-hook` or `--install-hook` flag) to configure `.git/hooks/pre-commit` to execute `npm run self-review`.
-  - [ ] Add unit tests in `tests/cli.test.mjs` and verify all existing CLI test suites remain 100% green.
-  - [ ] Verify via dogfood review on the resulting PR.
+## Active Next Task: Dogfood Review & PR for Increment 17 (Issue #29)
+- [ ] Open GitHub PR for Increment 17: "Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication"
+- [ ] Run dogfood review on the PR (`npm run dogfood:pr <PR_NUMBER>`)
+- [ ] Address review feedback and merge to main
 
 ### Backlog & Future Capabilities
 - [ ] PR comment reaction / interactive re-review commands (`/gem-review --quick`)
@@ -30,6 +18,21 @@
 ---
 
 ## Completed Increments
+- [x] **Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication**
+  - [x] Implemented centralized CLI helper module (`src/cli.js`):
+    - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`).
+    - `handleCommonFlags(argv, options)`: Unified `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`) dispatch.
+    - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection replacing duplicate boilerplate, supporting symlinks, relative paths, and extensionless invocations.
+    - `formatCliError(err)`: Standardized terminal error presentation.
+  - [x] Refactored sibling CLI entrypoints in `scripts/` to consume `src/cli.js`:
+    - `scripts/dogfood-pr.mjs`
+    - `scripts/dogfood-review.mjs`
+    - `scripts/self-review.mjs`
+    - `scripts/ci-action.mjs`
+    - `scripts/bump-version.mjs`
+  - [x] Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) to configure `.git/hooks/pre-commit` to execute `npm run self-review`.
+  - [x] Added unit and integration tests in `tests/cli.test.mjs` and `tests/skills.test.mjs` (481 total passing across 105 suites with 0 failures).
+  - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
   - [x] Calibrated lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
     - *Contracts*: Explicit parameterization vs ambient state coupling (`process.argv` vs explicit options).

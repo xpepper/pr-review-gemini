@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (clean, synchronized with `origin/main`)
-* **Test Suite**: `npm test` runs and passes (445 tests across 98 suites, 0 failures)
+* **Current Branch**: `feat/centralize-cli-infrastructure`
+* **Test Suite**: `npm test` runs and passes (481 tests across 105 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -27,13 +27,13 @@
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
+  - Increment 17 (Issue #29): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication`
 
 ---
 
-## Status: READY_FOR_INCREMENT_17 (Issue #29)
+## Status: READY_FOR_PR_AND_DOGFOOD (Issue #29)
 
-All 16 increments are fully implemented, verified test-first (445 passing tests across 98 suites, manifest version check green), dogfood-reviewed on GitHub PRs, and merged to `main`.
-Active next mission: **Increment 17 / Issue #29**: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication.
+All 17 increments are fully implemented, verified test-first (481 passing tests across 105 suites, manifest version check green):
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -43,6 +43,7 @@ Active next mission: **Increment 17 / Issue #29**: Centralize CLI Entrypoint Inf
 - [x] Increment 14: Pluggable custom review roles & specialist lenses
 - [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
 - [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
+- [x] Increment 17: Centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Issue #29)
 
 ---
 
@@ -420,39 +421,36 @@ Possible future enhancements:
 
 ---
 
-## Next Mission: Increment 17 — Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (Issue #29)
+## Completed Work: Increment 17 — Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (Issue #29)
 
 - **GitHub Issue**: [#29: refactor(cli): centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication (Increment 17)](https://github.com/xpepper/pr-review-gemini/issues/29)
-- **Branch**: `feat/centralize-cli-infrastructure` (create from clean `main`)
-
-### Problem & Background
-During dogfood review on PR #28, the newly calibrated `conventions` specialist lens caught sibling CLI boilerplate duplication across entrypoint scripts:
-- **Direct invocation boilerplate**: The `isDirectRun` pattern (`process.argv[1] && path.resolve(process.argv[1]) === path.resolve(...)` followed by `main().catch(...)`) is repeated across multiple sibling scripts in `scripts/`.
-- **Flag parsing & banner boilerplate**: Common flag handling (`-v`/`--version`, `-h`/`--help`, usage printing, error formatting) is implemented independently across sibling CLI scripts (`scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`).
-
-This violates the **Single Source of Truth / DRY across sibling CLI entrypoints** design dimension established in Increment 16.
-
-### Proposed Objectives (Increment 17)
-1. **Centralized CLI Infrastructure Module (`src/cli.js`)**:
-   - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections and proper exit codes (`process.exit(1)`).
-   - `handleCommonFlags(argv, options)`: Centralized handler for `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`).
-   - `isDirectRun(importMetaUrl, argv)`: Centralized direct invocation detection.
-   - `formatCliError(err)`: Consistent error formatting for user-facing terminal output.
-2. **Refactor Sibling Entrypoints in `scripts/`**:
-   - Update `scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, and `scripts/bump-version.mjs` to consume `src/cli.js`.
-   - Maintain 100% backward compatibility of CLI interfaces, flag semantics, output formats, and exit codes.
-3. **Pre-Commit Hook Integration (`--install-hook`)**:
-   - Provide a zero-friction CLI installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook`) to configure `.git/hooks/pre-commit` to execute `npm run self-review` before commit.
-4. **Comprehensive Tests & Verification**:
-   - Add unit tests in `tests/cli.test.mjs` covering all functions in `src/cli.js`.
-   - Ensure all existing CLI test suites (`tests/dogfood.test.mjs`, `tests/version.test.mjs`, `tests/ci.test.mjs`, etc.) remain 100% green.
-   - Run dogfood review on the resulting PR.
-
-### Prompt for the Next Agent
-
-```text
-Please implement Increment 17: "Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication" addressing Issue #29 (https://github.com/xpepper/pr-review-gemini/issues/29) following HANDOFF.md, TODO.md, and AGENTS.md.
-```
+- **Branch**: `feat/centralize-cli-infrastructure`
+- **Changes Delivered**:
+  - `src/cli.js` — Centralized CLI Infrastructure Module:
+    - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection supporting symlinks, relative paths, and extensionless invocations (e.g. `node scripts/self-review`).
+    - `formatCliError(err, options)`: Consistent, human-friendly terminal error presentation with customizable prefixes and optional stack traces.
+    - `handleCommonFlags(argv, options)`: Unified `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`) dispatch, with exit code 0 or suppression options.
+    - `runIfDirect(importMetaUrl, mainFn, options)`: Standardized top-level execution wrapper trapping synchronous throws and asynchronous promise rejections, printing formatted errors and exiting with code 1.
+    - `installPreCommitHook(options)`: Automated git pre-commit hook installer ensuring `.git/hooks/pre-commit` exists, is executable (`0o755`), and invokes `npm run self-review`. Preserves existing third-party hooks by appending safely.
+    - `uninstallPreCommitHook(options)`: Cleans up self-review hook, removing the file if auto-generated or stripping lines if combined with other hooks.
+    - `isPreCommitHookInstalled(options)`: Inspects git hooks directory for existing self-review configuration.
+  - Sibling CLI Entrypoints Refactored in `scripts/`:
+    - `scripts/dogfood-pr.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
+    - `scripts/dogfood-review.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
+    - `scripts/self-review.mjs`: Uses `handleCommonFlags`, `runIfDirect`, and adds `--install-hook` / `--uninstall-hook` CLI options.
+    - `scripts/ci-action.mjs`: Uses `runIfDirect`.
+    - `scripts/bump-version.mjs`: Uses `handleCommonFlags` and `runIfDirect`.
+  - `package.json`:
+    - Added npm script `"install-hook": "node scripts/self-review.mjs --install-hook"`.
+  - Re-exports in `src/reviewer.js`:
+    - Re-exported all CLI utilities (`isDirectRun`, `runIfDirect`, `handleCommonFlags`, `formatCliError`, `installPreCommitHook`, `uninstallPreCommitHook`, `isPreCommitHookInstalled`).
+  - Documentation & Skill:
+    - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
+  - Tests & Verification:
+    - Added 36 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
+    - Total **481 tests passing across 105 suites with 0 failures**.
+    - Manifest sync check green (`npm run version:check`).
+    - Verified `npm run install-hook`, idempotency, and `--uninstall-hook` end-to-end.
 
 ---
 

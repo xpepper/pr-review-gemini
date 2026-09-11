@@ -126,5 +126,19 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Created automated GitHub release workflow (`.github/workflows/release.yml`) for git tagging `vX.Y.Z` and publishing GitHub releases.
   - Centralized CLI version banner printing (`formatVersionBanner`, `printVersionBanner`) in `src/version.js` and decoupled `runCiAction` from ambient `process.argv`.
   - Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs` (414 total tests passing across 92 suites with 0 failures).
-  - Addressed all PR review comments and findings on PR #26 (16 total comments and threads resolved).
+- [x] **Increment 16: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer (#27)**
+  - Calibrated lens definitions across all 6 standard specialist lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`) with language-agnostic design dimensions (ambient state coupling, redundant work, dead logic assignments, landing surface invariants, DRY entrypoint duplication).
+  - Implemented model catalog resilience (`isModelUnavailableError`, `isRetriableModelError`) with automatic fallback to `'auto'` (`fallback_to_auto: true`).
+  - Added automated benchmark evaluation suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking recall, precision, and sensitivity against real PR defect patterns.
+  - Added streamlined dogfood reviewer runner (`scripts/dogfood-pr.mjs`, `npm run dogfood:pr <PR_NUMBER>`).
+  - Added 31 new tests (445 total passing across 98 suites) and comprehensive documentation.
+- [x] **Increment 17: Centralize CLI Entrypoint Infrastructure & Sibling Boilerplate Consolidation (#29)**
+  - Created centralized CLI infrastructure module (`src/cli.js`):
+    - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`).
+    - `handleCommonFlags(argv, options)`: Centralized handler for `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`).
+    - `isDirectRun(importMetaUrl, argv)`: Robust direct invocation detection supporting symlinks, relative paths, and extensionless invocations.
+    - `formatCliError(err)`: Consistent error formatting for user-facing terminal output.
+  - Refactored sibling CLI entrypoints in `scripts/` (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`) to consume `src/cli.js`.
+  - Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) configuring `.git/hooks/pre-commit` to run `npm run self-review`.
+  - Added 36 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (481 total passing across 105 suites with 0 failures).
 

@@ -17,6 +17,7 @@ import {
 import { runReview } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
+import { runIfDirect } from '../src/cli.js';
 
 const MOCK_DIFF = `diff --git a/src/sample.js b/src/sample.js
 index 1111111..2222222 100644
@@ -224,11 +225,5 @@ export async function main() {
   process.exit(result.exitCode);
 }
 
-// Auto-run if executed directly via node scripts/ci-action.mjs
-const isDirectExecution =
-  process.argv[1] &&
-  (process.argv[1].endsWith('ci-action.mjs') || process.argv[1].endsWith('ci-action'));
+runIfDirect(import.meta.url, main);
 
-if (isDirectExecution) {
-  main();
-}

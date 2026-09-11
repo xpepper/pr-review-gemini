@@ -21,8 +21,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { loadConfig } from '../src/config.js';
-import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
+import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -193,15 +192,7 @@ export async function main() {
     replaceStandardRoles,
   } = parseCliArgs(process.argv.slice(2));
 
-  if (showVersion) {
-    printVersionBanner();
-    process.exit(0);
-  }
-
-  if (showHelp) {
-    printUsage();
-    process.exit(0);
-  }
+  handleCommonFlags(process.argv.slice(2), { printUsage });
 
   if (self) {
     const cwd = process.cwd();
@@ -430,12 +421,5 @@ export async function main() {
   }
 }
 
-// Only execute main when called directly
-const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve('scripts/dogfood-review.mjs');
-if (isDirectRun) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+runIfDirect(import.meta.url, main);
 

@@ -79,6 +79,15 @@ import {
   evaluateCalibrationFinding,
   evaluateCalibrationSuite,
 } from './calibration.js';
+import {
+  isDirectRun,
+  runIfDirect,
+  handleCommonFlags,
+  formatCliError,
+  installPreCommitHook,
+  uninstallPreCommitHook,
+  isPreCommitHookInstalled,
+} from './cli.js';
 
 export {
   resolveLensPlan,
@@ -130,6 +139,13 @@ export {
   CALIBRATION_BENCHMARKS,
   evaluateCalibrationFinding,
   evaluateCalibrationSuite,
+  isDirectRun,
+  runIfDirect,
+  handleCommonFlags,
+  formatCliError,
+  installPreCommitHook,
+  uninstallPreCommitHook,
+  isPreCommitHookInstalled,
 };
 
 export const REVIEW_MODES = {

@@ -12,7 +12,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { printVersionBanner } from '../src/version.js';
+import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 
 export function printUsage(output = console.log) {
   output(`
@@ -50,15 +50,7 @@ export function buildDogfoodArgs(rawArgs) {
 export async function main() {
   const rawArgs = process.argv.slice(2);
 
-  if (rawArgs.includes('-v') || rawArgs.includes('--version')) {
-    printVersionBanner();
-    process.exit(0);
-  }
-
-  if (rawArgs.includes('-h') || rawArgs.includes('--help')) {
-    printUsage();
-    process.exit(0);
-  }
+  handleCommonFlags(rawArgs, { printUsage });
 
   const prNumberArg = rawArgs.find((a) => /^\d+$/.test(a));
   if (!prNumberArg && !rawArgs.includes('--self')) {
@@ -86,13 +78,4 @@ export async function main() {
   });
 }
 
-// Only execute main when called directly
-const isDirectRun =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
-if (isDirectRun) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+runIfDirect(import.meta.url, main);

@@ -608,6 +608,30 @@ node scripts/dogfood-pr.mjs <PR_NUMBER> [options]
 - **Actionable Findings Table**: Formats detected candidate findings into a clear triage table showing index, severity, confidence, diff location, and description.
 - **Interactive Triage**: Pair with `--publish --interactive` to pick, exclude, or filter findings before submitting host-gated GitHub reviews.
 
+---
+
+## Centralized CLI Infrastructure & Pre-Commit Hook Integration
+
+To eliminate duplication across sibling CLI entrypoints (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`), `src/cli.js` provides centralized, reusable CLI entrypoint infrastructure:
+
+- **`runIfDirect(importMetaUrl, mainFn)`**: Safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`).
+- **`handleCommonFlags(argv, options)`**: Centralized flag handling for `-v`/`--version` (invoking `printVersionBanner()`) and `-h`/`--help` (invoking caller-provided `printUsage()`).
+- **`isDirectRun(importMetaUrl, argv)`**: Direct invocation detection supporting symlinks, relative paths, and extensionless invocations.
+- **`formatCliError(err)`**: Standardized terminal error presentation.
+
+### Pre-Commit Hook Installer (`--install-hook`)
+
+Configure `.git/hooks/pre-commit` to automatically execute `npm run self-review` before git commits:
+
+```bash
+# Install git pre-commit hook
+npm run install-hook
+# or: node scripts/self-review.mjs --install-hook
+
+# Remove git pre-commit hook
+node scripts/self-review.mjs --uninstall-hook
+```
+
 
 
 

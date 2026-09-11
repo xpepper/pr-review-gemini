@@ -60,6 +60,13 @@ Automate multi-lens AI code review on every pull request using the official GitH
     fail_on: P1
 ```
 
+### 6. Install Git Pre-Commit Self-Review Hook
+Automatically run fail-closed self-review on uncommitted changes before every git commit:
+```bash
+npm run install-hook
+```
+*(To remove: `node scripts/self-review.mjs --uninstall-hook`)*
+
 ---
 
 ## Core Usage & CLI Options
@@ -205,6 +212,11 @@ Enables rapid, zero-friction dogfood reviews before merging pull requests with a
 - **Streamlined Runner (`npm run dogfood:pr`)**: Reviews any PR with automatic model resolution (`--model auto`), diff hunk anchoring verification, and interactive triage.
 - **Model Catalog Resilience (`isModelUnavailableError`)**: Detects when configured primary or fallback models are unsupported, unentitled, or unavailable in the local host environment.
 - **Automatic Fallback to `auto`**: Seamlessly falls back to model `'auto'` (`fallback_to_auto: true`, enabled by default) when configured models are unavailable, guaranteeing review completion without manual intervention.
+
+### 11. Centralized CLI Infrastructure & Pre-Commit Hook Integration
+Eliminates duplicated boilerplate across sibling CLI entrypoints through a single source of truth (`src/cli.js`):
+- **Centralized Infrastructure**: Unifies direct invocation detection (`isDirectRun`), top-level promise rejection handling (`runIfDirect`), version/help flag dispatch (`handleCommonFlags`), and terminal error presentation (`formatCliError`).
+- **Pre-Commit Hook Integration**: Run `npm run install-hook` to configure `.git/hooks/pre-commit` to execute `npm run self-review` before git commits, preventing blocking defects from landing on branches.
 
 ---
 
@@ -446,7 +458,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 407 unit tests across 91 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, and atomic manifest synchronization.
+All 479 unit tests across 105 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, and centralized CLI infrastructure.
 
 ---
 
