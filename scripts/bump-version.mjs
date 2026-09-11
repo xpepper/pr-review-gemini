@@ -223,7 +223,16 @@ export async function runBump(options = {}, io = console) {
     // 7. Git commit and tag if requested
     if (options.createTag) {
       try {
-        await execFileAsync('git', ['add', 'package.json', 'plugin.json', 'mcp.json', 'skills/gem-pr-review/SKILL.md', 'CHANGELOG.md'], { cwd: rootDir });
+        const filesToStage = [
+          'package.json',
+          'plugin.json',
+          'mcp.json',
+          'skills/gem-pr-review/SKILL.md',
+        ];
+        if (options.writeChangelog && fs.existsSync(path.join(rootDir, 'CHANGELOG.md'))) {
+          filesToStage.push('CHANGELOG.md');
+        }
+        await execFileAsync('git', ['add', ...filesToStage], { cwd: rootDir });
         await execFileAsync('git', ['commit', '-m', `chore(release): v${newVersion}`], { cwd: rootDir });
         await execFileAsync('git', ['tag', '-a', `v${newVersion}`, '-m', `Release v${newVersion}`], { cwd: rootDir });
         io.log(`🏷️ Created git commit and tag v${newVersion}.`);
