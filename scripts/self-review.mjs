@@ -5,10 +5,14 @@
  * Evaluates uncommitted git worktree changes through specialist review lenses
  * and enforces a fail-closed safety gate before finishing tasks or committing.
  */
+import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { loadConfig } from '../src/config.js';
-import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
+import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
+import {
+  installPreCommitHook,
+  uninstallPreCommitHook,
+} from '../src/pre-commit-hook.js';
 
 export function printUsage(output = console.log) {
   output(`
@@ -28,6 +32,9 @@ Options:
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
   --role <id>         Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
+  --install-hook      Install git pre-commit hook to run self-review before commits
+  --uninstall-hook    Remove self-review git pre-commit hook
+  --command <cmd>     Custom command for pre-commit hook [default: 'npm run self-review']
   --json              Output machine-readable JSON result
   --mock              Use synthetic runner for testing without LLM inference
   -v, --version       Display version information
@@ -44,6 +51,9 @@ export function parseCliArgs(args) {
   let mock = false;
   let showHelp = false;
   let showVersion = false;
+  let installHook = false;
+  let uninstallHook = false;
+  let command;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -53,12 +63,31 @@ export function parseCliArgs(args) {
       showHelp = true;
     } else if (arg === '--version' || arg === '-v') {
       showVersion = true;
+    } else if (arg === '--install-hook') {
+      installHook = true;
+    } else if (arg === '--uninstall-hook') {
+      uninstallHook = true;
+    } else if (arg.startsWith('--command=')) {
+      const val = arg.slice('--command='.length).trim();
+      if (!val) {
+        throw new Error('Option --command requires a non-empty command string');
+      }
+      command = val;
+    } else if (arg === '--command') {
+      const { value, nextIndex } = readOptionValue(args, i, '--command');
+      command = value.trim();
+      if (!command) {
+        throw new Error('Option --command requires a non-empty command string');
+      }
+      i = nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {
       mode = arg.slice('--mode='.length);
     } else if (arg === '--mode') {
-      mode = args[++i] || 'balanced';
+      const { value, nextIndex } = readOptionValue(args, i, '--mode');
+      mode = value;
+      i = nextIndex;
     } else if (arg === '--staged') {
       scope = 'staged';
     } else if (arg === '--unstaged') {
@@ -72,13 +101,16 @@ export function parseCliArgs(args) {
     } else if (arg.startsWith('--fail-on=')) {
       failOn = arg.slice('--fail-on='.length);
     } else if (arg === '--fail-on') {
-      failOn = args[++i] || 'P1';
+      const { value, nextIndex } = readOptionValue(args, i, '--fail-on');
+      failOn = value;
+      i = nextIndex;
     } else if (arg.startsWith('--role=')) {
       const val = arg.slice('--role='.length);
       roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (arg === '--role') {
-      const val = args[++i] || '';
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+      const { value, nextIndex } = readOptionValue(args, i, '--role');
+      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
+      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg === '--json') {
@@ -97,22 +129,53 @@ export function parseCliArgs(args) {
     mock,
     showHelp,
     showVersion,
+    installHook,
+    uninstallHook,
+    command,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
 }
 
 export async function main() {
-  const parsed = parseCliArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  handleCommonFlags(rawArgs, { printUsage });
 
-  if (parsed.showVersion) {
-    printVersionBanner();
-    process.exit(0);
+  const parsed = parseCliArgs(rawArgs);
+
+  if (parsed.installHook) {
+    const res = installPreCommitHook({
+      rootDir: process.cwd(),
+      command: parsed.command,
+    });
+    if (!res.success) {
+      throw new Error(`Failed to install pre-commit hook: ${res.error}`);
+    }
+    const displayPath = res.hookPath
+      ? path.relative(process.cwd(), res.hookPath) || res.hookPath
+      : '.git/hooks/pre-commit';
+    if (res.alreadyInstalled) {
+      console.log(`ℹ️ Pre-commit hook is already installed in ${displayPath}.`);
+    } else {
+      console.log(`✅ Successfully installed pre-commit hook to ${displayPath}.`);
+    }
+    return;
   }
 
-  if (parsed.showHelp) {
-    printUsage();
-    process.exit(0);
+  if (parsed.uninstallHook) {
+    const res = uninstallPreCommitHook({
+      rootDir: process.cwd(),
+      command: parsed.command,
+    });
+    if (!res.success) {
+      throw new Error(`Failed to uninstall pre-commit hook: ${res.error}`);
+    }
+    if (res.removed || res.cleaned) {
+      console.log('✅ Successfully removed self-review pre-commit hook.');
+    } else {
+      console.log('ℹ️ Pre-commit hook was not installed.');
+    }
+    return;
   }
 
   const cwd = process.cwd();
@@ -149,11 +212,4 @@ export async function main() {
   }
 }
 
-// Only run automatically when executed directly from CLI
-const isDirectExecution =
-  process.argv[1] &&
-  (process.argv[1].endsWith('self-review.mjs') || process.argv[1].endsWith('self-review'));
-
-if (isDirectExecution) {
-  main();
-}
+runIfDirect(import.meta.url, main);

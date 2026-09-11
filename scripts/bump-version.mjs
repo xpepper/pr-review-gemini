@@ -16,8 +16,8 @@ import {
   isValidSemVer,
   checkManifestSync,
   getManifestVersions,
-  printVersionBanner,
 } from '../src/version.js';
+import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 import {
   parseConventionalCommit,
   determineSemverBump,
@@ -66,8 +66,8 @@ export function parseCliArgs(args = []) {
   let createTag = false;
   let notesFile = null;
   let rootDir = null;
-  let showVersion = false;
   let showHelp = false;
+  let showVersion = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -106,8 +106,8 @@ export function parseCliArgs(args = []) {
     createTag,
     notesFile,
     rootDir,
-    showVersion,
     showHelp,
+    showVersion,
   };
 }
 
@@ -313,27 +313,13 @@ export async function runBump(options = {}, io = console) {
 }
 
 export async function main() {
-  const parsed = parseCliArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  handleCommonFlags(rawArgs, { printUsage });
 
-  if (parsed.showVersion) {
-    printVersionBanner();
-    process.exit(0);
-  }
-
-  if (parsed.showHelp) {
-    printUsage();
-    process.exit(0);
-  }
+  const parsed = parseCliArgs(rawArgs);
 
   const result = await runBump(parsed, console);
   process.exit(result.exitCode);
 }
 
-// Auto-run if executed directly via node scripts/bump-version.mjs
-const isDirectExecution =
-  process.argv[1] &&
-  (process.argv[1].endsWith('bump-version.mjs') || process.argv[1].endsWith('bump-version'));
-
-if (isDirectExecution) {
-  main();
-}
+runIfDirect(import.meta.url, main);

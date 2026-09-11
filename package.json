@@ -8,6 +8,7 @@
     "review": "node scripts/dogfood-review.mjs",
     "dogfood:pr": "node scripts/dogfood-pr.mjs",
     "self-review": "node scripts/self-review.mjs",
+    "install-hook": "node scripts/self-review.mjs --install-hook",
     "ci-review": "node scripts/ci-action.mjs",
     "version:check": "node scripts/bump-version.mjs --check",
     "bump": "node scripts/bump-version.mjs",

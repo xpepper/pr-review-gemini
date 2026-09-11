@@ -7,7 +7,6 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import path from 'node:path';
 import {
   runReview,
   resolveReviewMode,
@@ -21,8 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { loadConfig } from '../src/config.js';
-import { PLUGIN_VERSION, printVersionBanner } from '../src/version.js';
+import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -90,7 +88,9 @@ export function parseCliArgs(args) {
     } else if (arg.startsWith('--mode=')) {
       mode = arg.slice('--mode='.length);
     } else if (arg === '--mode') {
-      mode = args[++i] || 'balanced';
+      const { value, nextIndex } = readOptionValue(args, i, '--mode');
+      mode = value;
+      i = nextIndex;
     } else if (arg === '--incremental') {
       incremental = true;
     } else if (arg === '--dry-run' || arg === '--no-comment') {
@@ -106,27 +106,36 @@ export function parseCliArgs(args) {
     } else if (arg.startsWith('--select=')) {
       select = arg.slice('--select='.length);
     } else if (arg === '--select') {
-      select = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--select');
+      select = value;
+      i = nextIndex;
     } else if (arg.startsWith('--role=')) {
       const val = arg.slice('--role='.length);
       roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (arg === '--role') {
-      const val = args[++i] || '';
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
+      const { value, nextIndex } = readOptionValue(args, i, '--role');
+      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
+      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg.startsWith('--cache-dir=')) {
       cacheDir = arg.slice('--cache-dir='.length);
     } else if (arg === '--cache-dir') {
-      cacheDir = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--cache-dir');
+      cacheDir = value;
+      i = nextIndex;
     } else if (arg.startsWith('--repo=')) {
       repo = arg.slice('--repo='.length);
     } else if (arg === '--repo') {
-      repo = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--repo');
+      repo = value;
+      i = nextIndex;
     } else if (arg.startsWith('--model=')) {
       model = arg.slice('--model='.length);
     } else if (arg === '--model') {
-      model = args[++i] || null;
+      const { value, nextIndex } = readOptionValue(args, i, '--model');
+      model = value;
+      i = nextIndex;
     } else if (arg === '--mock') {
       mock = true;
     } else if (arg === '--mock-gh') {
@@ -171,6 +180,9 @@ index 1111111..2222222 100644
 `;
 
 export async function main() {
+  const rawArgs = process.argv.slice(2);
+  handleCommonFlags(rawArgs, { printUsage });
+
   const {
     prNumber,
     self,
@@ -187,21 +199,9 @@ export async function main() {
     mock,
     mockGh,
     incremental,
-    showHelp,
-    showVersion,
     roles,
     replaceStandardRoles,
-  } = parseCliArgs(process.argv.slice(2));
-
-  if (showVersion) {
-    printVersionBanner();
-    process.exit(0);
-  }
-
-  if (showHelp) {
-    printUsage();
-    process.exit(0);
-  }
+  } = parseCliArgs(rawArgs);
 
   if (self) {
     const cwd = process.cwd();
@@ -430,12 +430,5 @@ export async function main() {
   }
 }
 
-// Only execute main when called directly
-const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve('scripts/dogfood-review.mjs');
-if (isDirectRun) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
+runIfDirect(import.meta.url, main);
 
