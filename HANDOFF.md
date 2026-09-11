@@ -392,49 +392,7 @@ To make our specialist lenses consistently sensitive and reliable without baking
 ### Prompt for the Next Agent
 
 ```text
-Please implement Increment 16 on this repository: "Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer" (addressing Issue #27: https://github.com/xpepper/pr-review-gemini/issues/27).
-
-Before writing code:
-1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/reviewer-sensitivity-calibration.
-
-Requirements:
-1. Language-Agnostic Lens Prompt Calibration:
-   - In src/reviewer.js and skills/gem-pr-review/SKILL.md, refine the specialist lens prompts using universal, language-agnostic software engineering dimensions (grounded in established review patterns from channingwalton/skills, JPeetz/agent-skills, unclecatvn/agent-skills):
-     - `contracts` (Contracts & Data Boundaries):
-       - Explicit Parameterization vs. Ambient State Coupling: flag functions/modules that read implicit global, ambient process, or environment state instead of receiving explicit parameters via configuration or dependency injection.
-       - Signature & Schema Stability: breaking changes, serialization mismatches, missing field defaults.
-       - Data Exposure: surfacing internal data to new external outputs/audiences is an exposure, not a refactor.
-     - `performance` (Performance & Resource Hygiene):
-       - Redundant Work & Side-Effect Duplication: duplicate or repeated subprocess invocations, file I/O operations, database queries (N+1), or network calls when the result was already computed or can be computed once up-front.
-       - Algorithmic Traps: O(n²) operations on unbounded inputs, unindexed lookups.
-       - Resource Lifecycle: unclosed handles, unreleased locks, memory retention/leaks.
-     - `conventions` (Conventions & Maintainability):
-       - Dead Code & Phantom Logic: dead variable initializations, unreachable branches, shadowed variables, and redundant conditional assignments that never take effect.
-       - Duplication & Single Source of Truth: copy-pasting boilerplate logic across sibling entrypoints or CLI commands rather than centralizing in a shared abstraction.
-       - Architectural Cohesion: separation of concerns and clear abstraction boundaries.
-     - `correctness` (Correctness & Concurrency):
-       - Where does the argument break down? Trace execution paths through edge cases, boundary conditions, and failure/exception escapes rather than trusting the happy path.
-       - Precondition & Landing Surface Invariants: inspect assumptions about external state, file paths, refs, or resources before the code executes; verify whether activation triggers (workflows, flags, schedulers) assume pre-existing environment state.
-       - Concurrency & Lifecycle: uncoordinated concurrent mutations, race conditions, and unhandled async/thread/process error escape paths.
-     - `security` (Security & Trust Boundaries):
-       - Trust Boundary Crossings: injection sinks, path traversal (user input resolving to filesystem/keys), and unsafe deserialization.
-       - Landing Surface Authorization: verify that new/modified endpoints and actions enforce proper access controls.
-       - Secret Exposure: hardcoded tokens, credential leaks in logs or error payloads.
-     - `tests` (Test Quality & Verification):
-       - Evidence Before Completion: verify whether introduced behaviors, failure paths, and edge cases are backed by passing automated tests.
-       - Test Integrity: flaky assertions, non-deterministic timing, and unrealistic mocking boundaries.
-2. Model Catalog & Auto Fallback Resilience:
-   - In src/config.js and src/subagents.js, ensure model resolution gracefully falls back to `auto` if configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) encounter capability errors, authentication rejections, or unavailability in the user's host environment.
-3. Regression & Calibration Benchmark Suite:
-   - Add a benchmark test suite in tests/calibration.test.mjs (or tests/benchmark.test.mjs) verifying that diff patterns corresponding to the PR #26 review findings are classified with high confidence and appropriate severity.
-4. Streamlined Real Dogfood Review Helper:
-   - Add an npm script / CLI helper (`npm run dogfood:pr <number>`) that runs a real review against an open PR with `--model auto`, runs hunk anchor verification, and outputs a formatted table of candidate findings.
-5. Documentation & Dogfooding:
-   - Update README.md and skills/gem-pr-review/SKILL.md to document the calibrated lens checklists, model fallback behavior, and dogfood review workflow.
-   - Run `npm test` to verify all tests pass with 0 failures.
-   - Run dogfood self-review before committing (`npm run self-review`).
-   - Open a GitHub PR with `gh pr create` referencing Issue #27.
+Please implement Increment 16: "Reviewer Sensitivity & Quality Calibration" addressing Issue #27 (https://github.com/xpepper/pr-review-gemini/issues/27) following HANDOFF.md, TODO.md, and AGENTS.md.
 ```
 
 ---
