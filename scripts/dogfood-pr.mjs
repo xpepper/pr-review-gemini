@@ -10,7 +10,6 @@
  *   npm run dogfood:pr <PR_NUMBER>
  */
 import { spawn } from 'node:child_process';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleCommonFlags, runIfDirect } from '../src/cli.js';
 
@@ -58,8 +57,7 @@ export async function main() {
     process.exit(1);
   }
 
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  const reviewScriptPath = path.resolve(currentDir, 'dogfood-review.mjs');
+  const reviewScriptPath = fileURLToPath(new URL('./dogfood-review.mjs', import.meta.url));
   const forwardedArgs = buildDogfoodArgs(rawArgs);
 
   const child = spawn(process.execPath, [reviewScriptPath, ...forwardedArgs], {

@@ -9,6 +9,8 @@ import {
   formatCliError,
   handleCommonFlags,
   runIfDirect,
+  resolveGitHooksDir,
+  hasActiveHookCommand,
   containsPreCommitHook,
   installPreCommitHook,
   uninstallPreCommitHook,
@@ -308,14 +310,43 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     });
   });
 
+  describe('hasActiveHookCommand', () => {
+    it('detects active command lines and ignores comments', () => {
+      assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review\n'), true);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\n# npm run self-review\n'), false);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\n# check npm run self-review for docs\n'), false);
+      assert.equal(hasActiveHookCommand('#!/bin/sh\nnpm run self-review --staged\n'), true);
+    });
+  });
+
   describe('containsPreCommitHook', () => {
-    it('returns true when content includes marker or exact command', () => {
-      assert.equal(containsPreCommitHook('#!/bin/sh\n# gem-pr-review self-review pre-commit hook\nnpm run self-review\n'), true);
-      assert.equal(containsPreCommitHook('#!/bin/sh\nnpm run self-review\n'), true);
-      assert.equal(containsPreCommitHook('#!/bin/sh\ncustom-command\n', 'custom-command'), true);
+    it('returns true when content includes both marker and active command', () => {
+      assert.equal(
+        containsPreCommitHook(
+          '#!/bin/sh\n# gem-pr-review self-review pre-commit hook\nnpm run self-review\n'
+        ),
+        true
+      );
+      assert.equal(
+        containsPreCommitHook(
+          '#!/bin/sh\n# gem-pr-review self-review pre-commit hook\ncustom-command\n',
+          'custom-command'
+        ),
+        true
+      );
     });
 
-    it('returns false for unrelated content or non-string input', () => {
+    it('returns false if command is commented out or marker is missing', () => {
+      // Missing marker
+      assert.equal(containsPreCommitHook('#!/bin/sh\nnpm run self-review\n'), false);
+      // Commented command
+      assert.equal(
+        containsPreCommitHook(
+          '#!/bin/sh\n# gem-pr-review self-review pre-commit hook\n# npm run self-review\n'
+        ),
+        false
+      );
+      // Unrelated content or non-string
       assert.equal(containsPreCommitHook('#!/bin/sh\necho "hello"\n'), false);
       assert.equal(containsPreCommitHook(null), false);
       assert.equal(containsPreCommitHook(undefined), false);
@@ -336,7 +367,7 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
     it('fails gracefully when rootDir is not a git repository', () => {
       const res = installPreCommitHook({ rootDir: tempDir });
       assert.equal(res.success, false);
-      assert.match(res.error, /No \.git directory found/);
+      assert.match(res.error, /No \.git/);
     });
 
     it('handles filesystem errors during installation adhering to return contract', () => {
@@ -474,6 +505,68 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       const remaining = fs.readFileSync(hookFile, 'utf8');
       assert.match(remaining, /npm test/);
       assert.doesNotMatch(remaining, /npm run self-review/);
+    });
+
+    it('resolves git hooks directory and installs hook in a linked git worktree', () => {
+      // Simulate main repo
+      const mainGitDir = path.join(tempDir, 'main-repo', '.git');
+      const mainHooksDir = path.join(mainGitDir, 'hooks');
+      const worktreeGitDir = path.join(mainGitDir, 'worktrees', 'feature-branch');
+      fs.mkdirSync(mainHooksDir, { recursive: true });
+      fs.mkdirSync(worktreeGitDir, { recursive: true });
+      fs.writeFileSync(path.join(worktreeGitDir, 'commondir'), '../..\n');
+
+      // Simulate linked worktree checkout
+      const worktreeDir = path.join(tempDir, 'worktree-checkout');
+      fs.mkdirSync(worktreeDir, { recursive: true });
+      fs.writeFileSync(path.join(worktreeDir, '.git'), `gitdir: ${worktreeGitDir}\n`);
+
+      const resolvedHooks = resolveGitHooksDir(worktreeDir);
+      assert.equal(resolvedHooks, mainHooksDir);
+
+      const installRes = installPreCommitHook({ rootDir: worktreeDir });
+      assert.equal(installRes.success, true);
+      assert.ok(fs.existsSync(path.join(mainHooksDir, 'pre-commit')));
+
+      const status = isPreCommitHookInstalled({ rootDir: worktreeDir });
+      assert.equal(status.installed, true);
+      assert.equal(status.containsSelfReview, true);
+    });
+
+    it('inserts self-review hook before terminal exit statement in existing hook', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      const hookFile = path.join(hooksDir, 'pre-commit');
+      fs.writeFileSync(hookFile, '#!/bin/sh\necho "check"\nexit 0\n', { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const exitIdx = content.indexOf('exit 0');
+      assert.ok(selfReviewIdx !== -1, 'Must contain self-review');
+      assert.ok(exitIdx !== -1, 'Must contain exit 0');
+      assert.ok(selfReviewIdx < exitIdx, 'self-review must precede exit 0 so it executes');
+    });
+
+    it('does not touch or uninstall unmanaged hooks without PRE_COMMIT_HOOK_MARKER', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      const hookFile = path.join(hooksDir, 'pre-commit');
+      // User manually added hook without our marker
+      const originalContent = '#!/bin/sh\nnpm run self-review && npm test\n';
+      fs.writeFileSync(hookFile, originalContent, { mode: 0o755 });
+
+      const uninstRes = uninstallPreCommitHook({ rootDir: tempDir });
+      assert.equal(uninstRes.success, true);
+      assert.equal(uninstRes.removed, false);
+      assert.equal(fs.readFileSync(hookFile, 'utf8'), originalContent);
     });
 
     it('installs and uninstalls pre-commit hook via self-review.mjs CLI flags', async () => {

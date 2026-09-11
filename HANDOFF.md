@@ -444,14 +444,15 @@ Possible future enhancements:
     - Added npm script `"install-hook": "node scripts/self-review.mjs --install-hook"`.
   - Architecture & Module Isolation:
     - Dedicated CLI infrastructure housed exclusively in `src/cli.js` without polluting core `src/reviewer.js` domain surface.
-    - Robust pre-commit hook idempotency and uninstallation keyed to unique marker (`PRE_COMMIT_HOOK_MARKER`) and exact command with guaranteed executable permissions (`chmod 0o755`).
+    - Linked Git worktree hook resolution via `resolveGitHooksDir` parsing `.git` gitdir and commondir indirections.
+    - Robust pre-commit hook idempotency and uninstallation keyed to unique marker (`PRE_COMMIT_HOOK_MARKER`), active line-aware command matching, insertion before top-level `exit` statements, and guaranteed executable permissions (`chmod 0o755`).
   - Documentation & Skill:
     - Updated `skills/gem-pr-review/SKILL.md` and `README.md` with complete documentation on centralized CLI infrastructure, `npm run install-hook`, `--install-hook`, and `--uninstall-hook`.
   - Tests & Verification:
-    - Added 42 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
-    - Total **489 tests passing across 106 suites with 0 failures**.
+    - Added 46 new unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs`.
+    - Total **493 tests passing across 107 suites with 0 failures**.
     - Manifest sync check green (`npm run version:check`).
-    - Verified `npm run install-hook`, idempotency, and `--uninstall-hook` end-to-end.
+    - Verified `npm run install-hook`, worktree hook resolution, idempotency, and `--uninstall-hook` end-to-end.
 
 ---
 

@@ -223,6 +223,78 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
 }
 
 /**
+ * Resolves the git hooks directory for a standard git repository or linked worktree.
+ *
+ * @param {string} [rootDir=process.cwd()]
+ * @returns {string|null} Absolute path to hooks directory, or null if not a git repository
+ */
+export function resolveGitHooksDir(rootDir = process.cwd()) {
+  const gitPath = path.join(rootDir, '.git');
+  if (!fs.existsSync(gitPath)) {
+    return null;
+  }
+
+  try {
+    const stat = fs.statSync(gitPath);
+    if (stat.isDirectory()) {
+      return path.join(gitPath, 'hooks');
+    }
+
+    if (stat.isFile()) {
+      const content = fs.readFileSync(gitPath, 'utf8').trim();
+      const match = content.match(/^gitdir:\s*(.+)$/m);
+      if (!match) {
+        return null;
+      }
+      let gitDir = match[1].trim();
+      if (!path.isAbsolute(gitDir)) {
+        gitDir = path.resolve(rootDir, gitDir);
+      }
+
+      // In linked worktrees, hooks are shared in the common git directory
+      const commonDirFile = path.join(gitDir, 'commondir');
+      if (fs.existsSync(commonDirFile)) {
+        const relCommon = fs.readFileSync(commonDirFile, 'utf8').trim();
+        const commonDir = path.resolve(gitDir, relCommon);
+        return path.join(commonDir, 'hooks');
+      }
+
+      return path.join(gitDir, 'hooks');
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether content has an active (non-comment) shell command line executing the target command.
+ *
+ * @param {string} content - Hook file content
+ * @param {string} [command='npm run self-review'] - Command to look for
+ * @returns {boolean}
+ */
+export function hasActiveHookCommand(content, command = 'npm run self-review') {
+  if (typeof content !== 'string') {
+    return false;
+  }
+  const lines = content.split(/\r?\n/);
+  return lines.some((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) {
+      return false;
+    }
+    return (
+      trimmed === command ||
+      trimmed.startsWith(command + ' ') ||
+      trimmed.startsWith(command + ';') ||
+      trimmed.startsWith(command + '&')
+    );
+  });
+}
+
+/**
  * Checks whether pre-commit hook content contains the gem-pr-review hook or managed command.
  *
  * @param {string} content - Pre-commit hook file content
@@ -233,7 +305,10 @@ export function containsPreCommitHook(content, command = 'npm run self-review') 
   if (typeof content !== 'string') {
     return false;
   }
-  return content.includes(PRE_COMMIT_HOOK_MARKER) || content.includes(command);
+  const lines = content.split(/\r?\n/);
+  const hasMarker = lines.some((l) => l.trim() === PRE_COMMIT_HOOK_MARKER);
+  const hasCmd = hasActiveHookCommand(content, command);
+  return hasMarker && hasCmd;
 }
 
 /**
@@ -246,9 +321,18 @@ export function containsPreCommitHook(content, command = 'npm run self-review') 
  */
 export function isPreCommitHookInstalled(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const hookPath = path.join(rootDir, '.git', 'hooks', 'pre-commit');
+  const hooksDir = resolveGitHooksDir(rootDir);
   const command = options.command || 'npm run self-review';
 
+  if (!hooksDir) {
+    return {
+      installed: false,
+      containsSelfReview: false,
+      hookPath: path.join(rootDir, '.git', 'hooks', 'pre-commit'),
+    };
+  }
+
+  const hookPath = path.join(hooksDir, 'pre-commit');
   if (!fs.existsSync(hookPath)) {
     return { installed: false, containsSelfReview: false, hookPath };
   }
@@ -272,16 +356,15 @@ export function isPreCommitHookInstalled(options = {}) {
  */
 export function installPreCommitHook(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const gitDir = path.join(rootDir, '.git');
+  const hooksDir = resolveGitHooksDir(rootDir);
 
-  if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
+  if (!hooksDir) {
     return {
       success: false,
-      error: 'No .git directory found. Ensure you are running inside a git repository.',
+      error: 'No .git repository or worktree found. Ensure you are running inside a git repository.',
     };
   }
 
-  const hooksDir = path.join(gitDir, 'hooks');
   const hookPath = path.join(hooksDir, 'pre-commit');
   const command = options.command || 'npm run self-review';
 
@@ -302,9 +385,21 @@ export function installPreCommitHook(options = {}) {
         };
       }
 
-      const separator = existing.endsWith('\n') ? '' : '\n';
-      const addition = `\n${PRE_COMMIT_HOOK_MARKER}\n${command}\n`;
-      fs.writeFileSync(hookPath, existing + separator + addition);
+      // If an existing hook ends with or contains an exit statement,
+      // insert before it so self-review is guaranteed to run
+      const lines = existing.split(/\r?\n/);
+      const exitIdx = lines.findIndex((l) =>
+        /^\s*exit(\s+[0-9]+|\s+\$[a-zA-Z0-9_]+)?\s*$/.test(l)
+      );
+
+      if (exitIdx !== -1) {
+        lines.splice(exitIdx, 0, PRE_COMMIT_HOOK_MARKER, command, '');
+        fs.writeFileSync(hookPath, lines.join('\n'));
+      } else {
+        const separator = existing.endsWith('\n') ? '' : '\n';
+        const addition = `\n${PRE_COMMIT_HOOK_MARKER}\n${command}\n`;
+        fs.writeFileSync(hookPath, existing + separator + addition);
+      }
       fs.chmodSync(hookPath, 0o755);
       return {
         success: true,
@@ -339,7 +434,13 @@ export function installPreCommitHook(options = {}) {
  */
 export function uninstallPreCommitHook(options = {}) {
   const rootDir = options.rootDir || process.cwd();
-  const hookPath = path.join(rootDir, '.git', 'hooks', 'pre-commit');
+  const hooksDir = resolveGitHooksDir(rootDir);
+
+  if (!hooksDir) {
+    return { success: true, removed: false };
+  }
+
+  const hookPath = path.join(hooksDir, 'pre-commit');
   const command = options.command || 'npm run self-review';
 
   if (!fs.existsSync(hookPath)) {
@@ -348,32 +449,39 @@ export function uninstallPreCommitHook(options = {}) {
 
   try {
     const content = fs.readFileSync(hookPath, 'utf8');
-    if (!containsPreCommitHook(content, command)) {
+    // Only uninstall if it contains our managed marker
+    if (!content.includes(PRE_COMMIT_HOOK_MARKER)) {
       return { success: true, removed: false, hookPath };
     }
 
-    // If file only contains our auto-generated hook or comment lines, delete file
-    const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const nonCommentLines = lines.filter((l) => !l.startsWith('#'));
+    const lines = content.split(/\r?\n/);
+    // Check if the file only contains comments/shebang and our exact command
+    const nonCommentLines = lines
+      .map((l) => l.trim())
+      .filter((l) => Boolean(l) && !l.startsWith('#'));
 
     if (
       nonCommentLines.length <= 1 &&
-      nonCommentLines.every((l) => l.includes(command) || l.includes('self-review'))
+      nonCommentLines.every((l) => l === command)
     ) {
       fs.unlinkSync(hookPath);
       return { success: true, removed: true, hookPath };
     }
 
-    // If file contains other commands, strip marker and managed command lines
-    const cleaned = content
-      .split(/\r?\n/)
-      .filter((l) => {
-        const trimmed = l.trim();
-        return trimmed !== PRE_COMMIT_HOOK_MARKER && trimmed !== command;
-      })
-      .join('\n');
+    // If file contains other commands, strip only marker and managed command line
+    const cleaned = [];
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed === PRE_COMMIT_HOOK_MARKER) {
+        if (i + 1 < lines.length && lines[i + 1].trim() === command) {
+          i++; // Skip the managed command line as well
+        }
+        continue;
+      }
+      cleaned.push(lines[i]);
+    }
 
-    fs.writeFileSync(hookPath, cleaned);
+    fs.writeFileSync(hookPath, cleaned.join('\n'));
     fs.chmodSync(hookPath, 0o755);
     return { success: true, cleaned: true, hookPath };
   } catch (err) {

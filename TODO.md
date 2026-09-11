@@ -31,7 +31,7 @@
     - `scripts/ci-action.mjs`
     - `scripts/bump-version.mjs`
   - [x] Added zero-friction pre-commit hook installer (`npm run install-hook` or `node scripts/self-review.mjs --install-hook` / `--uninstall-hook`) to configure `.git/hooks/pre-commit` to execute `npm run self-review`.
-  - [x] Added unit and integration tests in `tests/cli.test.mjs` and `tests/skills.test.mjs` (489 total passing across 106 suites with 0 failures).
+  - [x] Added unit and integration tests in `tests/cli.test.mjs` and `tests/skills.test.mjs` (493 total passing across 107 suites with 0 failures).
   - [x] Comprehensive documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
   - [x] Calibrated lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
