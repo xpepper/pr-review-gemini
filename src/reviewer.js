@@ -74,6 +74,11 @@ import {
   isValidSemVer,
   parseSemVer,
 } from './version.js';
+import {
+  CALIBRATION_BENCHMARKS,
+  evaluateCalibrationFinding,
+  evaluateCalibrationSuite,
+} from './calibration.js';
 
 export {
   resolveLensPlan,
@@ -122,6 +127,9 @@ export {
   PLUGIN_NAME,
   isValidSemVer,
   parseSemVer,
+  CALIBRATION_BENCHMARKS,
+  evaluateCalibrationFinding,
+  evaluateCalibrationSuite,
 };
 
 export const REVIEW_MODES = {
