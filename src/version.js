@@ -52,10 +52,10 @@ export const SEMVER_REGEX =
  * @returns {boolean}
  */
 export function isValidSemVer(v) {
-  if (typeof v !== 'string' || !v.trim()) {
+  if (typeof v !== 'string' || !v) {
     return false;
   }
-  return SEMVER_REGEX.test(v.trim());
+  return SEMVER_REGEX.test(v);
 }
 
 /**
@@ -68,7 +68,7 @@ export function parseSemVer(v) {
   if (!isValidSemVer(v)) {
     return null;
   }
-  const match = v.trim().match(SEMVER_REGEX);
+  const match = v.match(SEMVER_REGEX);
   if (!match) {
     return null;
   }

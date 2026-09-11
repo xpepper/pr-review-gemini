@@ -52,6 +52,8 @@ describe('Increment 15: Central Version Module & Manifest Synchronization', () =
       assert.equal(isValidSemVer('1.0'), false);
       assert.equal(isValidSemVer('1'), false);
       assert.equal(isValidSemVer('invalid'), false);
+      assert.equal(isValidSemVer(' 0.1.0 '), false);
+      assert.equal(isValidSemVer('0.1.0\n'), false);
       assert.equal(isValidSemVer(''), false);
       assert.equal(isValidSemVer(null), false);
     });
