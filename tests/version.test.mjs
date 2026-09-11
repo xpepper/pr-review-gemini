@@ -687,5 +687,41 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.equal(result.exitCode, 1);
       assert.equal(gitCalls, 0, 'git should not be called on invalid target');
     });
+
+    it('accurately resolves and returns bumpType across target modes', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-bump-types-'));
+      try {
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.1.0"\n---\n# Skill'
+        );
+
+        const mockExec = async () => ({ stdout: '', stderr: '' });
+
+        const resPatch = await runBump(
+          { target: 'patch', dryRun: true, rootDir: tempDir, execFileFn: mockExec },
+          { log: () => {}, warn: () => {}, error: () => {} }
+        );
+        assert.equal(resPatch.bumpType, 'patch');
+
+        const resExplicit = await runBump(
+          { target: '1.5.0', dryRun: true, rootDir: tempDir, execFileFn: mockExec },
+          { log: () => {}, warn: () => {}, error: () => {} }
+        );
+        assert.equal(resExplicit.bumpType, 'explicit');
+
+        const resNotes = await runBump(
+          { target: 'notes', dryRun: true, rootDir: tempDir, execFileFn: mockExec },
+          { log: () => {}, warn: () => {}, error: () => {} }
+        );
+        assert.equal(resNotes.bumpType, 'none');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
   });
 });

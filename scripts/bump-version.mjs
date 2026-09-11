@@ -166,7 +166,7 @@ export async function runBump(options = {}, io = console) {
 
   // 3. Resolve target version
   let target = options.target || 'auto';
-  let bumpType = target;
+  let bumpType = null;
   let newVersion = null;
 
   const isNamedBump = ['major', 'minor', 'patch'].includes(target.toLowerCase());
@@ -216,6 +216,7 @@ export async function runBump(options = {}, io = console) {
         unchanged: true,
         currentVersion,
         newVersion: currentVersion,
+        bumpType: 'none',
       };
     }
 
@@ -228,6 +229,7 @@ export async function runBump(options = {}, io = console) {
     newVersion = calculateNextVersion(currentVersion, bumpType);
   } else {
     newVersion = target.trim();
+    bumpType = 'explicit';
   }
 
   io.log(`🚀 Bumping version: ${currentVersion} -> ${newVersion} (${options.dryRun ? 'DRY-RUN' : 'APPLYING'})`);
