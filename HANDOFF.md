@@ -3,7 +3,7 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/semantic-versioning`
+* **Current Branch**: `main` (clean, synchronized with `origin/main`)
 * **Test Suite**: `npm test` runs and passes (414 tests across 92 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -25,13 +25,14 @@
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
-  - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization`
+  - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
 
 ---
 
-## Status: INCREMENT_15_COMPLETED / PR_READY
+## Status: READY_FOR_INCREMENT_16 (Issue #27)
 
-All 15 roadmap increments are fully implemented, verified test-first (414 passing tests across 92 suites), and dogfood-reviewed:
+All 15 initial roadmap increments are fully implemented, verified test-first (414 passing tests across 92 suites), dogfood-reviewed, and merged to `main`.
+Active next mission: **Increment 16 / Issue #27**: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -365,6 +366,47 @@ Possible future enhancements:
     - Added 43 new unit and integration tests across `tests/version.test.mjs`, `tests/ci.test.mjs`, and `tests/skills.test.mjs`.
     - Total **414 tests passing across 92 suites with 0 failures**.
     - Executed `/pr-review-loop` resolving all 11 findings from Copilot reviewer and all 5 findings from the real dogfood review (16 total comments and threads verified and resolved).
+
+---
+
+## Next Mission: Increment 16 — Reviewer Sensitivity & Quality Calibration (Issue #27)
+
+- **GitHub Issue**: [#27: feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Increment 16)](https://github.com/xpepper/pr-review-gemini/issues/27)
+- **Branch**: `feat/reviewer-sensitivity-calibration` (create from `main` after verifying clean working tree)
+
+### Problem & Background
+On PR #26 (Increment 15), GitHub Copilot's built-in pull request reviewer bot caught 11 real issues (global `process.argv` coupling in library functions, redundant `getGitCommitsSinceTag` subprocess refetches, dead initial assignments, workflow trigger assumptions). In contrast, our reviewer initially produced 0 findings (due to local model catalog availability) and produced 5 findings when run with `--model auto`.
+The risk identified is that our specialist lenses may not be sensitive enough to code hygiene, parameter decoupling, dead initializations, redundant I/O refetches, and CI/CD workflow contract assumptions.
+
+### Prompt for the Next Agent
+
+```text
+Please implement Increment 16 on this repository: "Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer" (addressing Issue #27: https://github.com/xpepper/pr-review-gemini/issues/27).
+
+Before writing code:
+1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
+2. Confirm git working tree is clean on main, then create a feature branch: feat/reviewer-sensitivity-calibration.
+
+Requirements:
+1. Specialist Lens Prompt Calibration:
+   - In src/reviewer.js and skills/gem-pr-review/SKILL.md, refine the specialist lens prompts (specifically `contracts_data_flow`, `conventions_maintainability`, and `correctness_concurrency`) to explicitly evaluate:
+     - Ambient state coupling: reading global `process.argv`, `process.env`, or ambient process variables inside exported/reusable library functions instead of explicit function options.
+     - Redundant subprocess, file I/O, or network refetches: performing duplicate commands or subprocess executions when the result was already computed or could be computed once up-front.
+     - Dead code, unused initializations, and redundant branch conditions (e.g. `let x = target` that is always overwritten).
+     - CI/CD workflow contract assumptions: e.g. actions/checkout checking out a ref or input tag that does not yet exist.
+     - Duplication across sibling CLI scripts: encourage centralization of repetitive CLI flag parsing or banner formatting.
+2. Model Catalog & Auto Fallback Resilience:
+   - In src/config.js and src/subagents.js, ensure model resolution gracefully falls back to `auto` if configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) encounter capability errors, authentication rejections, or unavailability in the user's host environment.
+3. Regression & Calibration Benchmark Suite:
+   - Add a benchmark test suite in tests/calibration.test.mjs (or tests/benchmark.test.mjs) verifying that diff patterns corresponding to the PR #26 review findings are classified with high confidence and appropriate severity.
+4. Streamlined Real Dogfood Review Helper:
+   - Add an npm script / CLI helper (`npm run dogfood:pr <number>`) that runs a real review against an open PR with `--model auto`, runs hunk anchor verification, and outputs a formatted table of candidate findings.
+5. Documentation & Dogfooding:
+   - Update README.md and skills/gem-pr-review/SKILL.md to document the calibrated lens checklists, model fallback behavior, and dogfood review workflow.
+   - Run `npm test` to verify all tests pass with 0 failures.
+   - Run dogfood self-review before committing (`npm run self-review`).
+   - Open a GitHub PR with `gh pr create` referencing Issue #27.
+```
 
 ---
 

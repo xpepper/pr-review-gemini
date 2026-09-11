@@ -6,7 +6,18 @@
 
 ---
 
-## Active Next Task: Backlog & Future Capabilities
+## Active Next Task: Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration
+- [ ] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
+  - [ ] Calibrate lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` to explicitly target:
+    - Ambient global state coupling (`process.argv` / `process.env` in reusable functions).
+    - Redundant subprocess, file I/O, and network refetches.
+    - Dead variable assignments and redundant branching.
+    - CI/CD workflow assumption mismatches (e.g. checkout ref existence).
+  - [ ] Implement automatic model catalog fallback to `auto` when configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) are unavailable or fail in local environments.
+  - [ ] Add evaluation benchmark suite (`tests/benchmark.test.mjs` or fixture diff tests) comparing recall and precision against known PR defect patterns.
+  - [ ] Streamline real dogfood review workflow (`npm run dogfood:pr` or script wrapper) for real multi-lens PR verification before merge.
+
+### Backlog & Future Capabilities
 - [ ] Pre-commit hook installer (`npx gem-pr-review --install-hook`) for local self-review
 - [ ] PR comment reaction / interactive re-review commands (`/gem-review --quick`)
 - [ ] SARIF report export for GitHub Code Scanning integration
