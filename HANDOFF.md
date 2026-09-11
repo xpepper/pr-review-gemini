@@ -375,8 +375,19 @@ Possible future enhancements:
 - **Branch**: `feat/reviewer-sensitivity-calibration` (create from `main` after verifying clean working tree)
 
 ### Problem & Background
-On PR #26 (Increment 15), GitHub Copilot's built-in pull request reviewer bot caught 11 real issues (global `process.argv` coupling in library functions, redundant `getGitCommitsSinceTag` subprocess refetches, dead initial assignments, workflow trigger assumptions). In contrast, our reviewer initially produced 0 findings (due to local model catalog availability) and produced 5 findings when run with `--model auto`.
-The risk identified is that our specialist lenses may not be sensitive enough to code hygiene, parameter decoupling, dead initializations, redundant I/O refetches, and CI/CD workflow contract assumptions.
+On PR #26 (Increment 15), GitHub Copilot's built-in pull request reviewer bot caught 11 real issues across multiple design dimensions:
+- *Coupling & Encapsulation*: A library function reading ambient global process state instead of explicit options parameters.
+- *Resource Hygiene & Redundancy*: Redundant subprocess refetches when commit data was already computed or could be resolved once up-front.
+- *Dead Logic*: Unused initial variable assignments immediately overwritten in all branches.
+- *Precondition & Landing Surface Assumptions*: A CI workflow dispatch trigger assuming an external git ref already exists prior to checkout.
+- *Boilerplate Duplication*: Copy-pasting identical flag formatting across multiple sibling CLI entrypoints.
+
+In contrast, our reviewer initially produced 0 findings (due to local model catalog availability) and produced 5 findings when run with `--model auto`.
+To make our specialist lenses consistently sensitive and reliable without baking in language-specific rules of thumb, we draw inspiration from industry-leading code review agent skills:
+- [channingwalton/skills (code-reviewer)](https://github.com/channingwalton/skills/blob/main/skills/code-reviewer/SKILL.md)
+- [JPeetz/agent-skills (code-quality/code-review)](https://github.com/JPeetz/agent-skills/tree/main/skills/code-quality/code-review)
+- [unclecatvn/agent-skills (code-review)](https://github.com/unclecatvn/agent-skills/blob/main/skills/code-review/SKILL.md)
+- [OpenAI Codex skills](https://github.com/openai/codex/tree/main/.codex/skills)
 
 ### Prompt for the Next Agent
 
@@ -388,13 +399,31 @@ Before writing code:
 2. Confirm git working tree is clean on main, then create a feature branch: feat/reviewer-sensitivity-calibration.
 
 Requirements:
-1. Specialist Lens Prompt Calibration:
-   - In src/reviewer.js and skills/gem-pr-review/SKILL.md, refine the specialist lens prompts (specifically `contracts_data_flow`, `conventions_maintainability`, and `correctness_concurrency`) to explicitly evaluate:
-     - Ambient state coupling: reading global `process.argv`, `process.env`, or ambient process variables inside exported/reusable library functions instead of explicit function options.
-     - Redundant subprocess, file I/O, or network refetches: performing duplicate commands or subprocess executions when the result was already computed or could be computed once up-front.
-     - Dead code, unused initializations, and redundant branch conditions (e.g. `let x = target` that is always overwritten).
-     - CI/CD workflow contract assumptions: e.g. actions/checkout checking out a ref or input tag that does not yet exist.
-     - Duplication across sibling CLI scripts: encourage centralization of repetitive CLI flag parsing or banner formatting.
+1. Language-Agnostic Lens Prompt Calibration:
+   - In src/reviewer.js and skills/gem-pr-review/SKILL.md, refine the specialist lens prompts using universal, language-agnostic software engineering dimensions (grounded in established review patterns from channingwalton/skills, JPeetz/agent-skills, unclecatvn/agent-skills):
+     - `contracts` (Contracts & Data Boundaries):
+       - Explicit Parameterization vs. Ambient State Coupling: flag functions/modules that read implicit global, ambient process, or environment state instead of receiving explicit parameters via configuration or dependency injection.
+       - Signature & Schema Stability: breaking changes, serialization mismatches, missing field defaults.
+       - Data Exposure: surfacing internal data to new external outputs/audiences is an exposure, not a refactor.
+     - `performance` (Performance & Resource Hygiene):
+       - Redundant Work & Side-Effect Duplication: duplicate or repeated subprocess invocations, file I/O operations, database queries (N+1), or network calls when the result was already computed or can be computed once up-front.
+       - Algorithmic Traps: O(n²) operations on unbounded inputs, unindexed lookups.
+       - Resource Lifecycle: unclosed handles, unreleased locks, memory retention/leaks.
+     - `conventions` (Conventions & Maintainability):
+       - Dead Code & Phantom Logic: dead variable initializations, unreachable branches, shadowed variables, and redundant conditional assignments that never take effect.
+       - Duplication & Single Source of Truth: copy-pasting boilerplate logic across sibling entrypoints or CLI commands rather than centralizing in a shared abstraction.
+       - Architectural Cohesion: separation of concerns and clear abstraction boundaries.
+     - `correctness` (Correctness & Concurrency):
+       - Where does the argument break down? Trace execution paths through edge cases, boundary conditions, and failure/exception escapes rather than trusting the happy path.
+       - Precondition & Landing Surface Invariants: inspect assumptions about external state, file paths, refs, or resources before the code executes; verify whether activation triggers (workflows, flags, schedulers) assume pre-existing environment state.
+       - Concurrency & Lifecycle: uncoordinated concurrent mutations, race conditions, and unhandled async/thread/process error escape paths.
+     - `security` (Security & Trust Boundaries):
+       - Trust Boundary Crossings: injection sinks, path traversal (user input resolving to filesystem/keys), and unsafe deserialization.
+       - Landing Surface Authorization: verify that new/modified endpoints and actions enforce proper access controls.
+       - Secret Exposure: hardcoded tokens, credential leaks in logs or error payloads.
+     - `tests` (Test Quality & Verification):
+       - Evidence Before Completion: verify whether introduced behaviors, failure paths, and edge cases are backed by passing automated tests.
+       - Test Integrity: flaky assertions, non-deterministic timing, and unrealistic mocking boundaries.
 2. Model Catalog & Auto Fallback Resilience:
    - In src/config.js and src/subagents.js, ensure model resolution gracefully falls back to `auto` if configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) encounter capability errors, authentication rejections, or unavailability in the user's host environment.
 3. Regression & Calibration Benchmark Suite:

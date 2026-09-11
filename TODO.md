@@ -8,13 +8,15 @@
 
 ## Active Next Task: Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration
 - [ ] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
-  - [ ] Calibrate lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` to explicitly target:
-    - Ambient global state coupling (`process.argv` / `process.env` in reusable functions).
-    - Redundant subprocess, file I/O, and network refetches.
-    - Dead variable assignments and redundant branching.
-    - CI/CD workflow assumption mismatches (e.g. checkout ref existence).
+  - [ ] Calibrate lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
+    - *Contracts*: Explicit parameterization vs ambient state coupling (functions reading implicit global/ambient state instead of options/arguments).
+    - *Performance*: Redundant work & side-effect duplication (duplicate subprocess, I/O, or network refetches when data can be computed once up-front).
+    - *Conventions*: Dead code & phantom logic (unused initializations, unreachable branches, redundant assignments) and DRY duplication across sibling entrypoints.
+    - *Correctness*: Precondition & landing surface assumptions (assuming external entities or environment state exist before verification; tracing execution arguments through error escape paths).
+    - *Security*: Landing surface authorization gating, injection sinks, path traversal, and secret exposure.
+    - *Tests*: Evidence before completion, verifying newly introduced behavior and edge cases with automated tests.
   - [ ] Implement automatic model catalog fallback to `auto` when configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) are unavailable or fail in local environments.
-  - [ ] Add evaluation benchmark suite (`tests/benchmark.test.mjs` or fixture diff tests) comparing recall and precision against known PR defect patterns.
+  - [ ] Add evaluation benchmark suite (`tests/calibration.test.mjs` or fixture diff tests) comparing recall and precision against known PR defect patterns.
   - [ ] Streamline real dogfood review workflow (`npm run dogfood:pr` or script wrapper) for real multi-lens PR verification before merge.
 
 ### Backlog & Future Capabilities
