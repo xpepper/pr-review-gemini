@@ -125,6 +125,15 @@ export function updateChangelogFile(changelogEntry, rootDir = ROOT_DIR) {
  */
 export async function runBump(options = {}, io = console) {
   const rootDir = options.rootDir || ROOT_DIR;
+  const execFn = options.execFileFn || execFileAsync;
+  const execGitFn =
+    options.execGitFn ||
+    (options.execFileFn
+      ? async (args) => {
+          const res = await execFn('git', args, { cwd: rootDir });
+          return (res?.stdout || '').trim();
+        }
+      : undefined);
 
   // 1. Check mode
   if (options.check) {
@@ -153,7 +162,7 @@ export async function runBump(options = {}, io = console) {
   let latestTag = null;
 
   if (target === 'auto') {
-    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir });
+    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
     commits = gitInfo.commits;
     latestTag = gitInfo.latestTag;
 
@@ -187,7 +196,7 @@ export async function runBump(options = {}, io = console) {
 
   // 4. Generate changelog
   if (commits.length === 0) {
-    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir });
+    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
     commits = gitInfo.commits;
     latestTag = gitInfo.latestTag;
   }
@@ -232,12 +241,20 @@ export async function runBump(options = {}, io = console) {
         if (options.writeChangelog && fs.existsSync(path.join(rootDir, 'CHANGELOG.md'))) {
           filesToStage.push('CHANGELOG.md');
         }
-        await execFileAsync('git', ['add', ...filesToStage], { cwd: rootDir });
-        await execFileAsync('git', ['commit', '-m', `chore(release): v${newVersion}`], { cwd: rootDir });
-        await execFileAsync('git', ['tag', '-a', `v${newVersion}`, '-m', `Release v${newVersion}`], { cwd: rootDir });
+        await execFn('git', ['add', ...filesToStage], { cwd: rootDir });
+        await execFn('git', ['commit', '-m', `chore(release): v${newVersion}`], { cwd: rootDir });
+        await execFn('git', ['tag', '-a', `v${newVersion}`, '-m', `Release v${newVersion}`], { cwd: rootDir });
         io.log(`🏷️ Created git commit and tag v${newVersion}.`);
       } catch (gitErr) {
-        io.warn(`⚠️ Warning: Git commit/tag failed: ${gitErr.message}`);
+        io.error(`❌ Git commit/tag failed: ${gitErr.message}`);
+        return {
+          success: false,
+          exitCode: 1,
+          error: gitErr.message,
+          currentVersion,
+          newVersion,
+          bumpType,
+        };
       }
     }
   } else {

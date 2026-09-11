@@ -23,6 +23,7 @@ import {
   bumpManifestVersions,
   getGitCommitsSinceTag,
 } from '../src/semver.js';
+import { runBump } from '../scripts/bump-version.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -485,6 +486,51 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.match(stdout, /Analyzed \d+ commit\(s\)/);
       assert.match(stdout, /Determined bump:/);
       assert.match(stdout, /Dry-run completed/);
+    });
+
+    it('returns exitCode 1 and success false when git commit or tag fails', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-bump-git-fail-'));
+      try {
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.1.0"\n---\n# Skill'
+        );
+
+        const mockExec = async (cmd, args) => {
+          if (cmd === 'git' && args[0] === 'tag') {
+            throw new Error('fatal: tag "v0.1.1" already exists');
+          }
+          return { stdout: '', stderr: '' };
+        };
+
+        const loggedErrors = [];
+        const mockIo = {
+          log: () => {},
+          warn: () => {},
+          error: (msg) => loggedErrors.push(msg),
+        };
+
+        const result = await runBump(
+          {
+            target: 'patch',
+            rootDir: tempDir,
+            createTag: true,
+            execFileFn: mockExec,
+          },
+          mockIo
+        );
+
+        assert.equal(result.success, false);
+        assert.equal(result.exitCode, 1);
+        assert.match(result.error, /fatal: tag "v0\.1\.1" already exists/);
+        assert.ok(loggedErrors.some((msg) => msg.includes('Git commit/tag failed')));
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });
