@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main`
-* **Test Suite**: `npm test` runs and passes (371 tests across 83 suites, 0 failures)
+* **Current Branch**: `feat/semantic-versioning`
+* **Test Suite**: `npm test` runs and passes (402 tests across 91 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -25,12 +25,13 @@
   - PR #21 (Issue #20 / Increment 12): `feat: implement candidate finding recovery from degraded and malformed model output` (Merged, commit `69f42c4`)
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
+  - Increment 15 (Issue #25): `feat: automated semantic versioning, release management, and manifest synchronization`
 
 ---
 
-## Status: INCREMENT_14_MERGED / READY_FOR_INCREMENT_15
+## Status: INCREMENT_15_COMPLETED / PR_READY
 
-All 14 roadmap increments are fully implemented, verified test-first (371 passing tests across 83 suites), dogfood-reviewed, and merged into `main`.
+All 15 roadmap increments are fully implemented, verified test-first (402 passing tests across 91 suites), and dogfood-reviewed:
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -38,6 +39,7 @@ All 14 roadmap increments are fully implemented, verified test-first (371 passin
 - [x] Increment 12: Candidate finding recovery from degraded/malformed model output (Issue #20)
 - [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
 - [x] Increment 14: Pluggable custom review roles & specialist lenses
+- [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
 
 ---
 
@@ -322,6 +324,47 @@ Possible future enhancements:
     - Added 37 new tests across `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, `tests/mcp-server.test.mjs`, `tests/dogfood.test.mjs`, and `tests/skills.test.mjs`. Total 371 tests passing across 83 suites.
     - Executed `/pr-review-loop` on PR #24 addressing all 7 review comments from `@copilot-pull-request-reviewer` with dedicated commits, verified replies, and resolved threads.
 
+## Completed Work: Increment 15 — Automated Semantic Versioning, Release Management & Manifest Synchronization (Issue #25)
+
+- **GitHub Issue**: [#25: feat: automated semantic versioning, release management, and manifest synchronization (Increment 15)](https://github.com/xpepper/pr-review-gemini/issues/25)
+- **Branch**: `feat/semantic-versioning`
+- **Changes Delivered**:
+  - `src/version.js`:
+    - Canonical runtime version module dynamically resolving plugin and package version from `package.json` without hardcoding strings.
+    - Exported `VERSION`, `PLUGIN_VERSION`, `PLUGIN_NAME`.
+    - Implemented SemVer 2.0 validation (`isValidSemVer`, `parseSemVer`).
+    - Implemented multi-manifest version inspection (`getManifestVersions`) and strict drift detection (`checkManifestSync`).
+  - `src/semver.js`:
+    - Conventional commit message parser (`parseConventionalCommit`) extracting commit type, optional scope, description, PR numbers (`#\d+`), and breaking change indicators (`!`, `BREAKING CHANGE:`).
+    - Automated SemVer bump evaluation (`determineSemverBump`): priority major (breaking changes) > minor (`feat:`) > patch (`fix:`, `perf:`, `chore:`, `docs:`, `refactor:`).
+    - `calculateNextVersion`: increments SemVer versions according to bump type or explicit version target.
+    - `generateChangelog`: formats categorized Markdown release notes with features, bug fixes, breaking changes, chores, and PR links.
+    - `getGitCommitsSinceTag`: retrieves and parses git commits since latest git tag (or from root if untagged).
+    - `bumpManifestVersions`: atomically synchronizes and updates `package.json`, `plugin.json`, `mcp.json`, and `skills/gem-pr-review/SKILL.md` (with `--dry-run` safety).
+  - `scripts/bump-version.mjs`:
+    - Zero-dependency CLI bump utility supporting `patch`, `minor`, `major`, `<explicit-version>`, and `auto` bump types.
+    - Flags: `--check` (verifies all manifests are in sync, exits 0 if synced, 1 if drift), `--dry-run`, `--changelog`, `--write-changelog` (updates `CHANGELOG.md`), `--tag`, and `--release`.
+  - `server/index.js` (MCP Server):
+    - Replaced hardcoded version `'0.1.0'` with dynamic `PLUGIN_VERSION` in MCP `initialize` response (`serverInfo.version`).
+  - `src/reviewer.js`:
+    - Injected canonical version into PR review summary headers (`## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: ...)`).
+    - Re-exported version and SemVer utilities.
+  - CLI Version Flags (`-v` and `--version`):
+    - Added to `scripts/dogfood-review.mjs`
+    - Added to `scripts/self-review.mjs`
+    - Added to `scripts/ci-action.mjs`
+    - Added to `scripts/bump-version.mjs`
+  - Release Automation (`.github/workflows/release.yml`):
+    - Automated GitHub Actions release workflow triggering on `v*` tag pushes or workflow dispatch.
+    - Verifies manifest synchronization, runs tests, generates changelog, and publishes GitHub Release via `gh release create`.
+  - `package.json`:
+    - Added npm scripts: `"version:check": "node scripts/bump-version.mjs --check"`, `"bump": "node scripts/bump-version.mjs"`, `"release": "node scripts/bump-version.mjs auto --release"`.
+  - `skills/gem-pr-review/SKILL.md` & `README.md`:
+    - Documented dynamic versioning, multi-manifest synchronization, CLI version flags, and release automation.
+  - Tests:
+    - Added 31 new unit and integration tests across `tests/version.test.mjs` and `tests/skills.test.mjs`.
+    - Total **402 tests passing across 91 suites with 0 failures**.
+
 ---
 
 ## Future Opportunities / Phase 8 Ideas
@@ -330,57 +373,4 @@ Possible future enhancements:
 2. **PR Comment Reaction / Interaction**: Ability to interactively rerun specific lenses upon receiving PR comment commands (e.g. `/gem-review --quick`).
 3. **SARIF Report Export**: Export structured findings to standard SARIF format for GitHub Code Scanning integration.
 
----
-
-## Next Session Mission: Increment 15 — Automated Semantic Versioning, Release Management & Manifest Synchronization (Issue #25)
-
-- **GitHub Issue**: [#25: feat: automated semantic versioning, release management, and manifest synchronization (Increment 15)](https://github.com/xpepper/pr-review-gemini/issues/25)
-- **Target Branch**: `feat/semantic-versioning`
-
-### Goal
-Implement automated semantic versioning, release management, and manifest synchronization so that the package version is no longer hardcoded to `0.1.0` and releases are systematically tagged and tracked from conventional commits.
-
-### Requirements & Architecture
-1. **Centralized Version Module (`src/version.js`)**:
-   - Provide a canonical module exporting the plugin version dynamically resolved from `package.json`.
-   - Update `server/index.js` MCP server info (`serverInfo.version`) and review summary headers to read from `src/version.js` rather than hardcoding `'0.1.0'`.
-   - Add `-v` / `--version` CLI flag to `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, and `scripts/ci-action.mjs`.
-
-2. **Atomic Manifest Bump Script (`scripts/bump-version.mjs`)**:
-   - Provide a CLI utility to bump version atomically across:
-     - `package.json`
-     - `plugin.json`
-     - `mcp.json`
-     - `skills/gem-pr-review/SKILL.md`
-   - Support explicit bump types: `patch`, `minor`, `major`, or explicit semver string (e.g. `1.0.0`).
-   - Automatically analyze conventional commits since the latest git tag (`feat:` -> minor, `fix:` -> patch, breaking change -> major) to recommend or apply the next SemVer bump.
-
-3. **Changelog Generation & GitHub Release Workflow**:
-   - Extract conventional commit messages since the previous release tag to generate categorized release notes (`### Features`, `### Bug Fixes`, `### Documentation`, `### Refactoring`).
-   - Add automated GitHub release workflow (`.github/workflows/release.yml`) or release helper (`npm run release`) that tags `vX.Y.Z` and creates a GitHub Release.
-
-4. **Manifest Consistency & Drift Detection Tests (`tests/version.test.mjs`)**:
-   - Automated test suite verifying that all manifest files (`package.json`, `plugin.json`, `mcp.json`, `skills/gem-pr-review/SKILL.md`) have matching SemVer strings and valid formats.
-   - Test CLI `--version` outputs and dynamic MCP server info reporting.
-
----
-
-## Ready-to-Use Prompt for the Next Session
-
-```text
-Please implement Increment 15 on this repository: "Automated Semantic Versioning, Release Management & Manifest Synchronization" (addressing Issue #25: https://github.com/xpepper/pr-review-gemini/issues/25).
-
-Before writing code:
-1. Read HANDOFF.md, TODO.md, AGENTS.md, and docs/roadmap.md.
-2. Confirm git working tree is clean on main, then create a feature branch: feat/semantic-versioning.
-
-Implementation requirements:
-- Central Version Module: Implement src/version.js to dynamically export the canonical version from package.json without hardcoding. Wire it into server/index.js (MCP serverInfo.version) and review summaries.
-- CLI Version Support: Add -v and --version flags to scripts/dogfood-review.mjs, scripts/self-review.mjs, and scripts/ci-action.mjs.
-- Atomic Manifest Synchronization: Implement scripts/bump-version.mjs to bump version atomically across package.json, plugin.json, mcp.json, and skills/gem-pr-review/SKILL.md.
-- Conventional Commit SemVer Calculation: Automatically determine patch, minor, or major version bump from conventional commits since the latest git tag and generate clean categorized changelogs.
-- Release Automation: Add release workflow or script (.github/workflows/release.yml / npm run release) to tag vX.Y.Z and create GitHub releases.
-- Test-First Verification: Add unit tests in tests/version.test.mjs ensuring manifest versions remain synchronized, adhere to SemVer, and CLI flags output expected version info, keeping all 371+ existing tests passing.
-- Dogfood Review & PR: Run dogfood review against your PR, commit with conventional commits, update TODO.md and HANDOFF.md, and submit a pull request against main.
-```
 

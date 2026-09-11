@@ -83,6 +83,7 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--repo <owner/repo>` | Target repository (defaults to current git origin) |
 | `--model <model>` | Override the default model used by review subagents |
 | `--mock` | Use synthetic runner for rapid offline testing without inference |
+| `-v`, `--version` | Display version information |
 
 ### CLI Examples
 
@@ -384,6 +385,36 @@ By using the distinctive `/gem-pr-review` slash command, this plugin runs alongs
 - **Direct CLI Execution**: Run `node scripts/dogfood-review.mjs <PR_NUMBER>` to bypass Copilot CLI's global plugin registry entirely.
 - **Explicit MCP Tool Prompting**: In Copilot CLI chat, prompt directly: *"Use the gem-pr-review MCP server to review PR 123"*. The model will invoke `gem_pr_review_subagents` from this server.
 
+---
+
+## Semantic Versioning, Release Automation & Manifest Synchronization
+
+`gem-pr-review` features automated semantic versioning and atomic multi-manifest synchronization adhering to the Agent Plugins 1.0 standard:
+
+### Manifest Synchronization
+Version metadata is maintained in strict synchronization across 4 manifest declarations:
+- `package.json`
+- `plugin.json`
+- `mcp.json`
+- `skills/gem-pr-review/SKILL.md`
+
+Verify manifest integrity:
+```bash
+npm run version:check
+```
+
+### Conventional Commit SemVer Bump & Changelog Generation
+Analyze git commits since the last release tag to automatically determine the next version bump and generate release notes:
+```bash
+# Preview automated SemVer calculation and categorized changelog
+node scripts/bump-version.mjs auto --dry-run --changelog
+
+# Full release: bump manifests, update CHANGELOG.md, commit, and create git tag
+npm run release
+```
+
+### Automated Release Workflow
+Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) to verify manifests, run tests, generate categorized release notes, and publish an official GitHub Release.
 
 ---
 
@@ -395,7 +426,7 @@ Run the automated test suite:
 npm test
 ```
 
-All 333+ unit tests across 82 suites verify parser accuracy, host-gated security, candidate finding recovery from degraded/malformed model output, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, and quality gate enforcement.
+All 401 unit tests across 91 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, and atomic manifest synchronization.
 
 ---
 
