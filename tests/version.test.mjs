@@ -485,18 +485,22 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
     });
 
     it('supports dry-run bump without altering repository manifests', async () => {
+      const expectedNext = calculateNextVersion(VERSION, 'patch');
       const { stdout } = await execFileAsync(process.execPath, [
         bumpScript,
         'patch',
         '--dry-run',
         '--changelog',
       ]);
-      assert.match(stdout, /Bumping version: 0\.1\.0 -> 0\.1\.1 \(DRY-RUN\)/);
+      assert.match(
+        stdout,
+        new RegExp(`Bumping version: ${VERSION.replace(/\./g, '\\.')} -> ${expectedNext.replace(/\./g, '\\.')} \\(DRY-RUN\\)`)
+      );
       assert.match(stdout, /Dry-run completed\. No files modified\./);
 
       // Verify canonical package.json was not modified
       const pkg = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
-      assert.equal(pkg.version, '0.1.0');
+      assert.equal(pkg.version, VERSION);
     });
 
     it('supports auto SemVer calculation with --dry-run in isolated git repository', async () => {
