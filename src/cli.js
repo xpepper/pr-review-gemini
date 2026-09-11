@@ -396,10 +396,12 @@ export function installPreCommitHook(options = {}) {
         };
       }
 
-      // If an existing hook ends with or contains an exit statement,
-      // insert before it so self-review is guaranteed to run
+      // If an existing hook ends with a top-level terminal exit statement,
+      // insert before it so self-review is guaranteed to run.
+      // Top-level exit statements are unindented (column 0), avoiding nested
+      // exits inside if/then/fi branches, case blocks, or function bodies.
       const lines = existing.split(/\r?\n/);
-      const exitIdx = lines.findIndex((l) => /^\s*exit\b/.test(l));
+      const exitIdx = lines.findLastIndex((l) => /^exit\b/.test(l.trimEnd()));
 
       if (exitIdx !== -1) {
         lines.splice(exitIdx, 0, PRE_COMMIT_HOOK_MARKER, command, '');

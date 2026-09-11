@@ -656,6 +656,66 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       }
     });
 
+    it('preserves conditional block structure and does not insert before nested or indented early exits', () => {
+      const gitDir = path.join(tempDir, '.git');
+      const hooksDir = path.join(gitDir, 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+
+      const hookFile = path.join(hooksDir, 'pre-commit');
+      const complexHook = `#!/bin/sh
+if [ -z "$STAGED_FILES" ]; then
+  echo "No files staged"
+  exit 0
+fi
+
+run_tests() {
+  npm test || exit 1
+}
+
+run_tests
+exit $?
+`;
+      fs.writeFileSync(hookFile, complexHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: tempDir });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const conditionalExitIdx = content.indexOf('  exit 0');
+      const terminalExitIdx = content.indexOf('exit $?');
+
+      assert.ok(selfReviewIdx !== -1, 'Must contain self-review');
+      assert.ok(selfReviewIdx > conditionalExitIdx, 'self-review must be placed after conditional early exit');
+      assert.ok(selfReviewIdx < terminalExitIdx, 'self-review must precede terminal exit $?');
+    });
+
+    it('appends at end of file when hook has only conditional exits and no terminal exit', () => {
+      const subTemp = path.join(tempDir, 'sub-guard-only');
+      const subHooks = path.join(subTemp, '.git', 'hooks');
+      fs.mkdirSync(subHooks, { recursive: true });
+      const hookFile = path.join(subHooks, 'pre-commit');
+      const guardOnlyHook = `#!/bin/sh
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+echo "Running checks"
+npm test
+`;
+      fs.writeFileSync(hookFile, guardOnlyHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: subTemp });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const npmTestIdx = content.indexOf('npm test');
+      assert.ok(selfReviewIdx > npmTestIdx, 'self-review must be appended at end of script after npm test');
+    });
+
     it('does not touch or uninstall unmanaged hooks without PRE_COMMIT_HOOK_MARKER', () => {
       const gitDir = path.join(tempDir, '.git');
       const hooksDir = path.join(gitDir, 'hooks');
