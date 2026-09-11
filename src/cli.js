@@ -11,9 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { printVersionBanner, formatVersionBanner, VERSION, PLUGIN_NAME } from './version.js';
-
-export { printVersionBanner, formatVersionBanner, VERSION, PLUGIN_NAME };
+import { printVersionBanner, VERSION } from './version.js';
 
 /**
  * Robustly detects whether a script module is being executed directly via CLI
@@ -95,11 +93,10 @@ export function formatCliError(err, options = {}) {
     return `${prefix}${err}`;
   }
 
-  const env = options.env || process.env;
   const isDebug =
     options.debug !== undefined
       ? Boolean(options.debug)
-      : Boolean(options.verbose || options.stack || env?.DEBUG);
+      : Boolean(options.verbose || options.stack || options.env?.DEBUG);
 
   if (err instanceof Error) {
     if (isDebug) {
@@ -145,8 +142,9 @@ export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
     bannerFn(io, options.version);
     if (exitFn) {
       exitFn(0);
+      return { handled: true, action: 'version', exitCode: 0 };
     }
-    return { handled: true, action: 'version', exitCode: 0 };
+    return { handled: true, action: 'version' };
   }
 
   if (argv.includes('-h') || argv.includes('--help')) {
@@ -155,8 +153,9 @@ export function handleCommonFlags(argv = process.argv.slice(2), options = {}) {
     }
     if (exitFn) {
       exitFn(0);
+      return { handled: true, action: 'help', exitCode: 0 };
     }
-    return { handled: true, action: 'help', exitCode: 0 };
+    return { handled: true, action: 'help' };
   }
 
   return { handled: false };
@@ -190,21 +189,17 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
       : (code) => process.exit(code);
   const formatErrorFn = options.formatError || formatCliError;
 
-  const env = options.env || process.env;
+  // Fully explicit debuggability: default to true to preserve full diagnostic stack traces
+  // on unhandled script exceptions unless explicitly suppressed with debug: false or stack: false
   const isDebug =
     options.debug !== undefined
       ? Boolean(options.debug)
-      : Boolean(
-          options.verbose ||
-            options.stack ||
-            env?.DEBUG ||
-            env?.CI ||
-            argv.includes('--debug') ||
-            argv.includes('--verbose')
-        );
+      : options.stack !== undefined
+      ? Boolean(options.stack)
+      : true;
 
   const printAndExit = (err) => {
-    const msg = formatErrorFn(err, { debug: isDebug, env, ...options });
+    const msg = formatErrorFn(err, { debug: isDebug, ...options });
     (io.error || console.error)(msg);
     const code = typeof err?.exitCode === 'number' ? err.exitCode : 1;
     exitFn(code);

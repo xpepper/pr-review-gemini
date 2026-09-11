@@ -151,13 +151,14 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(exitCalled, false);
     });
 
-    it('respects exit: false option to prevent process termination', () => {
+    it('respects exit: false option to prevent process termination and omits exitCode', () => {
       let logged = '';
       const mockIo = { log: (msg) => { logged += msg; } };
 
       const res = handleCommonFlags(['--version'], { io: mockIo, exit: false });
       assert.equal(res.handled, true);
       assert.equal(res.action, 'version');
+      assert.equal(res.exitCode, undefined);
       assert.match(logged, new RegExp(`${PLUGIN_NAME} v${VERSION}`));
     });
   });
@@ -253,8 +254,8 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(res.exitCode, 1);
     });
 
-    it('surfaces stack trace in runIfDirect when CI environment variable or debug option is active', async () => {
-      const dummyFile = path.resolve('scripts/dummy-ci-runner.mjs');
+    it('surfaces stack trace in runIfDirect by default for full developer debuggability', async () => {
+      const dummyFile = path.resolve('scripts/dummy-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
 
       let loggedError = '';
@@ -262,22 +263,21 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       const mockExit = () => {};
 
       const failingMain = () => {
-        throw new Error('Unexpected crash in CI');
+        throw new Error('Unexpected unhandled crash');
       };
 
       await runIfDirect(dummyUrl, failingMain, {
         argv: ['node', dummyFile],
         io: mockIo,
         exit: mockExit,
-        debug: true,
       });
 
-      assert.match(loggedError, /Error: Unexpected crash in CI/);
+      assert.match(loggedError, /Error: Unexpected unhandled crash/);
       assert.match(loggedError, /at /);
     });
 
-    it('respects injected options.env without reading ambient process.env', async () => {
-      const dummyFile = path.resolve('scripts/dummy-env-runner.mjs');
+    it('suppresses stack trace in runIfDirect when debug: false is explicitly requested', async () => {
+      const dummyFile = path.resolve('scripts/dummy-clean-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
 
       let loggedError = '';
@@ -285,28 +285,17 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       const mockExit = () => {};
 
       const failingMain = () => {
-        throw new Error('Crash with injected env');
+        throw new Error('Clean message failure');
       };
 
-      // With env: { DEBUG: '1' }, stack trace should be included
       await runIfDirect(dummyUrl, failingMain, {
         argv: ['node', dummyFile],
         io: mockIo,
         exit: mockExit,
-        env: { DEBUG: '1' },
+        debug: false,
       });
-      assert.match(loggedError, /Error: Crash with injected env/);
-      assert.match(loggedError, /at /);
 
-      // With env: {}, stack trace should NOT be included
-      loggedError = '';
-      await runIfDirect(dummyUrl, failingMain, {
-        argv: ['node', dummyFile],
-        io: mockIo,
-        exit: mockExit,
-        env: {},
-      });
-      assert.equal(loggedError, '❌ Crash with injected env');
+      assert.equal(loggedError, '❌ Clean message failure');
     });
   });
 
