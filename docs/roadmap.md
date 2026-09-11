@@ -145,12 +145,15 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Refactored sibling CLI entrypoints in `scripts/` (`scripts/dogfood-pr.mjs`, `scripts/dogfood-review.mjs`, `scripts/self-review.mjs`, `scripts/ci-action.mjs`, `scripts/bump-version.mjs`) to consume `src/cli.js`.
   - Added 79 unit and integration tests across `tests/cli.test.mjs` and `tests/skills.test.mjs` (541 total passing across 109 suites with 0 failures).
   - Executed dogfood review loop against PR #30, verified 0 blocking defects, and merged into `main` (commit `d92295c`).
-- [ ] **Increment 18: Interactive PR Comment Command Dispatcher (/gem-review) (#31)**
-  - Implement authorized PR comment command dispatching for `/gem-review` and `/gem-pr-review`.
-  - Support arguments (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
-  - Host-gated author authorization check (`author_association` / repo write permissions).
-  - Visual GitHub reaction lifecycles (👀 acknowledged, 🚀 in-progress, 👍 success, 😕 unauthorized/error).
-  - GitHub Actions `issue_comment` trigger and PR head ref checkout.
+- [x] **Increment 18: Interactive PR Comment Command Dispatcher (/gem-review) (#31, PR #32)**
+  - Implemented authorized PR comment command tokenizer and dispatcher in `src/ci.js` for `/gem-review` and `/gem-pr-review` with flags (`--quick`, `--balanced`, `--full`, `--deep`, `--mode=<mode>`, `--incremental`, `--role=<id>`, `--replace-standard-roles`, `--verify`, `--fail-on`, `--action`, `--select`, `--help`), ignoring code blocks.
+  - Host-gated author authorization check (`isAuthorizedCommenter`, `getCommenterAuthorization`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowlists, cleanly denying unauthorized users with exit code 0, a friendly explanation, and 😕 reaction.
+  - Visual GitHub reaction lifecycle management (`addCommentReaction`, `safeReact`): `eyes` (👀) acknowledgment, `rocket` (🚀) in-progress, `+1` (👍) pass, `confused` (😕) denial/error.
+  - Formatted thread replies and CI summaries (`formatUnauthorizedReply`, `formatHelpReply`, `formatCompletionReply`, `formatCiSummary`).
+  - Runner security: eliminated PR checkout pwn risk by keeping runner workspace on base branch and inspecting diffs via API; enforced fail-closed origin checking for forks on `--verify`; restricted verification to canonical built-ins (`test`, `build`, `lint`) with explicit opt-in for custom profiles; validated verification commands against shell injection.
+  - GitHub Actions starter workflow `.github/workflows/gem-pr-review.yml` configured with `issue_comment: [created]` trigger, event-isolated concurrency serialization, and required permissions.
+  - Added unit and integration tests across `tests/ci.test.mjs` and `tests/skills.test.mjs` (608 total tests passing across 118 suites with 0 failures).
+  - Triaged, addressed, replied to, and resolved all 48 inline review threads on PR #32; squash-merged into `main`.
 - [ ] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
   - Project-specific review checklists, architecture invariants, and conventions dynamically ingested by subagents.
 - [ ] **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution**

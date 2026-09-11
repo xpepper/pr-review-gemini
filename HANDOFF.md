@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/pr-comment-commands`
-* **Active PR**: [#32: feat(ci): interactive PR comment command dispatcher (/gem-review) (#31)](https://github.com/xpepper/pr-review-gemini/pull/32)
-* **Test Suite**: `npm test` runs and passes (603 tests across 117 suites, 0 failures)
+* **Current Branch**: `main` (clean, up to date with `origin/main`)
+* **Active PR**: None (PR #32 merged into `main`, commit `7f3af22`)
+* **Test Suite**: `npm test` runs and passes (608 tests across 118 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -30,23 +30,30 @@
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
-  - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (In review, head commit `8d53b8c`)
+  - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (Merged, commit `7f3af22`)
 
 ---
 
-## Status: INCREMENT_18_REVIEW_TRIAGE (Issue #31, PR #32)
+## Status: READY_FOR_INCREMENT_19 — Repository Review Guidelines & Project Memory
 
-Increment 18 is fully implemented, verified test-first (603 passing tests across 117 suites, manifest version check green), dogfood-reviewed across multiple passes on GitHub PR #32.
+Increment 18 was fully delivered, triaged, and squash-merged into `main`:
+- All 48 inline review threads on PR #32 were addressed, replied to, and resolved via GitHub GraphQL.
+- Final PR summary comment was posted to PR #32.
+- PR #32 squash-merged into `main` and branch deleted.
+- Full test suite verified green (`npm test` 608 tests, 118 suites pass).
+- Version checks verified synchronized at `0.1.0` across all 4 manifests.
 
-### Direct Action Item for the Incoming Agent:
-**Run a full `/pr-review-loop` triage on the open review comments on PR #32**:
-1. Run `gh pr status` and fetch open review threads via GraphQL.
-2. For each open inline review thread:
-   - Many of the earlier comments have already been fixed in commits `73278d1`, `75f19bf`, `d9763f0`, and `8d53b8c` (e.g., custom profile opt-in gating, eliminating duplicate metadata fetches, failing closed on missing head SHA, aligning `formatCiSummary` banner with verification results, fixing indentation).
-   - If already addressed: reply with the commit SHA and explanation, and call `resolveReviewThread`.
-   - If any finding requires code adjustment: write a test first, make the smallest passing change, verify green (`npm test`), commit with conventional message, reply, and resolve the thread.
-3. Run the full verification suite (`npm test`, `npm run version:check`).
-4. Once all review threads are resolved and clean, merge PR #32 into `main` (`gh pr merge 32 --squash --delete-branch`), pull `main`, and advance the roadmap to Increment 19.
+### Direct Action Item for the Incoming Agent (Increment 19):
+**Design and implement Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**:
+1. Create a feature branch `feat/review-guidelines`.
+2. Implement guidelines discovery and loader (`src/config.js`, `src/reviewer.js`):
+   - Check `.github/gem-pr-review.md`, `.github/review-instructions.md`, or configured guidelines file.
+   - Parse sections (architecture invariants, conventions, checklists, forbidden patterns).
+   - Inject repository guidelines dynamically into subagent system/user prompts.
+3. Add memory persistence / project guidelines configuration options to `~/.copilot/gem-pr-review.json` and `.github/gem-pr-review.json`.
+4. Write tests first in `tests/config.test.mjs`, `tests/reviewer.test.mjs`, and `tests/skills.test.mjs`.
+5. Verify green (`npm test`, `npm run version:check`).
+6. Open PR, conduct automated dogfood review, and merge.
 
 ---
 

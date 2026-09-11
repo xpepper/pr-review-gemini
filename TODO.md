@@ -6,19 +6,16 @@
 
 ---
 
-## Active Mission: Increment 18 (Issue #31, PR #32) — Review Triage & Merge
-- [x] Implement comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`)
-- [x] Implement author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions
-- [x] Implement GitHub reaction lifecycle management (`eyes` 👀 on start, `rocket` 🚀 while running, `+1` 👍 on success, `confused` 😕 on unauthorized/error)
-- [x] Update `scripts/ci-action.mjs` to support `issue_comment` payloads, extracting PR number, head SHA, and executing target review
-- [x] Update `.github/workflows/gem-pr-review.yml` with `issue_comment: types: [created]` trigger, base branch checkout, and concurrency serialization
-- [x] Add unit tests in `tests/ci.test.mjs` covering command extraction, authorization gates, and reactions (603 tests passing across 117 suites)
-- [x] Open Pull Request #32 on GitHub (`feat/pr-comment-commands`) and run automated multi-lens dogfood reviews
-- [ ] Run `/pr-review-loop` triage on all open reviewer comments on PR #32 (verify against commits `73278d1`, `75f19bf`, `d9763f0`, `8d53b8c`, resolve threads)
-- [ ] Merge PR #32 into `main` and set up Increment 19
+## Active Mission: Increment 19 — Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)
+- [ ] Research & design repository review guidelines ingestion (`.github/gem-pr-review.md`, `.github/review-instructions.md`, or configured guideline paths)
+- [ ] Implement guidelines loader in `src/config.js` and `src/reviewer.js` to dynamically parse and inject repo guidelines into subagent prompts
+- [ ] Support guideline priority levels: architectural rules, codebase invariants, banned patterns, and domain-specific checklists
+- [ ] Add project memory persistence across reviews: record recurrent patterns and review preferences
+- [ ] Expose configuration options in `~/.copilot/gem-pr-review.json` and `.github/gem-pr-review.json`
+- [ ] Add unit and integration tests verifying guideline parsing, subagent prompt injection, and cache behavior
+- [ ] Open Pull Request on GitHub and run automated multi-lens dogfood reviews
 
-### Future Capabilities (Post-Increment 18 Roadmap)
-- [ ] Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)
+### Future Capabilities (Post-Increment 19 Roadmap)
 - [ ] Increment 20: PR Review Thread Conversation Replies & Automated Resolution
 - [ ] Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
@@ -26,6 +23,17 @@
 ---
 
 ## Completed Increments
+- [x] **Increment 18 / Issue #31: Interactive PR Comment Command Dispatcher (/gem-review) (PR #32)**
+  - [x] Implemented comment command parser in `src/ci.js` (`parseCommentCommand`) extracting commands (`/gem-review`, `/gem-pr-review`) and flags (`--quick`, `--incremental`, `--role=<id>`, `--verify`, `--help`).
+  - [x] Implemented author authorization gating in `src/ci.js` (`isAuthorizedCommenter`) checking `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or repo write permissions.
+  - [x] Implemented GitHub reaction lifecycle management (`eyes` 👀 on start, `rocket` 🚀 while running, `+1` 👍 on success, `confused` 😕 on unauthorized/error).
+  - [x] Updated `scripts/ci-action.mjs` to support `issue_comment` payloads, extracting PR number, head SHA, and executing target review.
+  - [x] Updated `.github/workflows/gem-pr-review.yml` with `issue_comment: types: [created]` trigger, base branch checkout, and concurrency serialization isolated by `github.event_name`.
+  - [x] Enforced detached verification boundary: restricted to same-repo only (forks fail closed), canonical profiles only (custom profiles require opt-in), and validation against shell injection.
+  - [x] Added `verification_status` step output to `action.yml` and `writeGitHubStepOutputs`.
+  - [x] Consolidated PR detection into `resolvePrContext(payload)` helper in `src/ci.js`.
+  - [x] Added unit tests in `tests/ci.test.mjs` (608 tests passing across 118 suites).
+  - [x] Addressed, replied to, and resolved all 48 inline review threads on PR #32; squash-merged into `main`.
 - [x] **Increment 17 / Issue #29: Centralize CLI Entrypoint Infrastructure and Eliminate Sibling Boilerplate Duplication**
   - [x] Implemented centralized CLI helper module (`src/cli.js`):
     - `runIfDirect(importMetaUrl, mainFn)`: Standardized, safe direct execution wrapper handling top-level unhandled rejections, formatted errors, and proper exit codes (`process.exit(1)`).
