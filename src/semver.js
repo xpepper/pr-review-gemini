@@ -252,7 +252,7 @@ export function generateChangelog({
   const formatItem = (c) => {
     const scopePrefix = c.scope ? `**${c.scope}:** ` : '';
     const desc = c.description || c.subject;
-    const prPart = c.prNumber ? ` ([#${c.prNumber}](pull/${c.prNumber}))` : '';
+    const prPart = c.prNumber ? ` (#${c.prNumber})` : '';
     const hashPart = c.shortHash ? ` (\`${c.shortHash}\`)` : '';
     let entry = `- ${scopePrefix}${desc}${prPart}${hashPart}`;
     if (c.breakingDescription) {

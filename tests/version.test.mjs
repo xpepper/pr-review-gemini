@@ -297,7 +297,8 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.match(changelog, /### 🚀 Features/);
       assert.match(changelog, /### 🐛 Bug Fixes/);
       assert.match(changelog, /### 📝 Documentation/);
-      assert.match(changelog, /support custom reviewer roles/);
+      assert.match(changelog, /support custom reviewer roles \(#24\)/);
+      assert.ok(!changelog.includes('pull/24'));
       assert.match(changelog, /normalize double-escaped newlines/);
     });
 
