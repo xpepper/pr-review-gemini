@@ -227,7 +227,9 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
 
   const io = options.io || console;
   const exitFn =
-    typeof options.exit === 'function'
+    options.exit === false
+      ? null
+      : typeof options.exit === 'function'
       ? options.exit
       : (code) => process.exit(code);
   const formatErrorFn = options.formatError || formatCliError;
@@ -241,7 +243,9 @@ export function runIfDirect(importMetaUrl, mainFn, options = {}) {
       typeof err?.exitCode === 'number' && err.exitCode > 0
         ? err.exitCode
         : 1;
-    exitFn(code);
+    if (exitFn) {
+      exitFn(code);
+    }
     return { error: err, exitCode: code };
   };
 

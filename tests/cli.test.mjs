@@ -373,6 +373,27 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(res.exitCode, 1);
     });
 
+    it('suppresses exit when options.exit is false in runIfDirect', async () => {
+      const dummyFile = path.resolve('scripts/direct-test.mjs');
+      const dummyUrl = pathToFileURL(dummyFile).href;
+      let loggedError = '';
+
+      const res = await runIfDirect(
+        dummyUrl,
+        () => {
+          throw new Error('Failure with suppressed exit');
+        },
+        {
+          argv: ['node', dummyFile],
+          io: { error: (msg) => { loggedError += msg; } },
+          exit: false,
+        }
+      );
+
+      assert.match(loggedError, /Failure with suppressed exit/);
+      assert.equal(res.exitCode, 1);
+    });
+
     it('formats clean error message by default without exposing stack trace', async () => {
       const dummyFile = path.resolve('scripts/dummy-runner.mjs');
       const dummyUrl = pathToFileURL(dummyFile).href;
