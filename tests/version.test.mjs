@@ -628,5 +628,64 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    it('fetches git commits once when bumping with explicit target or auto', async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'temp-bump-once-'));
+      try {
+        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'plugin.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.writeFileSync(path.join(tempDir, 'mcp.json'), JSON.stringify({ version: '0.1.0' }, null, 2));
+        fs.mkdirSync(path.join(tempDir, 'skills', 'gem-pr-review'), { recursive: true });
+        fs.writeFileSync(
+          path.join(tempDir, 'skills', 'gem-pr-review', 'SKILL.md'),
+          '---\nname: gem-pr-review\nmetadata:\n  version: "0.1.0"\n---\n# Skill'
+        );
+
+        let gitLogCalls = 0;
+        const mockExec = async (cmd, args) => {
+          if (cmd === 'git' && args[0] === 'log') {
+            gitLogCalls++;
+            return { stdout: `def5678\x1ffix: resolve bug\x1f\x1e` };
+          }
+          return { stdout: '', stderr: '' };
+        };
+
+        const result = await runBump(
+          {
+            target: 'patch',
+            dryRun: true,
+            rootDir: tempDir,
+            execFileFn: mockExec,
+          },
+          { log: () => {}, warn: () => {}, error: () => {} }
+        );
+
+        assert.equal(result.success, true);
+        assert.equal(result.newVersion, '0.1.1');
+        assert.equal(gitLogCalls, 1, 'git log should be called exactly once');
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it('returns error without calling git when target is invalid', async () => {
+      let gitCalls = 0;
+      const mockExec = async () => {
+        gitCalls++;
+        return { stdout: '', stderr: '' };
+      };
+
+      const result = await runBump(
+        {
+          target: 'invalid-target-value',
+          execFileFn: mockExec,
+        },
+        { log: () => {}, warn: () => {}, error: () => {} }
+      );
+
+      assert.equal(result.success, false);
+      assert.equal(result.exitCode, 1);
+      assert.equal(gitCalls, 0, 'git should not be called on invalid target');
+    });
   });
 });

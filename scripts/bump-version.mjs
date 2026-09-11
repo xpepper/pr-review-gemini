@@ -168,14 +168,20 @@ export async function runBump(options = {}, io = console) {
   let target = options.target || 'auto';
   let bumpType = target;
   let newVersion = null;
-  let commits = [];
-  let latestTag = null;
+
+  const isNamedBump = ['major', 'minor', 'patch'].includes(target.toLowerCase());
+  const isValidTarget = target === 'notes' || target === 'auto' || isNamedBump || isValidSemVer(target);
+  if (!isValidTarget) {
+    io.error(`❌ Invalid target version or bump type: "${target}".`);
+    return { success: false, exitCode: 1, error: 'Invalid target' };
+  }
+
+  // Fetch git commits once since latest tag for all target types
+  const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
+  const commits = gitInfo.commits;
+  const latestTag = gitInfo.latestTag;
 
   if (target === 'notes') {
-    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
-    commits = gitInfo.commits;
-    latestTag = gitInfo.latestTag;
-
     const changelogText = generateChangelog({
       version: currentVersion,
       previousVersion: latestTag || '0.1.0',
@@ -201,10 +207,6 @@ export async function runBump(options = {}, io = console) {
   }
 
   if (target === 'auto') {
-    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
-    commits = gitInfo.commits;
-    latestTag = gitInfo.latestTag;
-
     const evalResult = determineSemverBump(commits);
     if (!evalResult.bump) {
       io.log(`ℹ️ No conventional commits found since tag ${latestTag || 'beginning'}. Version remains ${currentVersion}.`);
@@ -221,25 +223,16 @@ export async function runBump(options = {}, io = console) {
     newVersion = calculateNextVersion(currentVersion, bumpType);
     io.log(`🔍 Analyzed ${commits.length} commit(s) since ${latestTag || 'initial commit'}:`);
     io.log(`   - Determined bump: ${bumpType.toUpperCase()} (${evalResult.reason})`);
-  } else if (['major', 'minor', 'patch'].includes(target.toLowerCase())) {
+  } else if (isNamedBump) {
     bumpType = target.toLowerCase();
     newVersion = calculateNextVersion(currentVersion, bumpType);
-  } else if (isValidSemVer(target)) {
-    newVersion = target.trim();
   } else {
-    io.error(`❌ Invalid target version or bump type: "${target}".`);
-    return { success: false, exitCode: 1, error: 'Invalid target' };
+    newVersion = target.trim();
   }
 
   io.log(`🚀 Bumping version: ${currentVersion} -> ${newVersion} (${options.dryRun ? 'DRY-RUN' : 'APPLYING'})`);
 
   // 4. Generate changelog
-  if (commits.length === 0) {
-    const gitInfo = await getGitCommitsSinceTag({ cwd: rootDir, execGitFn });
-    commits = gitInfo.commits;
-    latestTag = gitInfo.latestTag;
-  }
-
   const changelogText = generateChangelog({
     version: newVersion,
     previousVersion: currentVersion,
