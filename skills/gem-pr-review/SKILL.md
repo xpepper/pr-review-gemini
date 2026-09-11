@@ -36,40 +36,37 @@ Reviewers can trigger different modes based on PR complexity and speed requireme
 
 ## Specialist Review Lenses
 
-Each specialist lens inspects the unified diff through an independent, focused perspective:
+Each specialist lens inspects the unified diff through an independent, focused perspective calibrated for universal, language-agnostic software engineering risks:
 
 ### 1. Correctness & Concurrency (`correctness`)
-- Logical flaws, calculation errors, inverted conditions, and off-by-one bounds.
-- Race conditions, concurrent access without synchronization, deadlocks, and stale state.
-- Unhandled error cases, null or undefined dereferences, and uncaught exceptions.
-- Async lifecycle violations: unawaited promises, hanging timeouts, unhandled rejections.
+- **Where the argument breaks down**: Trace execution paths through edge cases, boundary conditions, and failure/exception escapes rather than trusting the happy path. Verify whether unhandled exceptions, promise rejections, or errors escape into unhandled execution contexts.
+- **Precondition & Landing Surface Invariants**: Inspect assumptions about external state, file paths, git refs, environment variables, or resources before code executes. Verify whether activation triggers (CI workflows, dispatch inputs, flags, schedulers) assume pre-existing environment state without verification.
+- **Concurrency & Async Lifecycle**: Uncoordinated concurrent mutations, race conditions, missing awaits, unhandled promise rejections, thread/process lifecycle leaks, deadlocks, or state corruption.
+- **Calculation & Logic**: Faulty calculations, incorrect boolean conditions, off-by-one errors, and unhandled null/undefined values.
 
 ### 2. Contracts & Data (`contracts`)
-- API surface alterations, signature changes, and backwards compatibility.
-- Schema mutations, serialisation/deserialisation risks, and missing field migrations.
-- Typing consistency, interface violations, and loose invariants.
+- **Explicit Parameterization vs. Ambient State Coupling**: Flag reusable library functions, modules, or components that read implicit global, ambient process (e.g. `process.argv`, `process.cwd()`, `process.env`), or environment state instead of receiving explicit parameters via configuration, options, or dependency injection.
+- **Interface Stability & Compatibility**: Breaking API or signature changes, schema drift, missing field defaults, or invalid assumptions about external payloads.
+- **Data Exposure**: Surfacing existing internal data to a new external audience or output (logs, error payloads, responses) is an exposure, not a refactor. Verify invariant boundaries across component interfaces.
 
 ### 3. Security & Trust Boundaries (`security`)
-- Injection vectors (SQL, command, HTML/XSS, template injection).
-- Authentication and authorisation bypasses, missing privilege checks.
-- Sensitive data exposure in logs, error traces, or client-facing responses.
-- Insecure deserialisation, untrusted input handling, and supply-chain / dependency risks.
+- **Trust Boundary Crossings**: Injection sinks (SQL, shell, command execution, template injection, XSS), path traversal (user input resolving to filesystem or storage keys), and unsafe deserialization.
+- **Landing Surface Authorization**: Verify that new or modified endpoints, actions, or workflows enforce proper access controls and cannot be invoked unauthenticated or with unintended elevated privileges.
+- **Secret Exposure**: Hardcoded tokens, API keys, credentials, private keys, or sensitive internal data leaking into logs, responses, or error payloads.
 
 ### 4. Performance & Resources (`performance`)
-- Algorithmic complexity regressions (e.g. $O(N^2)$ loops where $O(N)$ is required).
-- N+1 database queries, unbatched I/O calls, or redundant network roundtrips.
-- Memory retention, event listener leaks, unclosed streams, file handles, or connections.
-- Unnecessary large object allocations in hot loops.
+- **Redundant Work & Side-Effect Duplication**: Duplicate or repeated subprocess invocations, file I/O operations, database queries (N+1), or network refetches when the result is already computed or can be computed once up-front.
+- **Algorithmic Complexity Traps**: $O(N^2)$ loops over unbounded inputs, unindexed lookups, redundant re-traversals, and unnecessary large object allocations inside hot code paths.
+- **Resource Lifecycles & Leaks**: Unclosed streams or handles, unreleased locks, persistent event listener accumulation, and memory retention.
 
 ### 5. Conventions & Maintainability (`conventions`)
-- Architectural cohesion, project pattern adherence, and separation of concerns.
-- Clear naming, self-documenting code, and avoidance of cryptic abstractions.
-- Dead code, dangling commented lines, and duplicate logic.
+- **Dead Code & Phantom Logic**: Dead variable initializations, unreachable branches, shadowed variables, and redundant conditional assignments that are immediately overwritten or never take effect.
+- **Duplication & Single Source of Truth**: Copy-pasting boilerplate logic (e.g. flag parsing, banner printing, error formatting) across multiple sibling entrypoints or CLI commands rather than centralizing in a shared abstraction (DRY).
+- **Architectural Cohesion**: Clean separation of concerns, clear abstraction boundaries, and domain-appropriate naming clarity.
 
 ### 6. Test Quality & Verification (`tests`)
-- Missing test coverage for newly introduced branches, edge cases, or failure modes.
-- Brittle assertions, non-deterministic timing / flaky assertions.
-- Test ergonomics, mocking fidelity, and alignment with production behaviour.
+- **Evidence Before Completion**: Verify whether newly introduced behaviors, failure paths, and edge cases are backed by passing automated tests.
+- **Test Integrity**: Flaky assertions, non-deterministic timing, unrealistic mocking boundaries, or tests asserting implementation details instead of observable behavior.
 
 ---
 
@@ -346,9 +343,9 @@ Pull requests with extensive changes can exceed LLM context windows or degrade r
 
 ---
 
-## Automatic Fallback Model Retry on Quota/Capacity Errors (Zero Timeouts)
+## Automatic Fallback Model Retry & Model Catalog Resilience (Zero Timeouts)
 
-`gem-pr-review` provides automated failover resilience against API rate limits and model capacity constraints:
+`gem-pr-review` provides automated failover resilience against API rate limits, model capacity constraints, and local host model catalog unavailability:
 
 ### 1. Quota & Capacity Error Classification
 When executing review passes across specialist subagents, errors are classified in real time:
@@ -356,8 +353,10 @@ When executing review passes across specialist subagents, errors are classified 
 - **Capacity & Quota Exhaustion**: `RESOURCE_EXHAUSTED`, `INSUFFICIENT_QUOTA`, server capacity limits, model overload errors.
 - **Fail-Fast on Bugs**: Unrelated errors (syntax errors, type errors, invalid credentials) fail immediately without retrying to preserve debugging clarity.
 
-### 2. Automatic Failover Retry
-- When a specialist lens fails due to quota or capacity limits, the orchestrator automatically retries that lens against the next model configured in the fallback tier (e.g. `heavy_fallbacks`, `medium_fallbacks`, or per-lens fallbacks).
+### 2. Model Catalog & Auto Fallback Resilience
+- **Model Unavailability Detection (`isModelUnavailableError`)**: Detects when configured models are not available, unsupported, unentitled, or not found in the local environment catalog (e.g. `claude-3.5-haiku` or `gpt-4o` unavailable in the user's host Copilot subscription).
+- **Automatic Fallback to `auto`**: When configured primary and fallback models fail due to model unavailability (or quota exhaustion when enabled), the orchestrator automatically retries with model `'auto'`.
+- **Configurable `fallback_to_auto`**: Controlled via configuration (`fallback_to_auto: true`, default `true`).
 - **Zero Loss of Sibling Passes**: Completed passes by sibling subagents running in parallel are fully preserved and never dropped or re-evaluated.
 
 ### 3. Zero Timeouts
@@ -582,6 +581,33 @@ The GitHub Actions workflow at [`.github/workflows/release.yml`](.github/workflo
 2. Runs the full test suite (`npm test`).
 3. Generates release changelog notes from conventional commits.
 4. Publishes an official GitHub Release via `gh release create`.
+
+---
+
+## Streamlined Dogfood PR Review Helper (`npm run dogfood:pr`)
+
+To make real multi-lens dogfood reviews quick and frictionless before merging pull requests, `gem-pr-review` provides a dedicated runner script and npm shortcut:
+
+```bash
+# Review a PR using automatic model resolution (--model auto)
+npm run dogfood:pr <PR_NUMBER>
+
+# Fast triage on a PR
+npm run dogfood:pr <PR_NUMBER> --quick
+
+# Interactive finding triage before publishing to GitHub
+npm run dogfood:pr <PR_NUMBER> --publish --interactive
+
+# Direct CLI invocation
+node scripts/dogfood-pr.mjs <PR_NUMBER> [options]
+```
+
+### Key Capabilities:
+- **Default `--model auto`**: Automatically resolves the host environment's default active model without requiring manual catalog inspection or configuration flags.
+- **Hunk Anchoring & Safety Gates**: Verifies git diff hunk commentability before publishing, ensuring no comments fail or get dropped.
+- **Actionable Findings Table**: Formats detected candidate findings into a clear triage table showing index, severity, confidence, diff location, and description.
+- **Interactive Triage**: Pair with `--publish --interactive` to pick, exclude, or filter findings before submitting host-gated GitHub reviews.
+
 
 
 

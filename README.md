@@ -12,7 +12,13 @@ Evaluates pull requests across specialized lenses (correctness, contracts, secur
 - **Node.js**: `>= 20.0.0`
 - **GitHub CLI (`gh`)**: Authenticated (`gh auth status`)
 
-### 1. Run via CLI (Dry-Run)
+### 1. Run via Streamlined Dogfood Command
+Review any open pull request with automatic model resolution (`--model auto`):
+```bash
+npm run dogfood:pr <PR_NUMBER>
+```
+
+### 2. Run via CLI (Dry-Run)
 Inspect review findings on any pull request without publishing comments to GitHub:
 ```bash
 node scripts/dogfood-review.mjs <PR_NUMBER> --dry-run
@@ -23,7 +29,7 @@ To test the review pipeline instantly without model inference or API keys, use `
 node scripts/dogfood-review.mjs <PR_NUMBER> --mock --dry-run
 ```
 
-### 2. Run via GitHub Copilot CLI (Agent Skill)
+### 3. Run via GitHub Copilot CLI (Agent Skill)
 Install the plugin directly from GitHub into Copilot CLI:
 ```bash
 copilot plugin install xpepper/pr-review-gemini
@@ -37,13 +43,13 @@ copilot
 ```
 
 
-### 3. Run via MCP Inspector (Web UI)
+### 4. Run via MCP Inspector (Web UI)
 Launch the interactive Model Context Protocol inspector to test all tools visually:
 ```bash
 npx @modelcontextprotocol/inspector node server/index.js
 ```
 
-### 4. Run via GitHub Actions (Automated CI Review)
+### 5. Run via GitHub Actions (Automated CI Review)
 Automate multi-lens AI code review on every pull request using the official GitHub Action:
 ```yaml
 - name: AI PR Code Review
@@ -122,16 +128,16 @@ node scripts/dogfood-review.mjs 42 --publish --interactive
 
 ## Review Modes & Specialist Lenses
 
-Each review mode selects a curated set of independent specialist lenses:
+Each review mode selects a curated set of independent specialist lenses calibrated for language-agnostic software engineering risks:
 
-| Specialist Lens | Focus Area | `quick` | `balanced` | `full` | `deep` |
+| Specialist Lens | Calibrated Focus Area | `quick` | `balanced` | `full` | `deep` |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Correctness & Concurrency** | Logic errors, race conditions, async lifecycles, null pointers | ✅ | ✅ | ✅ | ✅ *(High Reasoning)* |
-| **Contracts & Data** | API compatibility, schema changes, serialization, typing | | ✅ | ✅ | |
-| **Security & Trust** | Injection flaws, auth bypasses, data exposure, tainted inputs | ✅ | ✅ | ✅ | |
-| **Performance & Resources** | Complexity regressions, N+1 queries, leaks, unbatched I/O | | ✅ | ✅ | |
-| **Conventions & Maintainability** | Project idioms, readability, naming, architectural layering | ✅ | ✅ | ✅ | |
-| **Test Quality & Coverage** | Edge cases, missing regression tests, brittle assertions | | | ✅ | |
+| **Correctness & Concurrency** | Where the argument breaks down, edge cases, unhandled error escapes, precondition & landing surface invariants, race conditions | ✅ | ✅ | ✅ | ✅ *(High Reasoning)* |
+| **Contracts & Data** | Explicit parameterization vs. ambient process coupling (`process.argv`), API stability, schema drift, data exposure boundaries | | ✅ | ✅ | |
+| **Security & Trust** | Trust boundary crossings (SQL, shell, template injection, XSS, path traversal), landing surface authorization, secret leaks | ✅ | ✅ | ✅ | |
+| **Performance & Resources** | Redundant work & side-effect duplication (repeated subprocess/git log refetches, duplicate I/O), $O(N^2)$ traps, resource lifecycles | | ✅ | ✅ | |
+| **Conventions & Maintainability** | Dead code & phantom variable assignments, copy-paste duplication across sibling CLI entrypoints (DRY), architectural cohesion | ✅ | ✅ | ✅ | |
+| **Test Quality & Coverage** | Evidence before completion (automated verification for new behaviors and edge cases), test integrity, brittle/flaky mocks | | | ✅ | |
 
 ---
 
@@ -188,6 +194,18 @@ Prevents loss of high-signal review findings when LLMs produce truncated or synt
 - **Individual Candidate Object Scanner**: Scans balanced `{ ... }` candidate objects and recovers individual findings even when outer structures are corrupt or mixed with free-form text.
 - **Contract Normalization**: Normalizes severities (`P0`–`nit` as well as descriptive labels), line numbers, file paths, and confidence scores across PR reviews, cached reviews, and local self-reviews.
 
+### 9. Reviewer Sensitivity & Quality Calibration
+Calibrates specialist review lenses against language-agnostic software engineering risks to catch subtle design, lifecycle, and operational defects:
+- **Universal Design Dimensions**: Detects ambient state coupling (`process.argv` vs explicit options), redundant work and subprocess refetches, dead variable assignments and phantom logic, landing surface invariants and preconditions, and copy-paste boilerplate across sibling entrypoints (DRY).
+- **Evidence Before Completion**: Holds test coverage lenses to strict verification standards, flagging unverified behavioral paths, brittle mocks, and tests asserting implementation details instead of observable behavior.
+- **Calibration Benchmark Suite**: Includes an automated benchmark evaluation suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking sensitivity, defect recall, and precision against real pull request defect patterns.
+
+### 10. Streamlined Dogfood CLI & Model Catalog Resilience
+Enables rapid, zero-friction dogfood reviews before merging pull requests with automatic failover:
+- **Streamlined Runner (`npm run dogfood:pr`)**: Reviews any PR with automatic model resolution (`--model auto`), diff hunk anchoring verification, and interactive triage.
+- **Model Catalog Resilience (`isModelUnavailableError`)**: Detects when configured primary or fallback models are unsupported, unentitled, or unavailable in the local host environment.
+- **Automatic Fallback to `auto`**: Seamlessly falls back to model `'auto'` (`fallback_to_auto: true`, enabled by default) when configured models are unavailable, guaranteeing review completion without manual intervention.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -235,6 +253,7 @@ Configuration is optional and works out of the box with sensible defaults. You c
 
 ```json
 {
+  "fallback_to_auto": true,
   "tiers": {
     "light": "gpt-4o-mini",
     "medium": "claude-3.5-sonnet",
@@ -287,6 +306,7 @@ Configuration is optional and works out of the box with sensible defaults. You c
 
 ### Configuration Options & Precedence
 
+- **`fallback_to_auto`**: When set to `true` (default: `true`), automatically falls back to model `'auto'` if configured primary or fallback models are not found, unentitled, or unavailable in the host environment.
 - **`custom_roles`** *(or `roles`)*: Pluggable domain-specific review roles. Each entry specifies a domain `prompt`, optional `name`, preferred `model`, `reasoningEffort`, `tier`, and fallback chain. Mounted alongside standard lenses by default.
 - **`replace_standard_roles`**: When set to `true`, disables built-in standard lenses and runs only custom or explicitly specified roles.
 - **`enabled_roles`**: Array of role IDs to execute (e.g. `["accessibility", "security"]`), filtering out unlisted roles.

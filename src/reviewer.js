@@ -29,6 +29,8 @@ import {
   DEFAULT_LENS_TIERS,
   isQuotaOrCapacityError,
   isQuotaError,
+  isModelUnavailableError,
+  isRetriableModelError,
 } from './subagents.js';
 import {
   fetchPriorReviews,
@@ -72,6 +74,11 @@ import {
   isValidSemVer,
   parseSemVer,
 } from './version.js';
+import {
+  CALIBRATION_BENCHMARKS,
+  evaluateCalibrationFinding,
+  evaluateCalibrationSuite,
+} from './calibration.js';
 
 export {
   resolveLensPlan,
@@ -95,6 +102,8 @@ export {
   promptFindingSelection,
   isQuotaOrCapacityError,
   isQuotaError,
+  isModelUnavailableError,
+  isRetriableModelError,
   runSelfReview,
   evaluateSelfReviewVerdict,
   formatSelfReviewSummary,
@@ -118,6 +127,9 @@ export {
   PLUGIN_NAME,
   isValidSemVer,
   parseSemVer,
+  CALIBRATION_BENCHMARKS,
+  evaluateCalibrationFinding,
+  evaluateCalibrationSuite,
 };
 
 export const REVIEW_MODES = {
@@ -154,11 +166,11 @@ export const LENS_DEFINITIONS = {
     name: 'Correctness & Concurrency',
     description: 'Logic flaws, calculation bugs, off-by-one errors, race conditions, deadlocks, and async lifecycle issues.',
     instructions: `You are an expert software engineer reviewing code specifically for Correctness & Concurrency.
-Inspect the unified diff carefully for:
-- Logical defects, faulty calculations, incorrect conditional checks, off-by-one errors.
-- Unhandled null/undefined values or missing error boundaries.
-- Async issues: unhandled promise rejections, missing awaits, uncoordinated concurrent mutations.
-- State corruption, deadlocks, or race conditions.`,
+Review to find where the argument breaks down. Inspect the unified diff carefully for:
+- Where the argument breaks down: Trace execution paths through edge cases, boundary conditions, and failure/exception escapes rather than trusting the happy path. Verify whether unhandled exceptions, promise rejections, or errors escape into unhandled execution contexts.
+- Precondition & Landing Surface Invariants: Inspect assumptions about external state, file paths, git refs, environment variables, or resources before code executes. Verify whether activation triggers (CI workflows, dispatch inputs, flags, schedulers) assume pre-existing environment state without verification.
+- Concurrency & Async Lifecycle: Uncoordinated concurrent mutations, race conditions, missing awaits, unhandled promise rejections, thread/process lifecycle leaks, deadlocks, or state corruption.
+- Calculation & Logic: Faulty calculations, incorrect boolean conditions, off-by-one errors, and unhandled null/undefined values.`,
   },
   contracts: {
     id: 'contracts',
@@ -166,10 +178,9 @@ Inspect the unified diff carefully for:
     description: 'API surface, backwards compatibility, typing, schema mutations, and data invariants.',
     instructions: `You are an expert software engineer reviewing code specifically for Contracts & Data invariants.
 Inspect the unified diff carefully for:
-- Breaking API or signature changes.
-- Inconsistent data typing or serialization schema mismatches.
-- Missing field defaults or invalid assumptions about external payloads.
-- Invariant violations across component boundaries.`,
+- Explicit Parameterization vs. Ambient State Coupling: Flag reusable library functions, modules, or components that read implicit global, ambient process (e.g. process.argv, process.cwd(), process.env), or environment state instead of receiving explicit parameters via configuration, options, or dependency injection.
+- Interface Stability & Compatibility: Breaking API or signature changes, schema drift, missing field defaults, or invalid assumptions about external payloads.
+- Data Exposure: Surfacing existing internal data to a new external audience or output (logs, error payloads, responses) is an exposure, not a refactor. Verify invariant boundaries across component interfaces.`,
   },
   security: {
     id: 'security',
@@ -177,10 +188,9 @@ Inspect the unified diff carefully for:
     description: 'Injection vulnerabilities, auth bypass, sensitive data leaks, and untrusted inputs.',
     instructions: `You are an expert security engineer reviewing code specifically for Security & Trust Boundaries.
 Inspect the unified diff carefully for:
-- Injection attacks (SQL, shell, command, XSS, template injection).
-- Authentication and authorization bypasses or weak access controls.
-- Exposure of secrets, API keys, tokens, or PII in logs or responses.
-- Insecure deserialization or processing of untrusted input.`,
+- Trust Boundary Crossings: Injection sinks (SQL, shell, command execution, template injection, XSS), path traversal (user input resolving to filesystem or storage keys), and unsafe deserialization.
+- Landing Surface Authorization: Verify that new or modified endpoints, actions, or workflows enforce proper access controls and cannot be invoked unauthenticated or with unintended elevated privileges.
+- Secret Exposure: Hardcoded tokens, API keys, credentials, private keys, or sensitive internal data leaking into logs, responses, or error payloads.`,
   },
   performance: {
     id: 'performance',
@@ -188,10 +198,9 @@ Inspect the unified diff carefully for:
     description: 'Algorithmic complexity regressions, N+1 queries, memory leaks, and resource management.',
     instructions: `You are an expert performance engineer reviewing code specifically for Performance & Resources.
 Inspect the unified diff carefully for:
-- Algorithmic complexity regressions (e.g. O(N^2) loops where O(N) or O(log N) is expected).
-- N+1 database queries or unbatched I/O operations.
-- Resource leaks: unclosed streams, unreleased handles, persistent event listeners.
-- Unnecessary large object allocations inside hot code paths.`,
+- Redundant Work & Side-Effect Duplication: Duplicate or repeated subprocess invocations, file I/O operations, database queries (N+1), or network refetches when the result is already computed or can be computed once up-front.
+- Algorithmic Complexity Traps: O(N^2) loops over unbounded inputs, unindexed lookups, redundant re-traversals, and unnecessary large object allocations inside hot code paths.
+- Resource Lifecycles & Leaks: Unclosed streams or handles, unreleased locks, persistent event listener accumulation, and memory retention.`,
   },
   conventions: {
     id: 'conventions',
@@ -199,10 +208,9 @@ Inspect the unified diff carefully for:
     description: 'Architectural cohesion, readability, naming clarity, and codebase standards.',
     instructions: `You are an expert software craftsman reviewing code specifically for Conventions & Maintainability.
 Inspect the unified diff carefully for:
-- Architectural cohesion and clean separation of concerns.
-- Obscure naming or overly convoluted abstractions.
-- Dead code, dangling commented-out blocks, or copy-paste duplication.
-- Project-level convention violations.`,
+- Dead Code & Phantom Logic: Dead variable initializations, unreachable branches, shadowed variables, and redundant conditional assignments that are immediately overwritten or never take effect.
+- Duplication & Single Source of Truth: Copy-pasting boilerplate logic (e.g. flag parsing, banner printing, error formatting) across multiple sibling entrypoints or CLI commands rather than centralizing in a shared abstraction (DRY).
+- Architectural Cohesion: Clean separation of concerns, clear abstraction boundaries, and domain-appropriate naming clarity.`,
   },
   tests: {
     id: 'tests',
@@ -210,9 +218,8 @@ Inspect the unified diff carefully for:
     description: 'Test coverage for new code paths, brittle assertions, and regression prevention.',
     instructions: `You are an expert QA and test engineer reviewing code specifically for Test Quality & Verification.
 Inspect the unified diff carefully for:
-- Missing unit or integration tests for new features, edge cases, or failure branches.
-- Flaky, brittle, or non-deterministic test assertions.
-- Test ergonomics, assertion clarity, and realistic mocking boundaries.`,
+- Evidence Before Completion: Verify whether newly introduced behaviors, failure paths, and edge cases are backed by passing automated tests.
+- Test Integrity: Flaky assertions, non-deterministic timing, unrealistic mocking boundaries, or tests asserting implementation details instead of observable behavior.`,
   },
 };
 
@@ -331,7 +338,9 @@ Notes:
   - P2: Medium concern / edge case / non-critical defect.
   - P3: Minor improvement / maintainability note.
   - nit: Trivial cosmetic note.
-- Only report findings that are grounded in the diff lines below.
+- Grounding & Landing Surface:
+  - Only report findings that are grounded in the diff lines below.
+  - Consider the surface the change lands on: assess whether the code makes invalid assumptions about ambient environment state, unverified external refs, or unhandled failure escape paths.
 - If no defects meet the threshold, return an empty array: <<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>.
 
 ${diffSection}`;

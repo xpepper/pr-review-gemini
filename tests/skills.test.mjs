@@ -143,5 +143,39 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /--version|-v/i, 'Should mention --version flag');
     assert.match(content, /manifest/i, 'Should mention manifest synchronization');
   });
+
+  it('documents calibrated language-agnostic review checklists (Increment 16)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Where the argument breaks down/i, 'Should mention where the argument breaks down');
+    assert.match(content, /Landing Surface Invariants/i, 'Should mention landing surface invariants');
+    assert.match(content, /Ambient State Coupling/i, 'Should mention ambient state coupling');
+    assert.match(content, /Data Exposure/i, 'Should mention data exposure');
+    assert.match(content, /Redundant Work/i, 'Should mention redundant work');
+    assert.match(content, /Dead Code & Phantom Logic/i, 'Should mention dead code and phantom logic');
+    assert.match(content, /Single Source of Truth/i, 'Should mention single source of truth');
+    assert.match(content, /Evidence Before Completion/i, 'Should mention evidence before completion');
+  });
+
+  it('documents model catalog auto fallback resilience and streamlined dogfood:pr command (Increment 16)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Model Catalog & Auto Fallback Resilience/i, 'Should document model catalog resilience');
+    assert.match(content, /isModelUnavailableError/i, 'Should mention isModelUnavailableError');
+    assert.match(content, /fallback_to_auto/i, 'Should mention fallback_to_auto setting');
+    assert.match(content, /npm run dogfood:pr/i, 'Should document npm run dogfood:pr');
+    assert.match(content, /scripts\/dogfood-pr\.mjs/i, 'Should document scripts/dogfood-pr.mjs');
+    assert.match(content, /--model auto/i, 'Should document default --model auto');
+  });
+
+  it('documents Increment 16 calibration, resilience, and dogfood:pr in README.md', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /npm run dogfood:pr/i, 'README should document npm run dogfood:pr');
+    assert.match(readmeContent, /Reviewer Sensitivity & Quality Calibration/i, 'README should document Reviewer Sensitivity & Quality Calibration');
+    assert.match(readmeContent, /Model Catalog & Auto Fallback Resilience|Model Catalog Resilience/i, 'README should document model catalog resilience');
+    assert.match(readmeContent, /fallback_to_auto/i, 'README should document fallback_to_auto');
+  });
 });
 

@@ -6,18 +6,12 @@
 
 ---
 
-## Active Next Task: Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration
-- [ ] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
-  - [ ] Calibrate lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
-    - *Contracts*: Explicit parameterization vs ambient state coupling (functions reading implicit global/ambient state instead of options/arguments).
-    - *Performance*: Redundant work & side-effect duplication (duplicate subprocess, I/O, or network refetches when data can be computed once up-front).
-    - *Conventions*: Dead code & phantom logic (unused initializations, unreachable branches, redundant assignments) and DRY duplication across sibling entrypoints.
-    - *Correctness*: Precondition & landing surface assumptions (assuming external entities or environment state exist before verification; tracing execution arguments through error escape paths).
-    - *Security*: Landing surface authorization gating, injection sinks, path traversal, and secret exposure.
-    - *Tests*: Evidence before completion, verifying newly introduced behavior and edge cases with automated tests.
-  - [ ] Implement automatic model catalog fallback to `auto` when configured models (e.g. `claude-3.5-haiku`, `gpt-4o`) are unavailable or fail in local environments.
-  - [ ] Add evaluation benchmark suite (`tests/calibration.test.mjs` or fixture diff tests) comparing recall and precision against known PR defect patterns.
-  - [ ] Streamline real dogfood review workflow (`npm run dogfood:pr` or script wrapper) for real multi-lens PR verification before merge.
+## Active Next Task: Merge PR #28 (Increment 16 / Issue #27)
+- [x] Push branch `feat/reviewer-sensitivity-calibration` and open PR for Issue #27 (PR #28 opened: https://github.com/xpepper/pr-review-gemini/pull/28)
+- [x] Run dogfood review on PR #28: `npm run dogfood:pr 28`
+- [x] Addressed all 5 P2 review findings on calibration lens/severity matching, precision calculation, and uniform fallback semantics (commit `ffd9380`)
+- [x] Re-reviewed with `npm run dogfood:pr 28` (0 P0, 0 P1, 0 P2, 1 P3, 1 nit; all blocking defects resolved; CI review green)
+- [ ] Merge PR #28 into `main`
 
 ### Backlog & Future Capabilities
 - [ ] Pre-commit hook installer (`npx gem-pr-review --install-hook`) for local self-review
@@ -27,6 +21,20 @@
 ---
 
 ## Completed Increments
+- [x] **Increment 16 / Issue #27: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer**
+  - [x] Calibrated lens prompts in `src/reviewer.js` and `skills/gem-pr-review/SKILL.md` using universal language-agnostic dimensions:
+    - *Contracts*: Explicit parameterization vs ambient state coupling (`process.argv` vs explicit options).
+    - *Performance*: Redundant work & side-effect duplication (repeated subprocess/git log refetches when data can be computed once up-front).
+    - *Conventions*: Dead code & phantom logic (unused initializations, unreachable branches, redundant assignments) and DRY duplication across sibling entrypoints.
+    - *Correctness*: Precondition & landing surface assumptions (assuming external entities or environment state exist before verification; tracing execution arguments through error escape paths).
+    - *Security*: Landing surface authorization gating, injection sinks, path traversal, and secret exposure.
+    - *Tests*: Evidence before completion, verifying newly introduced behavior and edge cases with automated tests.
+  - [x] Implemented automatic model catalog fallback to `auto` (`fallback_to_auto: true`) with error classifier `isModelUnavailableError` and unified `isRetriableModelError` in `src/subagents.js` and `src/config.js`.
+  - [x] Added evaluation benchmark suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking recall, precision, and sensitivity across universal defect patterns from PR #26 dogfooding.
+  - [x] Streamlined dogfood review runner via `scripts/dogfood-pr.mjs` and npm script `npm run dogfood:pr <PR_NUMBER>` with automatic model resolution (`--model auto`).
+  - [x] Added 31 new unit and integration tests across 6 suites (445 total tests passing across 98 suites with 0 failures).
+  - [x] Executed dogfood review loop against PR #28, resolving all 5 P2 findings (lens/severity matching, distinct finding precision, uniform auto fallback semantics).
+  - [x] Updated documentation in `README.md` and `skills/gem-pr-review/SKILL.md`.
 - [x] **Increment 15 / Issue #25: Automated Semantic Versioning, Release Management & Manifest Synchronization**
   - [x] Implemented canonical runtime version module (`src/version.js`) dynamically resolving version from `package.json` without hardcoding, with SemVer 2.0 validation (`isValidSemVer`, `parseSemVer`) and manifest sync inspection (`getManifestVersions`, `checkManifestSync`).
   - [x] Wired dynamic version into `server/index.js` MCP `serverInfo.version` and PR review summary headers (`src/reviewer.js`).

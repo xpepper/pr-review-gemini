@@ -372,6 +372,26 @@ describe('Configuration & Model Tier Management', () => {
       assert.deepEqual(resolved.lenses.security.fallbacks, ['claude-3.5-sonnet']);
     });
 
+    it('resolves fallback_to_auto configuration setting with default true', () => {
+      // Default is true
+      const defaultConfig = resolveConfig();
+      assert.equal(defaultConfig.fallback_to_auto, true);
+
+      // Explicitly disabled via snake_case or camelCase
+      const disabledSnake = resolveConfig({ userConfig: { fallback_to_auto: false } });
+      assert.equal(disabledSnake.fallback_to_auto, false);
+
+      const disabledCamel = resolveConfig({ userConfig: { fallbackToAuto: false } });
+      assert.equal(disabledCamel.fallback_to_auto, false);
+
+      const disabledAutoFallback = resolveConfig({ userConfig: { auto_fallback: false } });
+      assert.equal(disabledAutoFallback.fallback_to_auto, false);
+
+      // Explicitly enabled
+      const enabled = resolveConfig({ userConfig: { fallback_to_auto: true } });
+      assert.equal(enabled.fallback_to_auto, true);
+    });
+
     it('ignores non-object configurations gracefully', () => {
       assert.deepEqual(resolveConfig({ userConfig: 'invalid-string' }), DEFAULT_CONFIG);
       assert.deepEqual(resolveConfig({ userConfig: [1, 2, 3] }), DEFAULT_CONFIG);

@@ -136,6 +136,90 @@ export function isQuotaOrCapacityError(error) {
 
 export const isQuotaError = isQuotaOrCapacityError;
 
+const MODEL_UNAVAILABLE_CODES = new Set([
+  'MODEL_NOT_FOUND',
+  'MODEL_UNAVAILABLE',
+  'MODEL_NOT_SUPPORTED',
+  'UNSUPPORTED_MODEL',
+  'INVALID_MODEL',
+  'UNKNOWN_MODEL',
+  'MODEL_ACCESS_DENIED',
+  'CAPABILITY_NOT_SUPPORTED',
+  'ERR_MODEL_UNAVAILABLE',
+  'CATALOG_ERROR',
+]);
+
+/**
+ * Checks whether an error represents a model catalog unavailability, unsupported model,
+ * capability mismatch, or permission error for the requested model.
+ *
+ * @param {any} error - Error object, string, or response
+ * @returns {boolean}
+ */
+export function isModelUnavailableError(error) {
+  if (!error) return false;
+
+  // Reject pure programming syntax/type/reference errors
+  if (
+    error instanceof TypeError ||
+    error instanceof SyntaxError ||
+    error instanceof ReferenceError ||
+    error instanceof RangeError
+  ) {
+    return false;
+  }
+  if (typeof error === 'object' && NON_QUOTA_ERROR_NAMES.has(error.name)) {
+    return false;
+  }
+
+  // Check explicit error codes
+  const rawCode = error.code || error.error?.code || error.response?.data?.error?.code;
+  if (typeof rawCode === 'string') {
+    const upperCode = rawCode.toUpperCase();
+    if (MODEL_UNAVAILABLE_CODES.has(upperCode)) {
+      return true;
+    }
+  }
+
+  // Inspect textual message and response details
+  const messageCandidates = [
+    typeof error === 'string' ? error : '',
+    error.message,
+    error.details,
+    error.response?.data?.message,
+    error.response?.data?.error?.message,
+    error.error?.message,
+    error.statusText,
+  ].filter(Boolean);
+
+  const fullText = messageCandidates.join(' ');
+  if (!fullText) return false;
+
+  const modelKeywordsPattern =
+    /model.*(?:not found|not available|unavailable|not supported|unsupported|unknown|invalid|access denied|permission denied|disabled|does not support)|(?:catalog|capability|unsupported|unknown|invalid|missing).*model|(?:no access to|not authorized to (?:use|access)).*model|cannot use model|model.*not in catalog|unrecognized model/i;
+
+  if (modelKeywordsPattern.test(fullText)) {
+    return true;
+  }
+
+  const status = error.status || error.statusCode || error.response?.status || error.response?.statusCode;
+  if ((status === 404 || status === 400 || status === 403) && /\bmodel\b/i.test(fullText)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks whether an error is retriable across model fallbacks (either quota exhaustion or model unavailability).
+ *
+ * @param {any} error - Error object, string, or response
+ * @returns {boolean}
+ */
+export function isRetriableModelError(error) {
+  return isQuotaOrCapacityError(error) || isModelUnavailableError(error);
+}
+
 /**
  * Default tier and reasoning effort assignments per specialist lens.
  */
@@ -525,9 +609,31 @@ export async function dispatchSubagentsParallel({
           });
 
           const isQuota = isQuotaOrCapacityError(err);
+          const isModelUnavailable = isModelUnavailableError(err);
+          const isRetriable = isQuota || isModelUnavailable;
           const hasMoreFallbacks = i < modelCandidates.length - 1;
 
-          if (isQuota && hasMoreFallbacks) {
+          if (isRetriable && hasMoreFallbacks) {
+            continue;
+          }
+
+          // Automatic fallback to 'auto' when configured models encounter retriable errors
+          const fallbackToAuto =
+            item.fallbackToAuto !== false &&
+            item.fallback_to_auto !== false &&
+            config?.fallback_to_auto !== false &&
+            config?.fallbackToAuto !== false &&
+            config?.auto_fallback !== false &&
+            config?.autoFallback !== false;
+
+          if (
+            isRetriable &&
+            !hasMoreFallbacks &&
+            fallbackToAuto &&
+            candidateModel !== 'auto' &&
+            !modelCandidates.includes('auto')
+          ) {
+            modelCandidates.push('auto');
             continue;
           }
 

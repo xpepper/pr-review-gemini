@@ -33,6 +33,43 @@ describe('Reviewer Core & Orchestration', () => {
       }
     });
 
+    it('defines calibrated, language-agnostic review checklists across all specialist lenses (Increment 16)', () => {
+      // 1. Correctness: edge cases, error escapes, precondition & landing surface invariants
+      const correctness = LENS_DEFINITIONS.correctness.instructions;
+      assert.match(correctness, /breaks? down|edge cases?|escape/i);
+      assert.match(correctness, /landing surface|precondition|external state|invariants?/i);
+      assert.match(correctness, /concurrency|race conditions?|async/i);
+
+      // 2. Contracts: ambient state coupling vs explicit parameters, interface stability, data exposure
+      const contracts = LENS_DEFINITIONS.contracts.instructions;
+      assert.match(contracts, /ambient|global (?:process|state)|explicit parameter/i);
+      assert.match(contracts, /breaking|schema|defaults|signature/i);
+      assert.match(contracts, /exposure|audience/i);
+
+      // 3. Security: trust boundaries, injection sinks, landing surface authorization, secrets
+      const security = LENS_DEFINITIONS.security.instructions;
+      assert.match(security, /injection|path traversal|deserialization/i);
+      assert.match(security, /landing surface|authorization|access control/i);
+      assert.match(security, /secrets?|credentials?|tokens?|keys?/i);
+
+      // 4. Performance: redundant work & side-effect duplication, algorithmic traps, resource lifecycles
+      const performance = LENS_DEFINITIONS.performance.instructions;
+      assert.match(performance, /redundant.*work|duplicate.*subprocess|refetch|side-effect/i);
+      assert.match(performance, /algorithmic|complexity|O\(N|queries/i);
+      assert.match(performance, /resource|handles?|leaks?|streams?/i);
+
+      // 5. Conventions: dead code & phantom logic, duplication across sibling entrypoints, single source of truth
+      const conventions = LENS_DEFINITIONS.conventions.instructions;
+      assert.match(conventions, /dead code|phantom logic|unused initialization|unreachable/i);
+      assert.match(conventions, /duplication|sibling entrypoints?|single source of truth|dry/i);
+      assert.match(conventions, /cohesion|separation of concerns|abstraction/i);
+
+      // 6. Tests: evidence before completion, test integrity
+      const tests = LENS_DEFINITIONS.tests.instructions;
+      assert.match(tests, /evidence before completion|automated tests?|coverage/i);
+      assert.match(tests, /brittle|flaky|mocking|deterministic/i);
+    });
+
     it('resolveReviewMode resolves names, flags, and fallbacks', () => {
       assert.equal(resolveReviewMode().name, 'balanced');
       assert.equal(resolveReviewMode('quick').name, 'quick');

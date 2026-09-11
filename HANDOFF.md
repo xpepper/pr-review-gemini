@@ -3,8 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (clean, synchronized with `origin/main`)
-* **Test Suite**: `npm test` runs and passes (414 tests across 92 suites, 0 failures)
+* **Current Branch**: `feat/reviewer-sensitivity-calibration` (PR #28 opened and reviewed)
+* **Test Suite**: `npm test` runs and passes (445 tests across 98 suites, 0 failures)
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -26,13 +26,14 @@
   - PR #23 (Issue #22 / Increment 13): `feat: reusable GitHub Action and automated CI PR review workflow (action.yml)` (Merged, commit `9c5793b`)
   - PR #24 (Increment 14): `feat: pluggable custom review roles and specialist lenses` (Merged, commit `e70b3ce`)
   - PR #26 (Issue #25 / Increment 15): `feat: automated semantic versioning, release management, and manifest synchronization` (Merged, commit `ef8f0ee`)
+  - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Open PR: https://github.com/xpepper/pr-review-gemini/pull/28)
 
 ---
 
-## Status: READY_FOR_INCREMENT_16 (Issue #27)
+## Status: READY_TO_MERGE (PR #28 / Increment 16 / Issue #27)
 
-All 15 initial roadmap increments are fully implemented, verified test-first (414 passing tests across 92 suites), dogfood-reviewed, and merged to `main`.
-Active next mission: **Increment 16 / Issue #27**: Reviewer Sensitivity & Quality Calibration: Benchmark and Improve Specialist Lenses Against Copilot Reviewer.
+All deliverables for Increment 16 are implemented and verified test-first (445 passing tests across 98 suites, manifest version check green).
+Dogfood review loop executed against PR #28: all 5 P2 findings resolved and verified, CI review green.
 - [x] Increment 8: Large-diff file-backed transport (> 200 KB)
 - [x] Increment 9: Interactive finding selection UI & cached publish-later (Issue #14)
 - [x] Increment 10: Automatic fallback model retry on quota/capacity errors (without timeouts) (Issue #16)
@@ -41,6 +42,7 @@ Active next mission: **Increment 16 / Issue #27**: Reviewer Sensitivity & Qualit
 - [x] Increment 13: Reusable GitHub Action & automated CI PR review workflow (Issue #22)
 - [x] Increment 14: Pluggable custom review roles & specialist lenses
 - [x] Increment 15: Automated semantic versioning, release management & manifest synchronization (Issue #25)
+- [x] Increment 16: Reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Issue #27, PR #28)
 
 ---
 
@@ -369,31 +371,61 @@ Possible future enhancements:
 
 ---
 
-## Next Mission: Increment 16 — Reviewer Sensitivity & Quality Calibration (Issue #27)
+## Completed Work: Increment 16 — Reviewer Sensitivity & Quality Calibration (Issue #27)
 
 - **GitHub Issue**: [#27: feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer (Increment 16)](https://github.com/xpepper/pr-review-gemini/issues/27)
-- **Branch**: `feat/reviewer-sensitivity-calibration` (create from `main` after verifying clean working tree)
+- **Branch**: `feat/reviewer-sensitivity-calibration`
+- **Changes Delivered**:
+  - `src/reviewer.js`:
+    - Calibrated `LENS_DEFINITIONS` across all 6 standard specialist lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`) with language-agnostic design dimensions:
+      - `correctness`: where the argument breaks down, edge cases, error escapes, landing surface invariants & preconditions.
+      - `contracts`: explicit parameterization vs ambient state coupling (`process.argv`), API stability, schema drift, data exposure boundaries.
+      - `security`: trust boundary crossings, landing surface authorization gating, path traversal, injection sinks, secret leaks.
+      - `performance`: redundant work & side-effect duplication (duplicate subprocess, file I/O, or network refetches), complexity traps ($O(N^2)$), resource lifecycles.
+      - `conventions`: dead code & phantom logic (unused initializations, unreachable branches, redundant assignments), DRY duplication across sibling entrypoints.
+      - `tests`: evidence before completion (automated verification for new behaviors and edge cases), test integrity, brittle/flaky mocks.
+    - Updated `buildReviewerPrompt` with landing surface and ambient state evaluation guidance.
+    - Re-exported calibration and model error classification utilities.
+  - `src/config.js`:
+    - Added `fallback_to_auto: true` to `DEFAULT_CONFIG` and resolved configuration.
+  - `src/subagents.js`:
+    - Implemented `isModelUnavailableError`: classifies unsupported, unentitled, or missing models in host environment catalog (`MODEL_NOT_FOUND`, `MODEL_UNAVAILABLE`, HTTP 404/400/403 mentioning model).
+    - Implemented `isRetriableModelError`: unites quota errors (`isQuotaOrCapacityError`) and model catalog unavailability (`isModelUnavailableError`) while failing fast on unrelated bugs (syntax errors, type errors).
+    - Updated `dispatchSubagentsParallel`: automatically retries failing lenses against fallback models, and gracefully falls back to `'auto'` when primary and fallback models fail with model unavailable errors.
+  - `src/calibration.js`:
+    - Created benchmark defect suite (`CALIBRATION_BENCHMARKS`) derived from PR #26 dogfood review findings (ambient state coupling, redundant subprocess refetch, dead logic assignment, landing surface precondition, sibling CLI duplication).
+    - Implemented `evaluateCalibrationFinding` and `evaluateCalibrationSuite` measuring recall, precision, and sensitivity against benchmark patterns.
+  - `scripts/dogfood-pr.mjs` & `package.json`:
+    - Created dedicated dogfood runner defaulting to `--model auto` with full argument passthrough.
+    - Added npm script `"dogfood:pr": "node scripts/dogfood-pr.mjs"`.
+  - `skills/gem-pr-review/SKILL.md` & `README.md`:
+    - Documented calibrated review dimensions, model catalog auto fallback resilience, and `npm run dogfood:pr`.
+    - Added Key Features 9 & 10 to `README.md` and documented `fallback_to_auto` configuration.
+  - Tests & Verification:
+    - Added 31 new unit and integration tests across 6 test suites (`tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/subagents.test.mjs`, `tests/calibration.test.mjs`, `tests/dogfood.test.mjs`, `tests/skills.test.mjs`).
+    - Total **445 tests passing across 98 suites with 0 failures**.
+    - Manifest sync check green (`npm run version:check`).
+  - Dogfood Review Loop (PR #28):
+    - Opened PR #28 on GitHub referencing Issue #27.
+    - First dogfood review run caught 5 P2 findings in `src/calibration.js` and `src/subagents.js`:
+      1. Calibration scoring ignoring required lens and severity.
+      2. Calibration matching findings without validating lens or severity.
+      3. Calibration precision double-counting findings across multiple benchmarks.
+      4. Benchmark matching ignoring intended lens and severity.
+      5. Auto fallback not enabled by default for direct dispatch callers on quota errors.
+    - All 5 findings addressed and verified in commit `ffd9380`.
+    - Second dogfood review run verified clean: 0 P0, 0 P1, 0 P2, 1 P3, 1 nit; GitHub Actions CI automated review passed.
 
-### Problem & Background
-On PR #26 (Increment 15), GitHub Copilot's built-in pull request reviewer bot caught 11 real issues across multiple design dimensions:
-- *Coupling & Encapsulation*: A library function reading ambient global process state instead of explicit options parameters.
-- *Resource Hygiene & Redundancy*: Redundant subprocess refetches when commit data was already computed or could be resolved once up-front.
-- *Dead Logic*: Unused initial variable assignments immediately overwritten in all branches.
-- *Precondition & Landing Surface Assumptions*: A CI workflow dispatch trigger assuming an external git ref already exists prior to checkout.
-- *Boilerplate Duplication*: Copy-pasting identical flag formatting across multiple sibling CLI entrypoints.
+---
 
-In contrast, our reviewer initially produced 0 findings (due to local model catalog availability) and produced 5 findings when run with `--model auto`.
-To make our specialist lenses consistently sensitive and reliable without baking in language-specific rules of thumb, we draw inspiration from industry-leading code review agent skills:
-- [channingwalton/skills (code-reviewer)](https://github.com/channingwalton/skills/blob/main/skills/code-reviewer/SKILL.md)
-- [JPeetz/agent-skills (code-quality/code-review)](https://github.com/JPeetz/agent-skills/tree/main/skills/code-quality/code-review)
-- [unclecatvn/agent-skills (code-review)](https://github.com/unclecatvn/agent-skills/blob/main/skills/code-review/SKILL.md)
-- [OpenAI Codex skills](https://github.com/openai/codex/tree/main/.codex/skills)
+## Next Steps: Merge PR #28
 
-### Prompt for the Next Agent
-
-```text
-Please implement Increment 16: "Reviewer Sensitivity & Quality Calibration" addressing Issue #27 (https://github.com/xpepper/pr-review-gemini/issues/27) following HANDOFF.md, TODO.md, and AGENTS.md.
-```
+1. **Merge PR #28**:
+   - Merge PR #28 into `main` on GitHub via `gh pr merge 28 --squash` or `gh pr merge 28 --merge`.
+2. **Post-Merge**:
+   - Switch local repo back to `main` and pull latest commits: `git checkout main && git pull`.
+   - Delete feature branch `feat/reviewer-sensitivity-calibration`.
+   - Increment 16 will be fully closed.
 
 ---
 
