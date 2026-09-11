@@ -336,8 +336,14 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             { cwd }
           );
           const parsedMeta = JSON.parse(prMetaStdout);
-          headSha = parsedMeta?.headRefOid || null;
-          if (typeof parsedMeta?.isCrossRepository === 'boolean') {
+          headSha =
+            typeof parsedMeta?.headRefOid === 'string' && parsedMeta.headRefOid.trim()
+              ? parsedMeta.headRefOid.trim()
+              : null;
+          if (!headSha) {
+            originCheckFailed = true;
+            originError = 'GitHub API response missing or empty headRefOid commit SHA';
+          } else if (typeof parsedMeta?.isCrossRepository === 'boolean') {
             isCrossRepo = parsedMeta.isCrossRepository;
           } else if (parsedMeta?.headRepository?.nameWithOwner && ciEnv.repo) {
             isCrossRepo =

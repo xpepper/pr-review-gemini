@@ -1155,6 +1155,58 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('fails closed when PR metadata is missing headRefOid commit SHA', async () => {
+      const tmpEvent = path.join(os.tmpdir(), `event-missing-head-${Date.now()}.json`);
+      fs.writeFileSync(tmpEvent, JSON.stringify({
+        action: 'created',
+        issue: {
+          number: 21,
+          pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/21' },
+        },
+        comment: {
+          id: 780,
+          body: '/gem-review --quick --verify',
+          author_association: 'MEMBER',
+          user: { login: 'member' },
+        },
+        repository: { full_name: 'org/repo' },
+        sender: { login: 'member' },
+      }));
+
+      try {
+        let verificationExecuted = false;
+        const mockVerification = async () => {
+          verificationExecuted = true;
+          return { status: 'passed' };
+        };
+
+        const customExecGh = async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            return JSON.stringify({
+              isCrossRepository: false,
+              headRefOid: '', // Empty headRefOid
+            });
+          }
+          return JSON.stringify({ id: 1 });
+        };
+
+        const result = await runCiAction({
+          mock: true,
+          execGhFn: customExecGh,
+          runVerificationFn: mockVerification,
+        }, {
+          GITHUB_EVENT_PATH: tmpEvent,
+        }, silentIo);
+
+        assert.equal(result.exitCode, 1, 'Must fail closed when PR headRefOid is missing');
+        assert.equal(verificationExecuted, false, 'Must not execute verification without confirmed headSha');
+        assert.equal(result.verificationResult?.status, 'failed');
+        assert.match(result.verificationResult?.error, /missing or empty headRefOid/i);
+      } finally {
+        fs.unlinkSync(tmpEvent);
+      }
+    });
+
     it('allows custom verification profile when defined in repository config', async () => {
       const tmpEvent = path.join(os.tmpdir(), `event-custom-prof-${Date.now()}.json`);
       fs.writeFileSync(tmpEvent, JSON.stringify({
