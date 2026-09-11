@@ -10,6 +10,7 @@ import {
   writeGitHubStepOutputs,
   formatCiSummary,
   parseCommentCommand,
+  extractCommenterIdentity,
   isAuthorizedCommenter,
   getCommenterAuthorization,
   addCommentReaction,
@@ -872,7 +873,7 @@ describe('CI Event Payload & Environment Resolution', () => {
         },
         comment: {
           id: 777,
-          body: '/gem-review --quick --verify=unit',
+          body: '/gem-review --quick --verify=build',
           author_association: 'MEMBER',
           user: { login: 'verified-member' },
         },
@@ -902,7 +903,7 @@ describe('CI Event Payload & Environment Resolution', () => {
 
         assert.equal(result.exitCode, 0);
         assert.equal(verificationExecuted, true);
-        assert.equal(verifiedProfile, 'unit');
+        assert.equal(verifiedProfile, 'build');
         assert.equal(result.verificationResult?.status, 'passed');
       } finally {
         fs.unlinkSync(tmpEvent);
@@ -1201,6 +1202,33 @@ Hope that helps!
         assert.equal(parseCommentCommand('').isCommand, false);
         assert.equal(parseCommentCommand(null).isCommand, false);
         assert.equal(parseCommentCommand(undefined).isCommand, false);
+      });
+    });
+
+    describe('extractCommenterIdentity', () => {
+      it('extracts identity from parsed eventInfo object', () => {
+        const identity = extractCommenterIdentity({
+          commentUser: 'octocat',
+          commentAuthorAssociation: 'COLLABORATOR',
+        });
+        assert.equal(identity.username, 'octocat');
+        assert.equal(identity.association, 'COLLABORATOR');
+      });
+
+      it('extracts identity from raw GitHub webhook payload', () => {
+        const identity = extractCommenterIdentity({
+          comment: {
+            user: { login: 'mona' },
+            author_association: 'MEMBER',
+          },
+        });
+        assert.equal(identity.username, 'mona');
+        assert.equal(identity.association, 'MEMBER');
+      });
+
+      it('returns safe fallback values for missing or invalid inputs', () => {
+        assert.deepEqual(extractCommenterIdentity(null), { username: 'unknown', association: null });
+        assert.deepEqual(extractCommenterIdentity({}), { username: 'unknown', association: null });
       });
     });
 

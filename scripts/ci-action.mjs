@@ -264,7 +264,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     let verificationResult = null;
     if (ciEnv.verify) {
       const profileName = typeof ciEnv.verify === 'string' ? ciEnv.verify : 'test';
-      const SAFE_PROFILES = new Set(['test', 'build', 'lint', 'typecheck', 'unit']);
+      const SAFE_PROFILES = new Set(['test', 'build', 'lint']);
 
       if (!SAFE_PROFILES.has(profileName)) {
         const errorMsg = `Security: Unrecognized or disallowed verification profile "${profileName}". Allowed safe profiles: ${[...SAFE_PROFILES].join(', ')}.`;
@@ -277,13 +277,28 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         };
       } else {
         // Query PR metadata to ensure detached execution is blocked on cross-repository / fork PRs
-        let isCrossRepo = false;
+        // Fail closed: block execution unless explicitly verified to be a same-repository branch
+        let isCrossRepo = true;
         try {
-          const prMetaStdout = await execGhFn(['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'], { cwd });
+          const prMetaStdout = await execGhFn(
+            ['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'],
+            { cwd }
+          );
           const parsedMeta = JSON.parse(prMetaStdout);
-          isCrossRepo = Boolean(parsedMeta.isCrossRepository);
-        } catch {
-          // If query fails or in mock mode, proceed safely
+          if (typeof parsedMeta.isCrossRepository === 'boolean') {
+            isCrossRepo = parsedMeta.isCrossRepository;
+          } else if (isMock) {
+            isCrossRepo = false;
+          }
+        } catch (metaErr) {
+          if (isMock) {
+            isCrossRepo = false;
+          } else {
+            io.warn(
+              `[CI] Security: Unable to verify PR repository origin: ${metaErr.message}. Failing closed.`
+            );
+            isCrossRepo = true;
+          }
         }
 
         if (isCrossRepo) {

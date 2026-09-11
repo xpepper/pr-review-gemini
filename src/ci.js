@@ -544,22 +544,63 @@ export function parseCommentCommand(commentBody) {
 const DEFAULT_ALLOWED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 
 /**
- * Checks commenter authorization against GitHub author_association, repository write permissions,
- * and optional allowed user lists. Returns detailed authorization metadata.
+ * Normalizes commenter identity and association from parsed eventInfo or raw GitHub webhook payload.
  *
- * @param {object} payload
+ * @param {object} input - Parsed eventInfo object or raw GitHub webhook payload
+ * @returns {{ username: string, association: string | null }}
+ */
+export function extractCommenterIdentity(input) {
+  if (!input || typeof input !== 'object') {
+    return { username: 'unknown', association: null };
+  }
+
+  // 1. Parsed eventInfo shape (preferred)
+  if (typeof input.commentUser === 'string' || input.commentAuthorAssociation !== undefined) {
+    const rawAssoc = input.commentAuthorAssociation || null;
+    return {
+      username: input.commentUser || 'unknown',
+      association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
+    };
+  }
+
+  // 2. Raw GitHub webhook payload shape
+  const username =
+    input.comment?.user?.login ||
+    input.sender?.login ||
+    input.user ||
+    input.username ||
+    'unknown';
+
+  const rawAssoc =
+    input.comment?.author_association ||
+    input.sender?.author_association ||
+    input.author_association ||
+    input.authorAssociation ||
+    null;
+
+  return {
+    username,
+    association: rawAssoc ? String(rawAssoc).toUpperCase() : null,
+  };
+}
+
+/**
+ * Checks commenter authorization against GitHub author_association and optional allowed user lists.
+ * Accepts either a parsed eventInfo object or a raw GitHub webhook payload.
+ *
+ * @param {object} input - Parsed eventInfo or raw GitHub webhook payload
  * @param {object} [options={}]
  * @param {string[]} [options.allowedAssociations=['OWNER', 'MEMBER', 'COLLABORATOR']]
  * @param {string[]} [options.allowedUsers=[]]
  * @returns {{ authorized: boolean, association: string|null, username: string, reason: string }}
  */
-export function getCommenterAuthorization(payload, options = {}) {
+export function getCommenterAuthorization(input, options = {}) {
   const allowedAssociations = (options.allowedAssociations || DEFAULT_ALLOWED_ASSOCIATIONS).map((a) =>
     String(a).toUpperCase()
   );
   const allowedUsers = (options.allowedUsers || []).map((u) => String(u).toLowerCase());
 
-  if (!payload || typeof payload !== 'object') {
+  if (!input || typeof input !== 'object') {
     return {
       authorized: false,
       association: null,
@@ -568,23 +609,7 @@ export function getCommenterAuthorization(payload, options = {}) {
     };
   }
 
-  const username =
-    payload.commentUser ||
-    payload.comment?.user?.login ||
-    payload.sender?.login ||
-    payload.user ||
-    payload.username ||
-    'unknown';
-
-  const rawAssoc =
-    payload.commentAuthorAssociation ||
-    payload.comment?.author_association ||
-    payload.sender?.author_association ||
-    payload.author_association ||
-    payload.authorAssociation ||
-    null;
-
-  const association = rawAssoc ? String(rawAssoc).toUpperCase() : null;
+  const { username, association } = extractCommenterIdentity(input);
 
   // 1. Explicit allowed users check
   if (allowedUsers.includes(username.toLowerCase())) {
