@@ -48,6 +48,8 @@ export function parseCliArgs(args) {
   let failOn = 'P1';
   let json = false;
   let mock = false;
+  let showHelp = false;
+  let showVersion = false;
   let installHook = false;
   let uninstallHook = false;
   const roles = [];
@@ -55,7 +57,11 @@ export function parseCliArgs(args) {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--install-hook') {
+    if (arg === '--help' || arg === '-h') {
+      showHelp = true;
+    } else if (arg === '--version' || arg === '-v') {
+      showVersion = true;
+    } else if (arg === '--install-hook') {
       installHook = true;
     } else if (arg === '--uninstall-hook') {
       uninstallHook = true;
@@ -101,6 +107,8 @@ export function parseCliArgs(args) {
     failOn,
     json,
     mock,
+    showHelp,
+    showVersion,
     installHook,
     uninstallHook,
     roles: roles.length > 0 ? roles : undefined,

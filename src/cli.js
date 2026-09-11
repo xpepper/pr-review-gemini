@@ -81,7 +81,8 @@ export function resolveDebugFlag(options = {}) {
   if (options.verbose !== undefined) {
     return Boolean(options.verbose);
   }
-  if (options.env?.DEBUG) {
+  const env = options.env !== undefined ? options.env : process.env;
+  if (env?.DEBUG) {
     return true;
   }
   const argv = Array.isArray(options.argv) ? options.argv : [];
@@ -113,7 +114,7 @@ export function formatCliError(err, options = {}) {
   }
 
   if (typeof err === 'string') {
-    if (prefix === '❌ ' && (err.startsWith('❌ ') || err.startsWith('❌'))) {
+    if (prefix === '❌ ' && err.startsWith('❌')) {
       return err;
     }
     return `${prefix}${err}`;
@@ -126,7 +127,7 @@ export function formatCliError(err, options = {}) {
       return `${prefix}${err.stack || err.message}`;
     }
     const msg = err.message || String(err);
-    if (prefix === '❌ ' && (msg.startsWith('❌ ') || msg.startsWith('❌'))) {
+    if (prefix === '❌ ' && msg.startsWith('❌')) {
       return msg;
     }
     return `${prefix}${msg}`;
@@ -398,10 +399,28 @@ export function installPreCommitHook(options = {}) {
 
       // If an existing hook ends with a top-level terminal exit statement,
       // insert before it so self-review is guaranteed to run.
-      // Top-level exit statements are unindented (column 0), avoiding nested
-      // exits inside if/then/fi branches, case blocks, or function bodies.
+      // Top-level exit statements are unindented (column 0) and outside heredocs,
+      // avoiding nested exits inside if/then/fi branches, case blocks, or heredocs.
       const lines = existing.split(/\r?\n/);
-      const exitIdx = lines.findLastIndex((l) => /^exit\b/.test(l.trimEnd()));
+      let exitIdx = -1;
+      let inHeredoc = false;
+      let heredocDelim = '';
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!inHeredoc) {
+          const match = line.match(/<<-?\s*['"]?([A-Za-z0-9_]+)['"]?/);
+          if (match) {
+            inHeredoc = true;
+            heredocDelim = match[1];
+          } else if (/^exit\b/.test(line.trimEnd())) {
+            exitIdx = i;
+          }
+        } else if (line.trim() === heredocDelim) {
+          inHeredoc = false;
+          heredocDelim = '';
+        }
+      }
 
       if (exitIdx !== -1) {
         lines.splice(exitIdx, 0, PRE_COMMIT_HOOK_MARKER, command, '');

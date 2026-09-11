@@ -94,6 +94,22 @@ describe('Centralized CLI Infrastructure (src/cli.js)', () => {
       assert.equal(resolveDebugFlag({ argv: ['node', 'script.mjs', '--verbose'] }), true);
       assert.equal(resolveDebugFlag({ argv: ['node', 'script.mjs', '--quick'] }), false);
     });
+
+    it('defaults to ambient process.env when options.env is omitted', () => {
+      const originalDebug = process.env.DEBUG;
+      try {
+        process.env.DEBUG = '1';
+        assert.equal(resolveDebugFlag(), true);
+        process.env.DEBUG = '';
+        assert.equal(resolveDebugFlag(), false);
+      } finally {
+        if (originalDebug !== undefined) {
+          process.env.DEBUG = originalDebug;
+        } else {
+          delete process.env.DEBUG;
+        }
+      }
+    });
   });
 
   describe('formatCliError', () => {
@@ -714,6 +730,35 @@ npm test
       const selfReviewIdx = content.indexOf('npm run self-review');
       const npmTestIdx = content.indexOf('npm test');
       assert.ok(selfReviewIdx > npmTestIdx, 'self-review must be appended at end of script after npm test');
+    });
+
+    it('ignores exit statements inside heredoc blocks', () => {
+      const subTemp = path.join(tempDir, 'sub-heredoc');
+      const subHooks = path.join(subTemp, '.git', 'hooks');
+      fs.mkdirSync(subHooks, { recursive: true });
+      const hookFile = path.join(subHooks, 'pre-commit');
+      const heredocHook = `#!/bin/sh
+cat << 'EOF'
+Usage info:
+exit 0 to quit
+EOF
+
+npm test
+exit 0
+`;
+      fs.writeFileSync(hookFile, heredocHook, { mode: 0o755 });
+
+      const res = installPreCommitHook({ rootDir: subTemp });
+      assert.equal(res.success, true);
+      assert.equal(res.appended, true);
+
+      const content = fs.readFileSync(hookFile, 'utf8');
+      const selfReviewIdx = content.indexOf('npm run self-review');
+      const heredocExitIdx = content.indexOf('exit 0 to quit');
+      const terminalExitIdx = content.lastIndexOf('exit 0');
+
+      assert.ok(selfReviewIdx > heredocExitIdx, 'Must not insert inside heredoc');
+      assert.ok(selfReviewIdx < terminalExitIdx, 'Must insert before terminal exit');
     });
 
     it('does not touch or uninstall unmanaged hooks without PRE_COMMIT_HOOK_MARKER', () => {

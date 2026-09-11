@@ -46,6 +46,7 @@ index 1111111..2222222 100644
  * Executes CI Action workflow.
  *
  * @param {object} [options={}]
+ * @param {boolean} [options.version] - Programmatic version flag (CLI invocations handled by handleCommonFlags)
  * @param {object} [env=process.env]
  * @param {object} [io=console]
  * @returns {Promise<{ exitCode: number, qualityGate?: object, reviewResult?: object, ciEnv?: object, error?: string }>}

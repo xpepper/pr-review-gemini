@@ -481,6 +481,23 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
   describe('scripts/bump-version.mjs CLI Utility', () => {
     const bumpScript = path.join(ROOT_DIR, 'scripts', 'bump-version.mjs');
 
+    it('parseCliArgs correctly parses flags and leaves target null on --version or --help', async () => {
+      const { parseCliArgs } = await import('../scripts/bump-version.mjs');
+      const versionResult = parseCliArgs(['--version']);
+      assert.equal(versionResult.showVersion, true);
+      assert.equal(versionResult.target, null);
+
+      const helpResult = parseCliArgs(['--help']);
+      assert.equal(helpResult.showHelp, true);
+      assert.equal(helpResult.target, null);
+
+      const autoResult = parseCliArgs([]);
+      assert.equal(autoResult.target, 'auto');
+
+      const explicitResult = parseCliArgs(['minor']);
+      assert.equal(explicitResult.target, 'minor');
+    });
+
     it('prints version with --version and -v', async () => {
       const { stdout: stdoutLong } = await execFileAsync(process.execPath, [bumpScript, '--version']);
       assert.match(stdoutLong, new RegExp(`gem-pr-review v${VERSION}`));
