@@ -107,6 +107,8 @@ export function parseCliArgs(args) {
     failOn,
     json,
     mock,
+    showHelp,
+    showVersion,
     installHook,
     uninstallHook,
     roles: roles.length > 0 ? roles : undefined,

@@ -315,7 +315,6 @@ export function installPreCommitHook(options = {}) {
 
     const content = `#!/bin/sh\n${PRE_COMMIT_HOOK_MARKER}\n${command}\n`;
     fs.writeFileSync(hookPath, content, { mode: 0o755 });
-    fs.chmodSync(hookPath, 0o755);
     return {
       success: true,
       created: true,

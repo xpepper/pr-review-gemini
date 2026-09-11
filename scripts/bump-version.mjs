@@ -67,10 +67,16 @@ export function parseCliArgs(args = []) {
   let createTag = false;
   let notesFile = null;
   let rootDir = null;
+  let showVersion = false;
+  let showHelp = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === '--check') {
+    if (arg === '--help' || arg === '-h') {
+      showHelp = true;
+    } else if (arg === '--version' || arg === '-v') {
+      showVersion = true;
+    } else if (arg === '--check') {
       check = true;
     } else if (arg === '--dry-run') {
       dryRun = true;
@@ -93,7 +99,7 @@ export function parseCliArgs(args = []) {
   }
 
   return {
-    target: target || (check ? null : 'auto'),
+    target: target || (check || showVersion || showHelp ? null : 'auto'),
     check,
     dryRun,
     printChangelog,
@@ -101,6 +107,8 @@ export function parseCliArgs(args = []) {
     createTag,
     notesFile,
     rootDir,
+    showVersion,
+    showHelp,
   };
 }
 
