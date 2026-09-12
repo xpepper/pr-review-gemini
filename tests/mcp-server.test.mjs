@@ -1016,6 +1016,69 @@ index 1111111..2222222 100644
       assert.equal(parsed.resolution?.resolvedThreads[0]?.threadId, 'PRRT_2');
     });
 
+    it('gem_pr_review_threads enforces host diff retrieval when resolve is true, ignoring spoofed diffText', async () => {
+      let diffFetched = false;
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => {
+          diffFetched = true;
+          return 'diff --git a/real.js b/real.js';
+        },
+        fetchReviewThreadsFn: async () => [],
+        evaluateReviewThreadsFn: ({ diffText }) => {
+          assert.equal(diffText, 'diff --git a/real.js b/real.js');
+          return {
+            threads: [],
+            counts: { total: 0, resolved: 0, obsolete: 0, stillOpen: 0, authorReplied: 0, resolvable: 0 },
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 9931,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {
+            prNumber: 55,
+            resolve: true,
+            diffText: 'diff --git a/spoofed.js b/spoofed.js',
+          },
+        },
+      });
+
+      assert.equal(response.id, 9931);
+      assert.ok(!response.result?.isError);
+      assert.equal(diffFetched, true);
+    });
+
+    it('gem_pr_review_threads fails closed when resolve is true and host diff cannot be acquired', async () => {
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => {
+          throw new Error('Host git diff failed');
+        },
+        fetchReviewThreadsFn: async () => [],
+        evaluateReviewThreadsFn: () => ({ threads: [], counts: {} }),
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 9932,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {
+            prNumber: 55,
+            resolve: true,
+          },
+        },
+      });
+
+      assert.equal(response.id, 9932);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /Cannot auto-resolve threads/i);
+    });
+
     it('pr_review_threads alias functions identically to gem_pr_review_threads', async () => {
       let fetchedPr = null;
       const handler = createMcpHandler({

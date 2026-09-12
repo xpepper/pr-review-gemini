@@ -642,6 +642,52 @@ deleted file mode 100644
         assert.ok(calledWith.join(' ').includes('threadId=PRRT_123'));
       });
 
+      it('resolveReviewThread returns failure when GraphQL response contains errors or missing thread data', async () => {
+        // Case 1: GraphQL errors array
+        const mockGhWithError = async () => JSON.stringify({
+          errors: [{ message: 'Could not resolve thread' }],
+        });
+
+        const res1 = await resolveReviewThread({
+          threadId: 'PRRT_err',
+          execGhFn: mockGhWithError,
+        });
+        assert.equal(res1.success, false);
+        assert.equal(res1.isResolved, false);
+        assert.match(res1.error, /Could not resolve thread/);
+
+        // Case 2: Malformed empty data
+        const mockGhEmpty = async () => JSON.stringify({ data: {} });
+        const res2 = await resolveReviewThread({
+          threadId: 'PRRT_empty',
+          execGhFn: mockGhEmpty,
+        });
+        assert.equal(res2.success, false);
+        assert.equal(res2.isResolved, false);
+        assert.match(res2.error, /Malformed response/i);
+      });
+
+      it('replyToReviewThread REST fallback uses databaseId when available', async () => {
+        let postedEndpoint = null;
+        const mockGh = async (args) => {
+          postedEndpoint = args[3];
+          return JSON.stringify({ id: 999 });
+        };
+
+        const res = await replyToReviewThread({
+          threadId: 'numeric_123',
+          commentId: 54321,
+          prNumber: 42,
+          repo: 'owner/repo',
+          body: 'Verified fix via REST',
+          execGhFn: mockGh,
+        });
+
+        assert.equal(res.success, true);
+        assert.equal(res.id, 999);
+        assert.ok(postedEndpoint.includes('comments/54321/replies'));
+      });
+
       it('replyToReviewThread invokes GraphQL addPullRequestReviewThreadReply mutation', async () => {
         let calledWith = null;
         const mockGh = async (args) => {

@@ -773,20 +773,27 @@ export async function fetchReviewThreads({
  * @param {string} [params.incrementalDiffText='']
  * @returns {object}
  */
-export function evaluateReviewThread({ thread, diffText = '', incrementalDiffText = '' } = {}) {
-  const diff = incrementalDiffText || diffText || '';
-  const parsedDiffs = parseUnifiedDiff(diff);
-  const diffByPath = new Map();
-
-  for (const d of parsedDiffs) {
-    if (d.filePath) diffByPath.set(d.filePath, d);
-    if (d.newPath) diffByPath.set(d.newPath, d);
-    if (d.oldPath) diffByPath.set(d.oldPath, d);
+export function evaluateReviewThread({
+  thread,
+  diffText = '',
+  incrementalDiffText = '',
+  diffByPath = null,
+} = {}) {
+  let pathMap = diffByPath;
+  if (!pathMap) {
+    const diff = incrementalDiffText || diffText || '';
+    const parsedDiffs = parseUnifiedDiff(diff);
+    pathMap = new Map();
+    for (const d of parsedDiffs) {
+      if (d.filePath) pathMap.set(d.filePath, d);
+      if (d.newPath) pathMap.set(d.newPath, d);
+      if (d.oldPath) pathMap.set(d.oldPath, d);
+    }
   }
 
   const filePath = thread.path || thread.filePath || '';
   const line = Number(thread.line || 1);
-  const fileDiff = diffByPath.get(filePath);
+  const fileDiff = pathMap.get(filePath);
 
   let verdict = 'STILL_OPEN';
   let status = 'still_open';
@@ -875,9 +882,26 @@ export function evaluateReviewThread({ thread, diffText = '', incrementalDiffTex
  * @param {string} [params.incrementalDiffText='']
  * @returns {{ threads: Array<object>, counts: { total: number, resolved: number, obsolete: number, stillOpen: number, authorReplied: number, resolvable: number } }}
  */
-export function evaluateReviewThreads({ threads = [], diffText = '', incrementalDiffText = '' } = {}) {
+export function evaluateReviewThreads({
+  threads = [],
+  diffText = '',
+  incrementalDiffText = '',
+  diffByPath = null,
+} = {}) {
+  let pathMap = diffByPath;
+  if (!pathMap) {
+    const diff = incrementalDiffText || diffText || '';
+    const parsedDiffs = parseUnifiedDiff(diff);
+    pathMap = new Map();
+    for (const d of parsedDiffs) {
+      if (d.filePath) pathMap.set(d.filePath, d);
+      if (d.newPath) pathMap.set(d.newPath, d);
+      if (d.oldPath) pathMap.set(d.oldPath, d);
+    }
+  }
+
   const evaluated = threads.map((thread) =>
-    evaluateReviewThread({ thread, diffText, incrementalDiffText })
+    evaluateReviewThread({ thread, diffText, incrementalDiffText, diffByPath: pathMap })
   );
 
   const counts = {
@@ -969,7 +993,20 @@ export async function resolveReviewThread({
       { execGhFn, cwd }
     );
     const parsed = JSON.parse(raw);
-    const isResolved = parsed?.data?.resolveReviewThread?.thread?.isResolved ?? true;
+    if (parsed?.errors && Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+      const errMsg = parsed.errors.map((e) => e.message || 'GraphQL error').join('; ');
+      return { success: false, isResolved: false, threadId, error: errMsg };
+    }
+    const thread = parsed?.data?.resolveReviewThread?.thread;
+    if (!thread) {
+      return {
+        success: false,
+        isResolved: false,
+        threadId,
+        error: 'Malformed response from resolveReviewThread',
+      };
+    }
+    const isResolved = Boolean(thread.isResolved);
     return { success: true, isResolved, threadId };
   } catch (err) {
     return { success: false, isResolved: false, threadId, error: err.message };
@@ -1087,7 +1124,7 @@ export async function resolveVerifiedThreads({
     if (reply && t.suggestedReply) {
       await replyToReviewThread({
         threadId: t.threadId,
-        commentId: t.rootComment?.id || t.id,
+        commentId: t.rootComment?.databaseId || t.rootComment?.id || t.id,
         prNumber,
         repo,
         body: t.suggestedReply,

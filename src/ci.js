@@ -515,9 +515,9 @@ export function parseCommentCommand(commentBody) {
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
 
-    if (token === '--help' || token === '-h' || token.toLowerCase() === 'help') {
+    if (token === '--help' || token === '-h' || (i === 0 && token.toLowerCase() === 'help')) {
       help = true;
-    } else if (token === 'resolve' || token === '--resolve') {
+    } else if ((i === 0 && token === 'resolve') || token === '--resolve' || token.startsWith('--resolve=')) {
       action = 'resolve';
     } else if (token === '--quick' || token === '--balanced' || token === '--full' || token === '--deep') {
       mode = token.slice(2);
@@ -982,7 +982,7 @@ export function formatResolveCompletionReply({
   resolvedThreads = [],
   totalThreads = 0,
 } = {}) {
-  const resolved = counts.resolved ?? resolvedThreads.length ?? 0;
+  const resolved = resolvedThreads.length || ((counts.resolved ?? 0) + (counts.obsolete ?? 0));
   const stillOpen = counts.stillOpen ?? 0;
   const authorReplied = counts.authorReplied ?? 0;
   const total = totalThreads || counts.total || (resolved + stillOpen + authorReplied);

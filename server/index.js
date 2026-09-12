@@ -891,11 +891,29 @@ export function createMcpHandler(options = {}) {
               const autoReply = args.autoReply !== false;
               let diffText = args.diffText;
 
-              if (typeof diffText !== 'string' && getPrDiffFn) {
-                try {
-                  diffText = await getPrDiffFn(prNum, { repo, cwd });
-                } catch {
-                  diffText = '';
+              // Host-gated verification: when resolving, diff MUST be fetched directly from host
+              if (shouldResolve || typeof diffText !== 'string') {
+                if (getPrDiffFn) {
+                  try {
+                    diffText = await getPrDiffFn(prNum, { repo, cwd });
+                  } catch (err) {
+                    if (shouldResolve) {
+                      return {
+                        jsonrpc: '2.0',
+                        id,
+                        result: {
+                          isError: true,
+                          content: [
+                            {
+                              type: 'text',
+                              text: `Cannot auto-resolve threads: failed to acquire verified PR diff from host (${err?.message || 'Diff fetch error'})`,
+                            },
+                          ],
+                        },
+                      };
+                    }
+                    diffText = '';
+                  }
                 }
               }
 

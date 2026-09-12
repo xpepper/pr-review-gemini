@@ -1659,6 +1659,13 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(res3.resolve, true);
       });
 
+      it('does not treat bare word resolve in conversational comments as action resolve', () => {
+        const res = parseCommentCommand('/gem-review please resolve this');
+        assert.notEqual(res.action, 'resolve');
+        assert.notEqual(res.resolve, true);
+        assert.ok(res.unrecognizedArgs.includes('please'));
+      });
+
       it('extracts command from multiline comments and handles leading/trailing whitespace', () => {
         const comment = `
 Thanks for the updates! Could you rerun the review?
@@ -2025,6 +2032,20 @@ Hope that helps!
           assert.ok(reply.includes('Thread Resolution Complete'));
           assert.ok(reply.includes('- **Resolved & Closed**: 0'));
           assert.ok(reply.includes('No threads were verified as fixed'));
+        });
+
+        it('includes obsolete threads in resolved count', () => {
+          const reply = formatResolveCompletionReply({
+            totalThreads: 2,
+            counts: { total: 2, resolved: 1, obsolete: 1, stillOpen: 0, authorReplied: 0 },
+            resolvedThreads: [
+              { threadId: 't1', path: 'a.js', line: 1 },
+              { threadId: 't2', path: 'b.js', line: 2 },
+            ],
+          });
+
+          assert.ok(reply.includes('Thread Resolution Complete'));
+          assert.ok(reply.includes('- **Resolved & Closed**: 2'));
         });
       });
 

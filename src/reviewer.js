@@ -648,6 +648,50 @@ async function fetchPrMetadataWithFallback({ prNumber, repo, execGhFn, cwd }) {
 }
 
 /**
+ * Discovers, evaluates, and optionally resolves review comment threads for a PR.
+ */
+async function processPrReviewThreads({
+  prNumber,
+  repo = null,
+  diffText = '',
+  incrementalDiffText = '',
+  resolveThreads = false,
+  autoReplyThreads = true,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  let threads = [];
+  let evaluation = null;
+  let resolution = null;
+
+  try {
+    threads = await fetchReviewThreads({ prNumber, repo, execGhFn, cwd });
+    if (threads && threads.length > 0) {
+      evaluation = evaluateReviewThreads({
+        threads,
+        diffText,
+        incrementalDiffText,
+      });
+
+      if (resolveThreads) {
+        resolution = await resolveVerifiedThreads({
+          threads: evaluation.threads,
+          prNumber,
+          repo,
+          reply: autoReplyThreads !== false,
+          execGhFn,
+          cwd,
+        });
+      }
+    }
+  } catch {
+    // Non-fatal: thread tracking failure should not block core review passes
+  }
+
+  return { threads, evaluation, resolution };
+}
+
+/**
  * Orchestrates an end-to-end multi-lens review for a pull request.
  */
 export async function runReview({
@@ -958,40 +1002,24 @@ export async function runReview({
       });
 
       if (commitRel.relationship === 'same_head') {
-        let sameHeadThreads = [];
-        let sameHeadEval = null;
-        let sameHeadResolution = null;
-
-        try {
-          sameHeadThreads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });
-          if (sameHeadThreads.length > 0) {
-            sameHeadEval = evaluateReviewThreads({
-              threads: sameHeadThreads,
-              diffText: unifiedDiffText,
-            });
-
-            if (resolveThreads) {
-              sameHeadResolution = await resolveVerifiedThreads({
-                threads: sameHeadEval.threads,
-                prNumber: num,
-                repo,
-                reply: autoReplyThreads !== false,
-                execGhFn,
-                cwd,
-              });
-            }
-          }
-        } catch {
-          // non-fatal
-        }
+        const threadResult = await processPrReviewThreads({
+          prNumber: num,
+          repo,
+          diffText: unifiedDiffText,
+          incrementalDiffText: '',
+          resolveThreads,
+          autoReplyThreads,
+          execGhFn,
+          cwd,
+        });
 
         let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${resolvedMode.name}\` [Incremental])
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Status**: ℹ️ PR head commit (${currentHeadSha || 'unknown'}) has not changed since the last review. No new commits to evaluate.`;
 
-        if (sameHeadEval && sameHeadEval.threads.length > 0) {
-          summary += '\n\n' + formatThreadResolutionSummary(sameHeadEval);
+        if (threadResult.evaluation && threadResult.evaluation.threads.length > 0) {
+          summary += '\n\n' + formatThreadResolutionSummary(threadResult.evaluation);
         }
 
         return {
@@ -1023,9 +1051,9 @@ export async function runReview({
                 byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
               },
           guidelines: guidelinesSummary,
-          threads: sameHeadEval?.threads || sameHeadThreads,
-          threadCounts: sameHeadEval?.counts || null,
-          threadResolution: sameHeadResolution,
+          threads: threadResult.evaluation?.threads || threadResult.threads,
+          threadCounts: threadResult.evaluation?.counts || null,
+          threadResolution: threadResult.resolution,
         };
       }
 
@@ -1065,37 +1093,25 @@ export async function runReview({
     }
 
     // 2c. Review thread discovery and discussion state tracking (Increment 20)
-    let reviewThreads = [];
-    let threadEvaluation = null;
-    let threadResolution = null;
-
+    let threadResult = { threads: [], evaluation: null, resolution: null };
     const shouldCheckThreads = checkThreads === true || (checkThreads !== false && (incremental || resolveThreads));
 
     if (num && shouldCheckThreads) {
-      try {
-        reviewThreads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });
-        if (reviewThreads && reviewThreads.length > 0) {
-          threadEvaluation = evaluateReviewThreads({
-            threads: reviewThreads,
-            diffText: unifiedDiffText,
-            incrementalDiffText: incDiff || '',
-          });
-
-          if (resolveThreads) {
-            threadResolution = await resolveVerifiedThreads({
-              threads: threadEvaluation.threads,
-              prNumber: num,
-              repo,
-              reply: autoReplyThreads !== false,
-              execGhFn,
-              cwd,
-            });
-          }
-        }
-      } catch {
-        // Non-fatal: thread tracking failure should not block core review passes
-      }
+      threadResult = await processPrReviewThreads({
+        prNumber: num,
+        repo,
+        diffText: unifiedDiffText,
+        incrementalDiffText: incDiff || '',
+        resolveThreads,
+        autoReplyThreads,
+        execGhFn,
+        cwd,
+      });
     }
+
+    const reviewThreads = threadResult.threads;
+    const threadEvaluation = threadResult.evaluation;
+    const threadResolution = threadResult.resolution;
 
     // 3. Execute review passes across lenses in parallel
     const plan = resolveLensPlan({
