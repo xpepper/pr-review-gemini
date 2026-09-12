@@ -47,11 +47,29 @@ const ALLOWED_GUIDELINES_EXTENSIONS = Object.freeze(['.md', '.markdown', '.txt',
  * hidden credential directories, or unauthorized file extensions.
  *
  * @param {string} filePath - Path to check
+ * @param {string|null} [cwd=null] - Optional workspace root to evaluate relative paths safely
  * @returns {boolean} True if path is safe to load as review guidelines
  */
-export function isSafeGuidelinesPath(filePath) {
+export function isSafeGuidelinesPath(filePath, cwd = null) {
   if (typeof filePath !== 'string' || filePath.trim().length === 0) return false;
-  const normalized = filePath.replace(/\\/g, '/').trim();
+  let candidate = filePath.trim();
+
+  // If cwd is provided and candidate is absolute, evaluate relative to cwd to avoid
+  // false positives on parent directories (e.g. /home/user/token-service/...)
+  if (cwd && path.isAbsolute(candidate)) {
+    try {
+      const rel = path.relative(cwd, candidate);
+      if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+        candidate = rel;
+      } else {
+        candidate = path.basename(candidate);
+      }
+    } catch {
+      candidate = path.basename(candidate);
+    }
+  }
+
+  const normalized = candidate.replace(/\\/g, '/');
 
   for (const pattern of DISALLOWED_SENSITIVE_PATTERNS) {
     if (pattern.test(normalized)) {
@@ -65,6 +83,30 @@ export function isSafeGuidelinesPath(filePath) {
   }
 
   return true;
+}
+
+const GLOBAL_SECTION_PATTERNS = Object.freeze([
+  /^global/i,
+  /^general/i,
+  /^architectur(?:e|al)/i,
+  /^(?:code|coding|codebase)\s+(?:rules|standards|invariants|guidelines)/i,
+  /^repository (?:rules|invariants|guidelines|standards)/i,
+  /^invariants?$/i,
+  /^rules?$/i,
+  /^standards?$/i,
+  /^overview$/i,
+]);
+
+/**
+ * Checks if a section heading designates global repository guidelines.
+ *
+ * @param {string} headingText - Heading title
+ * @returns {boolean} True if heading matches global section patterns
+ */
+export function isGlobalHeading(headingText) {
+  if (!headingText) return false;
+  const clean = headingText.trim();
+  return GLOBAL_SECTION_PATTERNS.some((pattern) => pattern.test(clean));
 }
 
 /**
@@ -115,7 +157,7 @@ export function sanitizeGuidelinesForPrompt(text) {
 export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null } = {}) {
   if (typeof customPath === 'string' && customPath.trim().length > 0) {
     const trimmed = customPath.trim();
-    if (!isSafeGuidelinesPath(trimmed)) {
+    if (!isSafeGuidelinesPath(trimmed, cwd)) {
       return null;
     }
     const candidate = path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
@@ -195,7 +237,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
-  if (typeof filePath === 'string' && !isSafeGuidelinesPath(filePath)) {
+  if (typeof filePath === 'string' && !isSafeGuidelinesPath(filePath, cwd)) {
     return {
       content: '',
       rawContent: '',
@@ -239,6 +281,19 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
+  // Prevent symlink bypass to sensitive files (e.g. symlink pointing to .env)
+  if (!isSafeGuidelinesPath(realRel, realCwd) || !isSafeGuidelinesPath(realTarget, realCwd)) {
+    return {
+      content: '',
+      rawContent: '',
+      byteSize: 0,
+      truncated: false,
+      path: null,
+      relativePath: null,
+      found: false,
+    };
+  }
+
   const relativePath = sanitizeRelativePath(realTarget, realCwd);
 
   const effectiveMaxBytes = Math.min(
@@ -248,8 +303,9 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
 
   let fd;
   try {
-    // Open the fully resolved target directly, preventing symlink swap races
-    fd = fs.openSync(realTarget, 'r');
+    // Open the fully resolved target with O_NOFOLLOW to ensure it cannot be replaced by a symlink
+    const openFlags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+    fd = fs.openSync(realTarget, openFlags);
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) {
       return {
@@ -370,12 +426,34 @@ export function parseGuidelines(markdown) {
   let currentTargetLens = null;
   let currentLensLevel = 0;
   let currentSection = null;
+  let isCurrentGlobal = true; // Initial document preamble is global
 
   for (const line of lines) {
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
     if (headingMatch) {
       const level = headingMatch[1].length;
       const headingText = headingMatch[2].trim();
+
+      // Top-level document title (# ...) is part of document preamble / global
+      if (level === 1) {
+        if (currentSection) {
+          currentSection.content = currentSection.lines.join('\n').trim();
+          delete currentSection.lines;
+          sections.push(currentSection);
+        }
+        currentTargetLens = null;
+        currentLensLevel = 0;
+        isCurrentGlobal = true;
+        currentSection = {
+          heading: headingText,
+          level,
+          lensId: null,
+          isGlobal: true,
+          lines: [],
+        };
+        globalLines.push(line);
+        continue;
+      }
 
       // If already inside a lens section and heading is a nested subsection (level > currentLensLevel),
       // preserve it within the active lens section!
@@ -398,16 +476,21 @@ export function parseGuidelines(markdown) {
       }
 
       const targetLens = extractTargetLensId(headingText);
+      const isGlobal = !targetLens && isGlobalHeading(headingText);
+
       currentTargetLens = targetLens;
       currentLensLevel = targetLens ? level : 0;
+      isCurrentGlobal = isGlobal;
+
       currentSection = {
         heading: headingText,
         level,
         lensId: targetLens,
+        isGlobal,
         lines: [],
       };
 
-      if (!targetLens) {
+      if (isGlobal) {
         globalLines.push(line);
       }
       continue;
@@ -422,7 +505,7 @@ export function parseGuidelines(markdown) {
         lenses[currentTargetLens] = [];
       }
       lenses[currentTargetLens].push(line);
-    } else {
+    } else if (isCurrentGlobal) {
       globalLines.push(line);
     }
   }
@@ -533,7 +616,11 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
     };
   }
 
-  const maxBytes = config?.guidelines?.max_bytes || MAX_GUIDELINES_BYTES;
+  const configuredMax = config?.guidelines?.max_bytes;
+  const maxBytes =
+    typeof configuredMax === 'number' && Number.isFinite(configuredMax) && configuredMax > 0
+      ? Math.min(configuredMax, ABSOLUTE_MAX_GUIDELINES_BYTES)
+      : MAX_GUIDELINES_BYTES;
   const fileResult = readGuidelinesFile(discoveredPath, { maxBytes, cwd });
   const parsed = parseGuidelines(fileResult.content);
 

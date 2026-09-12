@@ -154,7 +154,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - GitHub Actions starter workflow `.github/workflows/gem-pr-review.yml` configured with `issue_comment: [created]` trigger, event-isolated concurrency serialization, and required permissions.
   - Added unit and integration tests across `tests/ci.test.mjs` and `tests/skills.test.mjs` (608 total tests passing across 118 suites with 0 failures).
   - Triaged, addressed, replied to, and resolved all 48 inline review threads on PR #32; squash-merged into `main`.
-- [x] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
+- [x] **Increment 19: Repository Review Guidelines & Domain Invariants (`.github/gem-pr-review.md`)**
   - Enabled repositories to define domain-specific guidelines, architecture invariants, conventions, and review checklists that subagents automatically ingest and enforce during reviews.
   - Implemented automatic file discovery in `src/guidelines.js` checking `.github/gem-pr-review.md`, `.github/review-instructions.md`, or custom configured path via `guidelines.path`.
   - Implemented markdown section-based parsing (`parseGuidelines`) dividing content into global rules (injected into all subagents) and lens/role specific sections (routed to targeted lenses like `## Security`, `## Performance`, `## Lens: Contracts`, `## Role: db`).

@@ -19,7 +19,7 @@
 ---
 
 ## Completed Increments
-- [x] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
+- [x] **Increment 19: Repository Review Guidelines & Domain Invariants (`.github/gem-pr-review.md`)**
   - [x] Implemented guidelines discovery in `src/guidelines.js` with priority order (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path).
   - [x] Implemented markdown section parser (`parseGuidelines`) routing global rules and lens/role specific sections (`## Security`, `## Performance`, `## Lens: <id>`, `## Role: <id>`).
   - [x] Injected prioritized guidelines block into subagent prompts in `src/reviewer.js` and `src/subagents.js`.
