@@ -83,7 +83,7 @@ export function isSafeGuidelinesPath(filePath, cwd = null) {
   }
 
   const ext = path.extname(normalized).toLowerCase();
-  if (ext && !ALLOWED_GUIDELINES_EXTENSIONS.includes(ext)) {
+  if (!ALLOWED_GUIDELINES_EXTENSIONS.includes(ext)) {
     return false;
   }
 
@@ -264,6 +264,17 @@ export function truncateUtf8Safe(input, maxBytes) {
 }
 
 /**
+ * Formats a standardized warning banner when guidelines exceed byte limits.
+ *
+ * @param {number} byteSize - Actual byte size
+ * @param {number} maxBytes - Configured byte limit
+ * @returns {string} Standard warning markdown block
+ */
+export function formatTruncationWarning(byteSize, maxBytes) {
+  return `> ⚠️ [Guidelines truncated: file size (${byteSize} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`;
+}
+
+/**
  * Reads a guideline file with size bounding and relative path resolution.
  *
  * @param {string} filePath - Path to guideline file
@@ -325,7 +336,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       const buf = Buffer.alloc(effectiveMaxBytes);
       const bytesRead = fs.readSync(fd, buf, 0, effectiveMaxBytes, 0);
       const slice = truncateUtf8Safe(buf.subarray(0, bytesRead), effectiveMaxBytes);
-      const warning = `> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${effectiveMaxBytes} bytes]`;
+      const warning = formatTruncationWarning(fileSize, effectiveMaxBytes);
       return {
         content: `${slice}\n\n${warning}`,
         rawContent: slice,

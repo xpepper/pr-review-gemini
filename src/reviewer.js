@@ -105,6 +105,7 @@ import {
   isSafeGuidelinesPath,
   createEmptyGuidelines,
   truncateUtf8Safe,
+  formatTruncationWarning,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -496,7 +497,11 @@ function isFileTouchedInDiff(diffText, relPath) {
   if (!diffText || !relPath) return false;
   const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(
-    `(?:diff --git .*\\b${escaped}\\b|--- (?:a/)?${escaped}\\b|\\+\\+\\+ (?:b/)?${escaped}\\b|rename (?:from|to) ${escaped}\\b|copy (?:from|to) ${escaped}\\b)`
+    `(?:diff --git [^\n]*(?:a|b)/${escaped}(?=[\\s\r\n]|$)|` +
+    `--- (?:a/)?${escaped}(?=[\\s\r\n]|$)|` +
+    `\\+\\+\\+ (?:b/)?${escaped}(?=[\\s\r\n]|$)|` +
+    `rename (?:from|to) ${escaped}(?=[\\s\r\n]|$)|` +
+    `copy (?:from|to) ${escaped}(?=[\\s\r\n]|$))`
   );
   return pattern.test(diffText);
 }
@@ -625,7 +630,25 @@ export async function runReview({
           };
         }
       } catch {
-        // Fallback if metadata query fails
+        // If query including baseRefName fails, attempt fallback with standard metadata fields
+        try {
+          const fallbackArgs = ['pr', 'view', String(num), '--json', 'headRefOid,author,title'];
+          if (repo) fallbackArgs.push('--repo', repo);
+          const rawMeta = await execGhFn(fallbackArgs, { cwd });
+          if (rawMeta && rawMeta.trim()) {
+            const meta = JSON.parse(rawMeta);
+            currentHeadSha = meta.headRefOid || currentHeadSha;
+            prMetadata = {
+              number: num,
+              title: meta.title || `PR #${num}`,
+              author: meta.author?.login || null,
+              headSha: meta.headRefOid,
+              baseRefName: null,
+            };
+          }
+        } catch {
+          // Fallback if metadata query fails completely
+        }
       }
     }
 
@@ -662,7 +685,7 @@ export async function runReview({
             const baseContent = truncateUtf8Safe(rawBaseContent, maxBytes);
             const isTruncated = Buffer.byteLength(rawBaseContent, 'utf8') > maxBytes;
             const truncationWarning = isTruncated
-              ? `> ⚠️ [Guidelines truncated: file size (${Buffer.byteLength(rawBaseContent, 'utf8')} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`
+              ? formatTruncationWarning(Buffer.byteLength(rawBaseContent, 'utf8'), maxBytes)
               : null;
 
             if (activeGuidelines.rawContent !== baseContent || isTruncated) {
