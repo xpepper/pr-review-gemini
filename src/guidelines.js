@@ -242,6 +242,28 @@ function emptyGuidelinesResult(filePath = null, cwd = null) {
 }
 
 /**
+ * Safely truncates a string or buffer to maxBytes without splitting multi-byte UTF-8 sequences.
+ *
+ * @param {string|Buffer} input - String or Buffer to truncate
+ * @param {number} maxBytes - Maximum byte length
+ * @returns {string} Safe UTF-8 string truncated to <= maxBytes
+ */
+export function truncateUtf8Safe(input, maxBytes) {
+  if (typeof input !== 'string' && !Buffer.isBuffer(input)) {
+    return '';
+  }
+  const buf = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
+  if (buf.length <= maxBytes) {
+    return buf.toString('utf8');
+  }
+  let str = buf.subarray(0, maxBytes).toString('utf8');
+  if (str.endsWith('\uFFFD')) {
+    str = str.slice(0, -1);
+  }
+  return str;
+}
+
+/**
  * Reads a guideline file with size bounding and relative path resolution.
  *
  * @param {string} filePath - Path to guideline file
@@ -302,10 +324,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     if (fileSize > effectiveMaxBytes) {
       const buf = Buffer.alloc(effectiveMaxBytes);
       const bytesRead = fs.readSync(fd, buf, 0, effectiveMaxBytes, 0);
-      let slice = buf.subarray(0, bytesRead).toString('utf8');
-      if (slice.endsWith('\uFFFD')) {
-        slice = slice.slice(0, -1);
-      }
+      const slice = truncateUtf8Safe(buf.subarray(0, bytesRead), effectiveMaxBytes);
       const warning = `> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${effectiveMaxBytes} bytes]`;
       return {
         content: `${slice}\n\n${warning}`,
@@ -547,15 +566,45 @@ export function resolveGuidelinesForLens({
   // Budget capping to avoid context blowout across parallel specialist calls
   if (typeof maxPromptBytes === 'number' && maxPromptBytes > 0 && Buffer.byteLength(result, 'utf8') > maxPromptBytes) {
     const budgetWarning = `\n\n> ⚠️ [Guidelines truncated: prompt budget (${Math.round(maxPromptBytes / 1024)} KB) exceeded]`;
-    const buf = Buffer.from(result, 'utf8');
-    let sliced = buf.subarray(0, maxPromptBytes).toString('utf8');
-    if (sliced.endsWith('\uFFFD')) {
-      sliced = sliced.slice(0, -1);
-    }
+    const sliced = truncateUtf8Safe(result, maxPromptBytes);
     result = sliced + budgetWarning;
   }
 
   return result;
+}
+
+/**
+ * Creates a standardized empty guidelines object.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.enabled=true]
+ * @param {boolean} [options.found=false]
+ * @param {string|null} [options.path=null]
+ * @param {string|null} [options.relativePath=null]
+ * @param {boolean} [options.untrustedInPr=false]
+ * @returns {object}
+ */
+export function createEmptyGuidelines({
+  enabled = true,
+  found = false,
+  path = null,
+  relativePath = null,
+  untrustedInPr = false,
+} = {}) {
+  return {
+    enabled,
+    found,
+    path,
+    relativePath,
+    byteSize: 0,
+    truncated: false,
+    truncationWarning: null,
+    rawContent: '',
+    content: '',
+    parsed: { global: '', lenses: {}, sections: [], raw: '' },
+    formatForLens: () => '',
+    ...(untrustedInPr ? { untrustedInPr: true } : {}),
+  };
 }
 
 /**
@@ -570,19 +619,7 @@ export function resolveGuidelinesForLens({
 export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesPath = null } = {}) {
   const isEnabled = config?.guidelines?.enabled !== false;
   if (!isEnabled) {
-    return {
-      enabled: false,
-      found: false,
-      path: null,
-      relativePath: null,
-      byteSize: 0,
-      truncated: false,
-      truncationWarning: null,
-      rawContent: '',
-      content: '',
-      parsed: { global: '', lenses: {}, sections: [], raw: '' },
-      formatForLens: () => '',
-    };
+    return createEmptyGuidelines({ enabled: false, found: false });
   }
 
   const customPath =
@@ -594,19 +631,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
 
   const discoveredPath = discoverGuidelinesFile({ cwd, customPath });
   if (!discoveredPath) {
-    return {
-      enabled: true,
-      found: false,
-      path: null,
-      relativePath: null,
-      byteSize: 0,
-      truncated: false,
-      truncationWarning: null,
-      rawContent: '',
-      content: '',
-      parsed: { global: '', lenses: {}, sections: [], raw: '' },
-      formatForLens: () => '',
-    };
+    return createEmptyGuidelines({ enabled: true, found: false });
   }
 
   const configuredMax = config?.guidelines?.max_bytes;

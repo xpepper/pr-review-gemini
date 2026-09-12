@@ -20,7 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue, parseOption, parseStringOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseOption } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -386,6 +386,11 @@ export async function main() {
       diffText: mock ? MOCK_DIFF : undefined,
       runnerFn,
       execGhFn,
+      execGitFn: (args, opts) =>
+        execFileAsync('git', args, {
+          cwd: opts?.cwd || cwd,
+          maxBuffer: 10 * 1024 * 1024,
+        }).then((r) => r.stdout),
       cwd,
       dryRun: isInteractiveTriage ? true : !shouldPublish,
       publish: isInteractiveTriage ? false : shouldPublish,

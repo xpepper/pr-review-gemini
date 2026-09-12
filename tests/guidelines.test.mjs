@@ -18,6 +18,8 @@ import {
   isSafeGuidelinesPath,
   isGlobalHeading,
   ABSOLUTE_MAX_GUIDELINES_BYTES,
+  truncateUtf8Safe,
+  createEmptyGuidelines,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -611,6 +613,37 @@ Global rules apply everywhere.
       });
       assert.equal(activeGuidelines.found, false);
       assert.equal(guidelinesSummary.found, false);
+    });
+  });
+
+  describe('truncateUtf8Safe & createEmptyGuidelines', () => {
+    it('truncateUtf8Safe truncates cleanly without splitting multi-byte sequences', () => {
+      // 🚀 is 4 bytes: F0 9F 9A 80
+      const emoji = 'Hello 🚀 World';
+      const buf = Buffer.from(emoji, 'utf8');
+      // Splitting inside the emoji: byte 7 or 8
+      const truncated = truncateUtf8Safe(buf, 8);
+      assert.ok(!truncated.includes('\uFFFD'));
+      assert.equal(truncated, 'Hello ');
+
+      // String within limit returns unchanged
+      assert.equal(truncateUtf8Safe('Short string', 100), 'Short string');
+      // Handles invalid inputs
+      assert.equal(truncateUtf8Safe(null, 10), '');
+      assert.equal(truncateUtf8Safe(123, 10), '');
+    });
+
+    it('createEmptyGuidelines produces standardized empty shape', () => {
+      const empty = createEmptyGuidelines({ enabled: true, found: false });
+      assert.equal(empty.enabled, true);
+      assert.equal(empty.found, false);
+      assert.equal(empty.byteSize, 0);
+      assert.equal(empty.rawContent, '');
+      assert.equal(typeof empty.formatForLens, 'function');
+      assert.equal(empty.formatForLens('correctness'), '');
+
+      const untrusted = createEmptyGuidelines({ untrustedInPr: true });
+      assert.equal(untrusted.untrustedInPr, true);
     });
   });
 });

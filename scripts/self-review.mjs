@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue, parseOption, parseStringOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseOption } from '../src/cli.js';
 import {
   installPreCommitHook,
   uninstallPreCommitHook,

@@ -1,4 +1,8 @@
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import {
   getPrDiff,
   parseUnifiedDiff,
@@ -99,6 +103,8 @@ import {
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
   isSafeGuidelinesPath,
+  createEmptyGuidelines,
+  truncateUtf8Safe,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -477,22 +483,47 @@ export function deduplicateFindings(findings) {
   return Array.from(map.values());
 }
 
+async function defaultExecGit(args, options = {}) {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd: options.cwd || process.cwd(),
+    timeout: options.timeout || 30000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return stdout;
+}
+
+function isFileTouchedInDiff(diffText, relPath) {
+  if (!diffText || !relPath) return false;
+  const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `(?:diff --git .*\\b${escaped}\\b|--- (?:a/)?${escaped}\\b|\\+\\+\\+ (?:b/)?${escaped}\\b|rename (?:from|to) ${escaped}\\b|copy (?:from|to) ${escaped}\\b)`
+  );
+  return pattern.test(diffText);
+}
+
 /**
  * Marks guidelines as untrusted and resets active content to prevent prompt injection.
  */
 function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
-  const updated = {
+  const relPath = activeGuidelines?.relativePath || activeGuidelines?.path || null;
+  const updatedGuidelines = {
     ...activeGuidelines,
-    untrustedInPr: true,
-    content: '',
-    rawContent: '',
-    parsed: { global: '', lenses: {}, sections: [] },
-    formatForLens: () => '',
+    ...createEmptyGuidelines({
+      enabled: activeGuidelines?.enabled !== false,
+      found: Boolean(activeGuidelines?.found),
+      path: relPath,
+      relativePath: relPath,
+      untrustedInPr: true,
+    }),
   };
-  if (guidelinesSummary) {
-    guidelinesSummary.untrustedInPr = true;
-  }
-  return updated;
+  const updatedSummary = guidelinesSummary
+    ? {
+        ...guidelinesSummary,
+        untrustedInPr: true,
+        byteSize: 0,
+      }
+    : null;
+  return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
 }
 
 /**
@@ -533,6 +564,10 @@ export async function runReview({
 
   const resolvedConfig = config || (await loadConfig({ cwd }));
   const resolvedMode = resolveReviewMode(mode);
+  const effectiveExecGit =
+    typeof execGitFn === 'function'
+      ? execGitFn
+      : (args, opts) => defaultExecGit(args, { cwd, ...opts });
 
   // Discover and load repository review guidelines
   let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
@@ -597,8 +632,9 @@ export async function runReview({
     // Verify that guidelines are authentic and not tampered with or introduced in the untrusted PR.
     // If the guidelines file was modified or introduced in this PR, reading it from the PR branch
     // would allow an attacker to inject prompt instructions into reviewer subagents.
-    // Ground truth: When confirmed base ref and execGitFn are available, we verify against
-    // `${confirmedBaseRef}:${relGuidelines}` directly. We never fall back to HEAD~1 because in a
+    // Ground truth: When confirmed base ref is available, we verify against `${confirmedBaseRef}:${relGuidelines}`
+    // directly whenever the guidelines file is touched in the diff, or when the caller provided custom diffText
+    // (which could omit the guidelines modification). We never fall back to HEAD~1 because in a
     // multi-commit PR, HEAD~1 is on the PR branch itself.
     const confirmedBaseRef =
       typeof baseRef === 'string' && baseRef.trim()
@@ -607,49 +643,61 @@ export async function runReview({
     const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
 
     if (relGuidelines) {
-      const gitDiffA = `--- a/${relGuidelines}`;
-      const gitDiffB = `+++ b/${relGuidelines}`;
-      const gitDiffHeader = `diff --git a/${relGuidelines} b/${relGuidelines}`;
-      const isModifiedInPr =
-        unifiedDiffText &&
-        (unifiedDiffText.includes(gitDiffHeader) ||
-          unifiedDiffText.includes(gitDiffA) ||
-          unifiedDiffText.includes(gitDiffB));
+      const isModifiedInPr = isFileTouchedInDiff(unifiedDiffText, relGuidelines);
+      const isCustomDiff = diffText !== undefined && diffText !== null;
 
-      if (confirmedBaseRef && execGitFn) {
+      if ((isModifiedInPr || isCustomDiff) && confirmedBaseRef) {
         try {
-          const baseContent = await execGitFn(['show', `${confirmedBaseRef}:${relGuidelines}`], { cwd });
-          if (typeof baseContent === 'string' && baseContent.length > 0) {
-            if (activeGuidelines.rawContent !== baseContent) {
-              // Guidelines file differs from base branch version (modified in PR or locally).
+          const rawBaseContent = await effectiveExecGit(
+            ['show', `${confirmedBaseRef}:${relGuidelines}`],
+            { cwd }
+          );
+          if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
+            const configuredMax = resolvedConfig?.guidelines?.max_bytes;
+            const maxBytes =
+              typeof configuredMax === 'number' && Number.isFinite(configuredMax) && configuredMax > 0
+                ? Math.min(configuredMax, ABSOLUTE_MAX_GUIDELINES_BYTES)
+                : MAX_GUIDELINES_BYTES;
+
+            const baseContent = truncateUtf8Safe(rawBaseContent, maxBytes);
+            const isTruncated = Buffer.byteLength(rawBaseContent, 'utf8') > maxBytes;
+            const truncationWarning = isTruncated
+              ? `> ⚠️ [Guidelines truncated: file size (${Buffer.byteLength(rawBaseContent, 'utf8')} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`
+              : null;
+
+            if (activeGuidelines.rawContent !== baseContent || isTruncated) {
+              // Guidelines file differs from base branch version (modified in PR or locally) or was truncated.
               // Discard untrusted on-disk content and load verified base ref content.
               const parsed = parseGuidelines(baseContent);
               activeGuidelines = {
                 ...activeGuidelines,
                 rawContent: baseContent,
-                content: baseContent,
+                content: truncationWarning ? `${baseContent}\n\n${truncationWarning}` : baseContent,
                 byteSize: Buffer.byteLength(baseContent, 'utf8'),
+                truncated: isTruncated,
+                truncationWarning,
                 parsed,
                 formatForLens: (lensId, opts = {}) =>
-                  resolveGuidelinesForLens({ parsed, lensId, ...opts }),
+                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning, ...opts }),
                 source: 'base_ref',
               };
               if (guidelinesSummary) {
+                Object.assign(guidelinesSummary, createGuidelinesSummary(activeGuidelines));
                 guidelinesSummary.source = 'base_ref';
               }
             }
           } else {
             // Empty base content or unreadable file
-            activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
+            ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
           }
         } catch {
           // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR)
-          activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
+          ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
         }
       } else if (isModifiedInPr) {
-        // Guidelines were modified or introduced in PR diff, but no confirmed base ref or git runner
-        // is available to safely retrieve base branch content. Fail closed to prevent prompt injection.
-        activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
+        // Guidelines were modified or introduced in PR diff, but no confirmed base ref is available
+        // to safely retrieve base branch content. Fail closed to prevent prompt injection.
+        ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
       }
     }
 
@@ -663,7 +711,7 @@ export async function runReview({
       commitRel = await classifyCommitRelationship({
         priorHeadSha: priorData?.latestReview?.commitId || null,
         currentHeadSha,
-        execGitFn,
+        execGitFn: effectiveExecGit,
         cwd,
       });
 
@@ -710,7 +758,7 @@ export async function runReview({
           priorHeadSha: commitRel.priorHeadSha,
           currentHeadSha,
           repo,
-          execGitFn,
+          execGitFn: effectiveExecGit,
           execGhFn,
           cwd,
         });
