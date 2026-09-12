@@ -3,10 +3,10 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (Increment 19 merged, clean working tree)
-* **Active PR**: None (PR #33 merged to `main`)
-* **Test Suite**: `npm test` runs and passes (743 tests across 132 suites, 0 failures)
-* **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
+* **Current Branch**: `main` (Increment 20 merged, clean working tree)
+* **Active PR**: None (PR #37 merged to `main`)
+* **Test Suite**: `npm test` runs and passes (775 tests across 141 suites, 0 failures)
+* **Manifests**: `npm run version:check` verified synchronized at `0.2.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -32,37 +32,33 @@
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
   - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (Merged, commit `7f3af22`)
   - PR #33 (Increment 19): `feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)` (Merged)
+  - PR #37 (Increment 20): `feat(threads): PR review thread conversation replies and automated resolution` (Merged)
 
 ---
 
-## Status: READY_FOR_INCREMENT_20 — PR Review Thread Conversation Replies & Automated Resolution
+## Status: READY_FOR_INCREMENT_21 — Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
 
-Increment 19 has been fully delivered, verified, dogfooded on GitHub PR #33, and merged into `main`:
-- `src/guidelines.js`: Guidelines discovery (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path), markdown section parser (global rules vs lens/role sections), prompt injector, 64 KB truncation safety, tamper-protection against PR modifications, and zero machine path exposure.
-- `src/config.js`: Layered configuration for `guidelines: { enabled, path, max_bytes }` with aliases and sanitization.
-- `src/reviewer.js` & `src/subagents.js`: Prompt injection into parallel specialist subagents under `## Repository Review Guidelines & Invariants:`.
-- `src/self-review.js`: Automated discovery, head file validation, and inclusion in one-shot self-review summaries.
-- `src/cache.js`: Targeted `headSha` cache invalidation, separating commit-specific lookup misses from live PR head staleness to safeguard concurrent reviews.
-- `src/cli.js`: Centralized common review CLI option parsing (`parseCommonReviewOptions`) consumed by `dogfood-review.mjs` and `self-review.mjs`.
-- `src/ci.js`, `scripts/ci-action.mjs`, `action.yml`: `guidelines_path` CI input and runner parameter.
-- `server/index.js`: `gem_pr_review_guidelines` and `pr_review_guidelines` MCP inspection tools, with guidelines authenticity preservation in `gem_pr_review_subagents` and safe path validation in `gem_self_review`.
-- `.github/gem-pr-review.md`: In-repo guidelines and project memory active across self-review and PR reviews.
-- Comprehensive test coverage: 743 passing tests across 132 test suites.
+Increment 20 has been fully delivered, verified, dogfooded on GitHub PR #37 across 3 review passes, and merged into `main`:
+- `src/prior.js`: Review thread discovery via GraphQL/REST (`fetchReviewThreads`), author reply and turn tracking, multi-turn conversational evaluation against latest diff (`evaluateReviewThread`, `evaluateReviewThreads`), GraphQL automated thread resolution (`resolveReviewThread`), follow-up thread replies (`replyToReviewThread`), and batch verified resolution orchestrator (`resolveVerifiedThreads`).
+- `src/reviewer.js`: Integrated thread evaluation and optional live resolution (`resolveThreads`, `autoReplyThreads`, `dryRun`) into PR review flow and incremental re-reviews with concise thread status summaries.
+- `src/ci.js` & `scripts/ci-action.mjs`: Added `/gem-review resolve` comment command workflow with reactive status lifecycle (🚀 in progress, 👍 verified resolution completion, 😕 error handling), autorun authorization checks, and safe error propagation.
+- `server/index.js`: Added MCP tools `gem_pr_review_threads` and alias `pr_review_threads` with host-gated PR diff verification requirements.
+- `scripts/dogfood-review.mjs` & `scripts/dogfood-pr.mjs`: Added `--resolve-threads` and `--no-reply-threads` CLI options.
+- Comprehensive test suite: 775 passing tests across 141 test suites.
 
-### Next Steps for Increment 20:
-1. Create feature branch: `git checkout -b feat/review-threads`
-2. Implement review thread discovery and discussion state tracker in `src/prior.js` / `src/reviewer.js`:
-   - Fetch unresolved inline PR review comment threads (`gh api graphql` / REST pull request review threads).
-   - Track author replies and conversation turns on individual finding threads.
-3. Support conversational multi-turn replies to inline review findings:
-   - Evaluate author replies against the latest code diff to verify whether the concern was addressed, refuted, or remains unresolved.
-   - Post follow-up replies on existing threads rather than opening new duplicated comments.
-4. Automate thread resolution verification against head diff:
-   - Verify code fixes against original finding hunks.
-   - Resolve GitHub review threads via GraphQL mutation (`resolveReviewThread`) when verified.
-5. Support `/gem-review resolve` comment command trigger in `src/ci.js`.
-6. Add unit and integration tests across `tests/prior.test.mjs`, `tests/reviewer.test.mjs`, `tests/ci.test.mjs`.
-7. Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
+### Next Steps for Increment 21:
+1. Create feature branch: `git checkout -b feat/architecture-diagrams`
+2. Implement architecture impact analyzer subagent / lens in `src/architecture.js` or `src/reviewer.js`:
+   - Inspect PR changes across module boundaries, subsystem interactions, and public APIs.
+   - Synthesize a concise high-level architecture walkthrough explaining system-level changes.
+3. Implement Mermaid sequence and component diagram generation:
+   - Generate valid Mermaid syntax (`sequenceDiagram`, `flowchart TD`/`LR`, `graph TD`) visualizing message flows and component relationships modified by the PR.
+   - Sanitize labels to prevent syntax rendering errors (escape quotes, brackets, avoid HTML tags).
+4. Integrate into review output:
+   - Include architecture summary and Mermaid diagrams in PR review markdown output when mode is `--full` or `--deep` (or when `--architecture` flag is specified).
+   - Add MCP tool `gem_pr_review_architecture`.
+5. Add unit and integration tests across `tests/architecture.test.mjs`, `tests/reviewer.test.mjs`, `tests/skills.test.mjs`.
+6. Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
 
 ---
 

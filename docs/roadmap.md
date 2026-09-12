@@ -164,8 +164,14 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Bounded reading to 64 KB (`guidelines.max_bytes`) with warning notice injection on truncation to prevent prompt overflow.
   - Enforced strict repository-relative path sanitization to guarantee zero exposure of absolute machine paths.
   - Added comprehensive test suites across `tests/guidelines.test.mjs`, `tests/reviewer.test.mjs`, `tests/subagents.test.mjs`, `tests/self-review.test.mjs`, `tests/ci.test.mjs`, `tests/mcp-server.test.mjs`, `tests/cli.test.mjs`, and `tests/skills.test.mjs`.
-- [ ] **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution**
-  - Conversational multi-turn verification when authors reply to inline findings; automatic GitHub review thread resolution upon fix verification.
+- [x] **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution (#37)**
+  - Review thread discovery and discussion state tracker in `src/prior.js` (`fetchReviewThreads`, `evaluateReviewThread`, `evaluateReviewThreads`).
+  - GraphQL review thread resolution (`resolveReviewThread`) and reply dispatching (`replyToReviewThread`, `resolveVerifiedThreads`).
+  - Conversational multi-turn tracking: author replies, turn counts, discussion states (`unresolved`, `author_replied`, `fix_pending`, `closed`).
+  - Automated thread verification against latest head diff and GraphQL `resolveReviewThread` mutations.
+  - Comment command trigger `/gem-review resolve` in `src/ci.js` and `scripts/ci-action.mjs` with visual reaction lifecycles (🚀, 👍, 😕).
+  - MCP inspection and resolution tools `gem_pr_review_threads` and alias `pr_review_threads` in `server/index.js` with host-gated diff safety checks.
+  - Dogfood review loop on PR #37 verified clean across 3 review passes and squash-merged to `main`.
 - [ ] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
   - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**

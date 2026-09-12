@@ -6,19 +6,27 @@
 
 ---
 
-## Active Mission: Increment 20 — PR Review Thread Conversation Replies & Automated Resolution
-- [ ] Implement review thread discovery and discussion state tracker in `src/prior.js` / `src/reviewer.js`
-- [ ] Support conversational multi-turn replies to inline review findings
-- [ ] Automate thread resolution verification against head diff
-- [ ] Support `/gem-review resolve` and auto-close verified comment threads
+## Active Mission: Increment 21 — Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
+- [ ] Implement architecture analysis specialist subagent / prompt mode in `src/reviewer.js`
+- [ ] Generate high-level system impact narrative and affected component overview
+- [ ] Generate GitHub Flavored Markdown Mermaid sequence diagrams and component diagrams for complex PRs
+- [ ] Expose MCP tool and CLI flag (`--architecture`)
+- [ ] Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`
 
-### Future Capabilities (Post-Increment 20 Roadmap)
-- [ ] Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
+### Future Capabilities (Post-Increment 21 Roadmap)
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
 
 ## Completed Increments
+- [x] **Increment 20 / PR #37: PR Review Thread Conversation Replies & Automated Resolution**
+  - [x] Implemented review thread discovery and discussion state tracker in `src/prior.js` (`fetchReviewThreads`, `evaluateReviewThread`, `evaluateReviewThreads`).
+  - [x] Supported conversational multi-turn replies and discussion states (`unresolved`, `author_replied`, `fix_pending`, `closed`).
+  - [x] Implemented automated thread resolution verification against head diff and GraphQL mutation `resolveReviewThread`.
+  - [x] Implemented `/gem-review resolve` comment command trigger in `src/ci.js` and `scripts/ci-action.mjs` with reaction lifecycles.
+  - [x] Added MCP tools `gem_pr_review_threads` and `pr_review_threads` in `server/index.js` with host-gated diff safety gates.
+  - [x] Added unit and integration tests across `tests/prior.test.mjs`, `tests/reviewer.test.mjs`, `tests/ci.test.mjs`, and `tests/mcp-server.test.mjs` (775 tests passing across 141 suites).
+  - [x] Verified via dogfood reviewer on PR #37 with 0 findings across 3 review passes and squash-merged to `main`.
 - [x] **Increment 19 / PR #33: Repository Review Guidelines & Domain Invariants (`.github/gem-pr-review.md`)**
   - [x] Implemented guidelines discovery in `src/guidelines.js` with priority order (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path).
   - [x] Implemented markdown section parser (`parseGuidelines`) routing global rules and lens/role specific sections (`## Security`, `## Performance`, `## Lens: <id>`, `## Role: <id>`).
