@@ -25,7 +25,7 @@ import {
   sanitizeCustomRoles,
 } from './config.js';
 import { parseMarkdownFindings } from './publish.js';
-import { isLargeDiff, createFileBackedDiff } from './diff.js';
+import { isLargeDiff, createFileBackedDiff, createHostSupervisedDiffReader } from './diff.js';
 import { formatGuidelinesForLens } from './guidelines.js';
 
 const execFileAsync = promisify(execFile);
@@ -544,8 +544,18 @@ export async function dispatchSubagentsParallel({
         repoGuidelines: lensGuidelines,
       });
 
-      const sdkTools = activeTransport?.reader
-        ? buildSdkReaderTools(activeTransport.reader)
+      const lensReader = typeof activeTransport?.createReader === 'function'
+        ? activeTransport.createReader()
+        : (activeTransport?.reader
+            ? createHostSupervisedDiffReader({
+                diffFilePath: activeTransport.diffFilePath,
+                diffText: activeTransport.diffText || (typeof diffText === 'string' ? diffText : ''),
+                manifest: activeTransport.manifest,
+              })
+            : null);
+
+      const sdkTools = lensReader
+        ? buildSdkReaderTools(lensReader)
         : [];
 
       const primaryModel = item.model;
@@ -572,7 +582,7 @@ export async function dispatchSubagentsParallel({
             tier: item.tier,
             model: candidateModel,
             reasoningEffort: item.reasoningEffort,
-            diffTransport: activeTransport,
+            diffTransport: activeTransport ? { ...activeTransport, reader: lensReader } : null,
             tools: sdkTools,
             isFallback,
             attemptIndex: i,

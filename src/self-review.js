@@ -365,7 +365,7 @@ export async function runSelfReview(options = {}) {
 
   try {
     if (isLarge) {
-      fileBackedDiff = await createFileBackedDiff({ diffText });
+      fileBackedDiff = await createFileBackedDiff(diffText);
       diffTransport = {
         isLarge: true,
         byteSize: fileBackedDiff.byteSize,
@@ -373,6 +373,8 @@ export async function runSelfReview(options = {}) {
         formattedManifest: fileBackedDiff.formattedManifest,
         manifest: fileBackedDiff.manifest,
         reader: fileBackedDiff.reader,
+        createReader: fileBackedDiff.createReader,
+        cleanup: fileBackedDiff.cleanup,
       };
     }
 

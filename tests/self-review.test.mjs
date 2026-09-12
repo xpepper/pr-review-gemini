@@ -1011,6 +1011,30 @@ deleted file mode 100644
         fs.rmSync(tempCwd, { recursive: true, force: true });
       }
     });
+
+    it('creates file-backed diff transport with valid content and byteSize for large diffs', async () => {
+      const largeDiff = 'diff --git a/huge.js b/huge.js\n' + '+const data = 123;\n'.repeat(15000);
+      let capturedTools = null;
+      let capturedTransport = null;
+
+      const runnerFn = async ({ tools, diffTransport }) => {
+        capturedTools = tools;
+        capturedTransport = diffTransport;
+        return { output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' };
+      };
+
+      const result = await runSelfReview({
+        diffText: largeDiff,
+        runnerFn,
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.ok(capturedTransport, 'diffTransport should be passed to runner');
+      assert.equal(capturedTransport.isLarge, true);
+      assert.ok(capturedTransport.byteSize > 200 * 1024, `byteSize (${capturedTransport.byteSize}) should exceed 200 KB`);
+      assert.ok(Array.isArray(capturedTools));
+      assert.equal(capturedTools.length, 3);
+    });
   });
 });
 

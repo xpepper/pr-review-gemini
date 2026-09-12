@@ -888,7 +888,9 @@ export function createHostSupervisedDiffReader(options = {}) {
  * @returns {Promise<object>}
  */
 export async function createFileBackedDiff(diffText, options = {}) {
-  const text = typeof diffText === 'string' ? diffText : '';
+  const text = typeof diffText === 'string'
+    ? diffText
+    : (typeof diffText?.diffText === 'string' ? diffText.diffText : '');
   const byteSize = Buffer.byteLength(text, 'utf8');
   const threshold = options.threshold ?? LARGE_DIFF_THRESHOLD_BYTES;
   const isLarge = byteSize > threshold;
@@ -906,14 +908,17 @@ export async function createFileBackedDiff(diffText, options = {}) {
   const manifest = generateDiffManifest(text, { threshold });
   const formattedManifest = formatDiffManifest(manifest);
 
-  const reader = createHostSupervisedDiffReader({
-    diffFilePath,
-    diffText: text,
-    manifest,
-    maxReads: options.maxReads ?? MAX_SUPERVISED_READS,
-    maxBudgetBytes: options.maxBudgetBytes ?? DEFAULT_SUPERVISED_BUDGET_BYTES,
-    maxBudgetCap: options.maxBudgetCap ?? MAX_SUPERVISED_BUDGET_BYTES,
-  });
+  const createReader = () =>
+    createHostSupervisedDiffReader({
+      diffFilePath,
+      diffText: text,
+      manifest,
+      maxReads: options.maxReads ?? MAX_SUPERVISED_READS,
+      maxBudgetBytes: options.maxBudgetBytes ?? DEFAULT_SUPERVISED_BUDGET_BYTES,
+      maxBudgetCap: options.maxBudgetCap ?? MAX_SUPERVISED_BUDGET_BYTES,
+    });
+
+  const reader = createReader();
 
   const cleanup = async () => {
     try {
@@ -931,6 +936,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
     manifest,
     formattedManifest,
     reader,
+    createReader,
     cleanup,
   };
 }

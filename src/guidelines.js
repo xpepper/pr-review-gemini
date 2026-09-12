@@ -149,6 +149,23 @@ export function sanitizeGuidelinesForPrompt(text) {
 }
 
 /**
+ * Sanitizes user-supplied custom review instructions to prevent prompt injection
+ * and delimiter breakouts when embedding custom instructions into reviewer LLM prompts.
+ *
+ * @param {string} text - Raw instruction text
+ * @returns {string} Sanitized instruction text safe for prompt injection
+ */
+export function sanitizeCustomInstructionsForPrompt(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/<\s*\/?\s*untrusted_custom_instructions[^>]*>/gi, (match) =>
+      match.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    )
+    .replace(/<<<\s*PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_PR_REVIEW_JSON]')
+    .replace(/<<<\s*END_PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_END_PR_REVIEW_JSON]');
+}
+
+/**
  * Discovers a review guidelines file in the given workspace.
  *
  * @param {object} [options]
