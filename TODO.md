@@ -14,6 +14,12 @@
 - [ ] Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`
 
 ### Future Capabilities (Post-Increment 21 Roadmap)
+- [ ] **Increment 22: Safe Verbose Review Diagnostics**
+  - Add `--verbose` to the PR and self-review CLI runners, with propagation through the dogfood wrapper and CI command dispatcher where appropriate.
+  - Emit phase timing, resolved mode/roles/model selection (including fallback attempts), diff metadata, guideline-resolution status, cache activity, per-lens completion/error status, finding classification, and host-gated publication decisions.
+  - Keep normal output concise and ensure verbose output never includes prompt/diff bodies, credentials, tokens, absolute machine paths, or unredacted environment data.
+  - Add machine-readable diagnostic events or a `--json`-compatible diagnostics field so failed remote reviews can be investigated without parsing terminal prose.
+  - Cover flag parsing, redaction, success, partial subagent failure, model fallback, stale-head rejection, and publish/demotion telemetry with automated tests.
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
@@ -200,4 +206,3 @@
 - [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
 - [x] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
 - [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
-

@@ -174,6 +174,11 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Dogfood review loop on PR #37 verified clean across 3 review passes and squash-merged to `main`.
 - [ ] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
   - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
+- [ ] **Increment 22: Safe Verbose Review Diagnostics**
+  - Add an opt-in `--verbose` diagnostic mode for `dogfood-review`, `dogfood-pr`, and `self-review`; propagate it through supported CI comment commands.
+  - Report structured, redacted execution telemetry: phase timing; selected mode, roles, and models; fallback attempts; diff and guideline metadata; cache outcomes; per-lens lifecycle/errors; finding anchoring/demotion; and publication/stale-head decisions.
+  - Preserve concise default output and never emit prompt or diff contents, secrets, authentication material, absolute machine paths, or environment values.
+  - Expose diagnostics in a machine-readable form compatible with JSON consumers, and test normal, degraded, and rejected execution paths.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
@@ -194,6 +199,5 @@ GitHub surfaces the notification:
 - [ ] Check the checkbox *"Publish this Action to the GitHub Marketplace"* in the release draft modal.
 - [ ] Confirm primary category (`Code quality`) and optional secondary category (`Continuous integration`).
 - [ ] Publish release to make `xpepper/pr-review-gemini` discoverable across the GitHub Actions Marketplace.
-
 
 
