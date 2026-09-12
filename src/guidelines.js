@@ -158,7 +158,7 @@ export function sanitizeGuidelinesForPrompt(text) {
 export function sanitizeCustomInstructionsForPrompt(text) {
   if (typeof text !== 'string') return '';
   return text
-    .replace(/<\s*\/?\s*untrusted_custom_instructions[^>]*>/gi, (match) =>
+    .replace(/<\s*\/?\s*untrusted_custom(?:_role)?_instructions[^>]*>/gi, (match) =>
       match.replace(/</g, '&lt;').replace(/>/g, '&gt;')
     )
     .replace(/<<<\s*PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_PR_REVIEW_JSON]')

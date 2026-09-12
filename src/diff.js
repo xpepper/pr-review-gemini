@@ -627,13 +627,14 @@ export function createHostSupervisedDiffReader(options = {}) {
     diffFilePath = null,
     diffText = '',
     manifest: providedManifest = null,
+    parsedFiles: providedParsedFiles = null,
     maxReads = MAX_SUPERVISED_READS,
     maxBudgetBytes = DEFAULT_SUPERVISED_BUDGET_BYTES,
     maxBudgetCap = MAX_SUPERVISED_BUDGET_BYTES,
   } = options;
 
-  const rawDiff = diffText || (diffFilePath ? fs.readFileSync(diffFilePath, 'utf8') : '');
-  const parsedFiles = parseUnifiedDiff(rawDiff);
+  const rawDiff = diffText || (!providedParsedFiles && diffFilePath ? fs.readFileSync(diffFilePath, 'utf8') : '');
+  const parsedFiles = Array.isArray(providedParsedFiles) ? providedParsedFiles : parseUnifiedDiff(rawDiff);
   const manifest = providedManifest || generateDiffManifest(parsedFiles, { threshold: LARGE_DIFF_THRESHOLD_BYTES });
 
   const effectiveBudget = Math.min(
@@ -905,7 +906,8 @@ export async function createFileBackedDiff(diffText, options = {}) {
     throw err;
   }
 
-  const manifest = generateDiffManifest(text, { threshold });
+  const parsedFiles = parseUnifiedDiff(text);
+  const manifest = generateDiffManifest(parsedFiles, { threshold });
   const formattedManifest = formatDiffManifest(manifest);
 
   const createReader = () =>
@@ -913,6 +915,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
       diffFilePath,
       diffText: text,
       manifest,
+      parsedFiles,
       maxReads: options.maxReads ?? MAX_SUPERVISED_READS,
       maxBudgetBytes: options.maxBudgetBytes ?? DEFAULT_SUPERVISED_BUDGET_BYTES,
       maxBudgetCap: options.maxBudgetCap ?? MAX_SUPERVISED_BUDGET_BYTES,
@@ -935,6 +938,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
     isLarge,
     manifest,
     formattedManifest,
+    parsedFiles,
     reader,
     createReader,
     cleanup,

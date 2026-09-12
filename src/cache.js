@@ -4,8 +4,6 @@ import { filterFindings } from './selection.js';
 import { publishReview } from './publish.js';
 import { getPrDiff } from './diff.js';
 
-const DEFAULT_CACHE_DIR = path.join(process.cwd(), '.gem-pr-cache');
-
 const SEVERITY_RANK = Object.freeze({
   P0: 0,
   P1: 1,
@@ -37,10 +35,16 @@ export function getCacheKey(prNumber, headSha, repo) {
  * Resolves the cache directory path.
  *
  * @param {Object} [options]
+ * @param {string} [options.cacheDir]
+ * @param {string} [options.cwd]
  * @returns {string}
  */
-function resolveCacheDir(options = {}) {
-  return options.cacheDir || DEFAULT_CACHE_DIR;
+export function resolveCacheDir(options = {}) {
+  if (options.cacheDir && typeof options.cacheDir === 'string') {
+    return options.cacheDir;
+  }
+  const root = options.cwd && typeof options.cwd === 'string' ? options.cwd : process.cwd();
+  return path.join(root, '.gem-pr-cache');
 }
 
 /**

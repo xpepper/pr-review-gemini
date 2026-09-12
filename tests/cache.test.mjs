@@ -11,6 +11,7 @@ import {
   clearAllCaches,
   publishCachedReview,
   getCacheKey,
+  resolveCacheDir,
 } from '../src/cache.js';
 
 describe('Review Cache (Publish-Later & Freshness Invalidation)', () => {
@@ -292,6 +293,20 @@ index 0000000..1111111 100644
           }),
         /stale/i
       );
+    });
+  });
+
+  describe('resolveCacheDir', () => {
+    it('resolves cache directory relative to provided cwd when cacheDir is omitted', () => {
+      const customCwd = '/custom/worktree/path';
+      const resolved = resolveCacheDir({ cwd: customCwd });
+      assert.equal(resolved, path.join(customCwd, '.gem-pr-cache'));
+    });
+
+    it('prefers explicit cacheDir over cwd', () => {
+      const explicit = '/explicit/cache';
+      const resolved = resolveCacheDir({ cacheDir: explicit, cwd: '/custom/worktree/path' });
+      assert.equal(resolved, explicit);
     });
   });
 });
