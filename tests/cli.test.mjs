@@ -28,6 +28,8 @@ import {
   atomicWriteFile,
   hasActiveFailClosedHookCommandInLines,
   readOptionValue,
+  parseStringOption,
+  parseOption,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
@@ -1463,6 +1465,19 @@ echo "prior test"
       assert.equal(parsed.showHelp, true);
       const parsedVer = parseCliArgs(['--version']);
       assert.equal(parsedVer.showVersion, true);
+
+      const parsedGuidelines = parseCliArgs(['--guidelines', 'custom-guidelines.md']);
+      assert.equal(parsedGuidelines.guidelinesPath, 'custom-guidelines.md');
+      const parsedGuidelinesEq = parseCliArgs(['--guidelines=custom-guidelines.md']);
+      assert.equal(parsedGuidelinesEq.guidelinesPath, 'custom-guidelines.md');
+    });
+
+    it('parses --guidelines in self-review.mjs parseCliArgs', async () => {
+      const { parseCliArgs } = await import('../scripts/self-review.mjs');
+      const parsed1 = parseCliArgs(['--guidelines', 'custom.md']);
+      assert.equal(parsed1.guidelinesPath, 'custom.md');
+      const parsed2 = parseCliArgs(['--guidelines=custom.md']);
+      assert.equal(parsed2.guidelinesPath, 'custom.md');
     });
 
     it('readOptionValue extracts argument value and throws on missing or flag-like values', () => {
@@ -1472,6 +1487,29 @@ echo "prior test"
 
       assert.throws(() => readOptionValue(['--mode'], 0, '--mode'), /Option --mode requires an argument value/);
       assert.throws(() => readOptionValue(['--mode', '--other'], 0, '--mode'), /Option --mode requires an argument value/);
+    });
+
+    it('parseStringOption parses both --flag=value and --flag value forms', () => {
+      const inlineRes = parseStringOption(['--guidelines=rules.md'], 0, '--guidelines');
+      assert.equal(inlineRes.matched, true);
+      assert.equal(inlineRes.value, 'rules.md');
+      assert.equal(inlineRes.nextIndex, 0);
+
+      const splitRes = parseStringOption(['--guidelines', 'rules.md'], 0, '--guidelines');
+      assert.equal(splitRes.matched, true);
+      assert.equal(splitRes.value, 'rules.md');
+      assert.equal(splitRes.nextIndex, 1);
+
+      const unmatched = parseStringOption(['--other', 'rules.md'], 0, '--guidelines');
+      assert.equal(unmatched.matched, false);
+    });
+
+    it('parseOption is an alias of parseStringOption and parses options identically', () => {
+      assert.equal(parseOption, parseStringOption);
+      const res = parseOption(['--mode=quick'], 0, '--mode');
+      assert.equal(res.matched, true);
+      assert.equal(res.value, 'quick');
+      assert.equal(res.nextIndex, 0);
     });
   });
 

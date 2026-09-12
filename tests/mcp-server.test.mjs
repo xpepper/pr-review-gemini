@@ -551,6 +551,128 @@ index 1111111..2222222 100644
       assert.equal(response.result.isError, true);
       assert.match(response.result.content[0].text, /Unknown tool/);
     });
+
+    it('handles gem_pr_review_guidelines and pr_review_guidelines inspection tools (Increment 19)', async () => {
+      const mockLoadGuidelines = () => ({
+        enabled: true,
+        found: true,
+        path: '/mock/.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
+        byteSize: 128,
+        truncated: false,
+        rawContent: '# Mock Rules',
+        parsed: { global: 'Mock Rules', lenses: {}, sections: [] },
+      });
+
+      const handler = createMcpHandler({
+        loadGuidelinesFn: mockLoadGuidelines,
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 80,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_guidelines',
+          arguments: {},
+        },
+      });
+
+      assert.equal(response.id, 80);
+      assert.ok(response.result?.content?.[0]?.text);
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.equal(parsed.enabled, true);
+      assert.equal(parsed.found, true);
+      assert.equal(parsed.relativePath, '.github/gem-pr-review.md');
+      assert.equal(parsed.byteSize, 128);
+      assert.equal(parsed.untrusted, true);
+      assert.match(parsed.notice, /UNTRUSTED_REPOSITORY_CONTENT/);
+    });
+
+    it('rejects arbitrary unconfigured guidelines paths outside .github/ in MCP inspector', async () => {
+      const handler = createMcpHandler();
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 801,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_guidelines',
+          arguments: {
+            path: 'docs/sensitive-architecture.md',
+          },
+        },
+      });
+
+      assert.equal(response.id, 801);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /Custom guidelines path must reside in \.github\//);
+
+      // Rejects unsafe sensitive files
+      const envResponse = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 802,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_guidelines',
+          arguments: {
+            guidelinesPath: '.env',
+          },
+        },
+      });
+
+      assert.equal(envResponse.id, 802);
+      assert.equal(envResponse.result?.isError, true);
+      assert.match(envResponse.result.content[0].text, /Custom guidelines path must be a safe markdown file/);
+    });
+
+    it('passes guidelinesPath to runReviewFn and runSelfReviewFn in MCP handlers (Increment 19)', async () => {
+      let passedReviewArgs = null;
+      let passedSelfReviewArgs = null;
+
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => 'diff --git a/app.js b/app.js\n+test',
+        runReviewFn: async (args) => {
+          passedReviewArgs = args;
+          return { prNumber: args.prNumber, findings: [] };
+        },
+        runSelfReviewFn: async (args) => {
+          passedSelfReviewArgs = args;
+          return { status: 'passed', findings: [] };
+        },
+      });
+
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 81,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_subagents',
+          arguments: {
+            prNumber: 99,
+            guidelinesPath: 'custom-guidelines.md',
+          },
+        },
+      });
+
+      assert.ok(passedReviewArgs);
+      assert.equal(passedReviewArgs.guidelinesPath, 'custom-guidelines.md');
+
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 82,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            guidelinesPath: 'self-guidelines.md',
+          },
+        },
+      });
+
+      assert.ok(passedSelfReviewArgs);
+      assert.equal(passedSelfReviewArgs.guidelinesPath, 'self-guidelines.md');
+    });
   });
 
   describe('startMcpServer stream processing', () => {

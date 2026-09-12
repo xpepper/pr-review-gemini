@@ -32,6 +32,9 @@ inputs:
   select:
     description: "Finding filter or selection specification (e.g. 'p0,p1', 'min:p2', '1,3')"
     required: false
+  guidelines_path:
+    description: 'Custom path to repository review guidelines file (defaults to .github/gem-pr-review.md)'
+    required: false
 
 outputs:
   verdict:
@@ -64,6 +67,7 @@ runs:
         INPUT_INCREMENTAL: ${{ inputs.incremental }}
         INPUT_ACTION: ${{ inputs.action }}
         INPUT_SELECT: ${{ inputs.select }}
+        INPUT_GUIDELINES_PATH: ${{ inputs.guidelines_path }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |

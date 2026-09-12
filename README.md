@@ -93,6 +93,7 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
 | `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
 | `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
+| `--guidelines <path>` | Custom guidelines file path (defaults to `.github/gem-pr-review.md`) |
 | `--repo <owner/repo>` | Target repository (defaults to current git origin) |
 | `--model <model>` | Override the default model used by review subagents |
 | `--mock` | Use synthetic runner for rapid offline testing without inference |
@@ -309,6 +310,11 @@ Configuration is optional and works out of the box with sensible defaults. You c
       "reasoningEffort": "low"
     }
   },
+  "guidelines": {
+    "enabled": true,
+    "path": ".github/gem-pr-review.md",
+    "max_bytes": 65536
+  },
   "verification": {
     "defaultProfile": "node-test",
     "profiles": {
@@ -325,6 +331,10 @@ Configuration is optional and works out of the box with sensible defaults. You c
 ### Configuration Options & Precedence
 
 - **`fallback_to_auto`**: When set to `true` (default: `true`), automatically falls back to model `'auto'` if configured primary or fallback models are not found, unentitled, or unavailable in the host environment.
+- **`guidelines`**: Repository review guidelines configuration. Controls automatic ingestion of project-specific review instructions and invariants (`.github/gem-pr-review.md`).
+  - `enabled`: Set to `false` to disable guideline discovery and prompt injection (default: `true`).
+  - `path`: Custom relative path to repository guidelines markdown file (default: `.github/gem-pr-review.md` or `.github/review-instructions.md`).
+  - `max_bytes`: Maximum allowed size for guideline files in bytes (default: `65536`, 64 KB). Files exceeding this bound are safely truncated with an explanatory warning.
 - **`custom_roles`** *(or `roles`)*: Pluggable domain-specific review roles. Each entry specifies a domain `prompt`, optional `name`, preferred `model`, `reasoningEffort`, `tier`, and fallback chain. Mounted alongside standard lenses by default.
 - **`replace_standard_roles`**: When set to `true`, disables built-in standard lenses and runs only custom or explicitly specified roles.
 - **`enabled_roles`**: Array of role IDs to execute (e.g. `["accessibility", "security"]`), filtering out unlisted roles.
@@ -334,6 +344,48 @@ Configuration is optional and works out of the box with sensible defaults. You c
 - **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`, `fallbacks`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models, reasoning profiles, and failover chains.
 - **Resolution Precedence**:
   $$\text{lens / custom role override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
+
+---
+
+## Repository Review Guidelines & Invariants (`.github/gem-pr-review.md`)
+
+`gem-pr-review` dynamically discovers, parses, and injects project-specific review instructions, architecture invariants, conventions, and domain checklists into specialist subagents.
+
+### Automatic Discovery & Precedence
+Guidelines are discovered and loaded with the following precedence:
+1. **Explicit Custom Override**: If specified via CLI (`--guidelines <path>`), CI action input (`guidelines_path`), or repository configuration (`guidelines.path` in `.github/gem-pr-review.json`), that exact file is evaluated directly as an override.
+2. **Default Convention**: `.github/gem-pr-review.md` (checked when no custom override is configured).
+3. **Fallback Convention**: `.github/review-instructions.md` (checked when default convention is not present).
+
+If no guidelines file exists or if `guidelines.enabled: false`, the review runs with standard lens instructions without disruption.
+
+### Structure & Multi-Lens Section Routing
+Guidelines support global rules and targeted lens/role sections:
+- **Global Invariants**: Top-level instructions and sections matching `## Global Invariants`, `## General`, or `## Architectural Rules` are injected into **all** specialist subagents.
+- **Specialist Lens Sections**: Sections matching built-in lenses (e.g. `## Security`, `## Performance`, `## Correctness`, `## Contracts`, `## Conventions`, `## Tests`) or explicit role markers (`## Lens: Security`, `## Role: db`) are routed exclusively to the corresponding subagent prompt.
+
+```markdown
+# Repository Review Guidelines
+
+## Global Invariants
+- All state changes must be accompanied by automated unit or integration tests.
+- Never log, expose, or return raw authentication tokens, secret keys, or passwords.
+- Maintain backwards compatibility for all public exported functions.
+
+## Security
+- Validate origin and sanitize payload data on all external webhook endpoints.
+- Ensure all database queries use parameterized prepared statements.
+
+## Performance
+- Avoid N+1 query loops by batching lookups or using joins.
+- Stream large responses rather than buffering full payloads into memory.
+```
+
+### Prompt Injection & Safety Bounds
+- **Subagent Injection**: Guidelines are prepended directly following lens core instructions under `## Repository Review Guidelines & Invariants:`.
+- **Bounded Ingestion**: Reading is capped at 64 KB (`guidelines.max_bytes`) to protect model context windows; truncated content appends a visible notice.
+- **Privacy & Sanitization**: Reported file paths are strictly repository-relative (`.github/gem-pr-review.md`), ensuring zero local machine path exposure.
+- **MCP Inspection Tool**: Inspect and parse active guidelines without running full review via `gem_pr_review_guidelines` or `pr_review_guidelines`.
 
 ---
 
@@ -352,6 +404,7 @@ Configuration is optional and works out of the box with sensible defaults. You c
 | `incremental` | Whether to run an incremental re-review (`auto`, `true`, `false`). In `auto` mode, `synchronize` events automatically trigger incremental reviews | No | `auto` |
 | `action` | Review action: `publish` (post review to PR) or `dry-run` (generate summary only) | No | `publish` |
 | `select` | Finding filter specification (e.g. `p0,p1`, `min:p2`, `1,3`) | No | *all findings* |
+| `guidelines_path` | Optional custom path to repository review guidelines file | No | `.github/gem-pr-review.md` |
 
 ### Action Outputs (`action.yml`)
 

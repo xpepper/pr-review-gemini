@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, parseOption } from '../src/cli.js';
 import {
   installPreCommitHook,
   uninstallPreCommitHook,
@@ -32,6 +32,7 @@ Options:
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
   --role <id>         Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
+  --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
   --install-hook      Install git pre-commit hook to run self-review before commits
   --uninstall-hook    Remove self-review git pre-commit hook
   --command <cmd>     Custom command for pre-commit hook [default: 'npm run self-review']
@@ -54,6 +55,7 @@ export function parseCliArgs(args) {
   let installHook = false;
   let uninstallHook = false;
   let command;
+  let guidelinesPath = null;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -67,27 +69,8 @@ export function parseCliArgs(args) {
       installHook = true;
     } else if (arg === '--uninstall-hook') {
       uninstallHook = true;
-    } else if (arg.startsWith('--command=')) {
-      const val = arg.slice('--command='.length).trim();
-      if (!val) {
-        throw new Error('Option --command requires a non-empty command string');
-      }
-      command = val;
-    } else if (arg === '--command') {
-      const { value, nextIndex } = readOptionValue(args, i, '--command');
-      command = value.trim();
-      if (!command) {
-        throw new Error('Option --command requires a non-empty command string');
-      }
-      i = nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
-    } else if (arg.startsWith('--mode=')) {
-      mode = arg.slice('--mode='.length);
-    } else if (arg === '--mode') {
-      const { value, nextIndex } = readOptionValue(args, i, '--mode');
-      mode = value;
-      i = nextIndex;
     } else if (arg === '--staged') {
       scope = 'staged';
     } else if (arg === '--unstaged') {
@@ -98,25 +81,47 @@ export function parseCliArgs(args) {
       scope = 'head';
     } else if (arg === '--no-untracked') {
       includeUntracked = false;
-    } else if (arg.startsWith('--fail-on=')) {
-      failOn = arg.slice('--fail-on='.length);
-    } else if (arg === '--fail-on') {
-      const { value, nextIndex } = readOptionValue(args, i, '--fail-on');
-      failOn = value;
-      i = nextIndex;
-    } else if (arg.startsWith('--role=')) {
-      const val = arg.slice('--role='.length);
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
-    } else if (arg === '--role') {
-      const { value, nextIndex } = readOptionValue(args, i, '--role');
-      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
-      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg === '--json') {
       json = true;
     } else if (arg === '--mock') {
       mock = true;
+    } else {
+      let opt = parseOption(args, i, '--command');
+      if (opt.matched) {
+        const val = opt.value.trim();
+        if (!val) {
+          throw new Error('Option --command requires a non-empty command string');
+        }
+        command = val;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--guidelines');
+      if (opt.matched) {
+        guidelinesPath = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--mode');
+      if (opt.matched) {
+        mode = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--fail-on');
+      if (opt.matched) {
+        failOn = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--role');
+      if (opt.matched) {
+        roles.push(...opt.value.split(',').map((s) => s.trim()).filter(Boolean));
+        i = opt.nextIndex;
+        continue;
+      }
     }
   }
 
@@ -132,6 +137,7 @@ export function parseCliArgs(args) {
     installHook,
     uninstallHook,
     command,
+    guidelinesPath,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
   };
@@ -193,6 +199,7 @@ export async function main() {
       runnerFn,
       roles: parsed.roles,
       replaceStandardRoles: parsed.replaceStandardRoles,
+      guidelinesPath: parsed.guidelinesPath,
     });
 
     if (parsed.json) {

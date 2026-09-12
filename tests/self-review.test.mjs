@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   generateSyntheticDiff,
@@ -454,6 +455,27 @@ index aaaaaaa..bbbbbbb 100644
       assert.ok(summary.includes('- ✅ Database Migrations (`database_migrations`)'));
       assert.ok(summary.includes('- ✅ Api Backwards Compat (`api_backwards_compat`)'));
     });
+
+    it('renders repository guidelines correctly when passed public summary shape with path instead of relativePath', () => {
+      const summary = formatSelfReviewSummary({
+        verdict: 'PASS',
+        status: 'passed',
+        findings: [],
+        counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
+        mode: 'balanced',
+        lenses: ['correctness'],
+        guidelines: {
+          enabled: true,
+          found: true,
+          path: '.github/gem-pr-review.md',
+          byteSize: 1024,
+          truncated: false,
+        },
+      });
+
+      assert.ok(summary.includes('- **Repository Guidelines**: `.github/gem-pr-review.md`'));
+      assert.doesNotMatch(summary, /undefined/);
+    });
   });
 
 
@@ -767,6 +789,86 @@ new file mode 100644
 
       assert.deepEqual(result.lenses, ['database_migrations']);
       assert.match(result.summary, /Database Migrations \(`database_migrations`\)/);
+    });
+
+    it('discovers and applies repository guidelines in runSelfReview (Increment 19)', async () => {
+      const tempCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-self-review-guidelines-'));
+      try {
+        const ghDir = path.join(tempCwd, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ghDir, 'gem-pr-review.md'),
+          '# Invariant: Always scrub credentials.\n'
+        );
+
+        const diffText = `diff --git a/src/app.js b/src/app.js
+new file mode 100644
+--- /dev/null
++++ b/src/app.js
+@@ -0,0 +1,2 @@
++console.log("clean");
++`;
+
+        let subagentPrompt = '';
+        const runnerFn = async ({ prompt }) => {
+          subagentPrompt = prompt;
+          return { output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' };
+        };
+
+        const result = await runSelfReview({
+          cwd: tempCwd,
+          diffText,
+          runnerFn,
+        });
+
+        assert.equal(result.status, 'passed');
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.path, '.github/gem-pr-review.md');
+        assert.match(result.summary, /Repository Guidelines.*\.github\/gem-pr-review\.md/);
+        assert.match(subagentPrompt, /## Repository Review Guidelines & Invariants:/);
+        assert.match(subagentPrompt, /Always scrub credentials\./);
+      } finally {
+        fs.rmSync(tempCwd, { recursive: true, force: true });
+      }
+    });
+
+    it('supports custom guidelinesPath in runSelfReview (Increment 19)', async () => {
+      const tempCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-self-review-custom-'));
+      try {
+        const customRules = path.join(tempCwd, 'self-rules.md');
+        fs.writeFileSync(customRules, '# Custom Invariant: Pure functions only.\n');
+
+        const diffText = `diff --git a/src/math.js b/src/math.js
+new file mode 100644
+--- /dev/null
++++ b/src/math.js
+@@ -0,0 +1,2 @@
++export const add = (a, b) => a + b;
++`;
+
+        let subagentPrompt = '';
+        const runnerFn = async ({ prompt }) => {
+          subagentPrompt = prompt;
+          return { output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' };
+        };
+
+        const result = await runSelfReview({
+          cwd: tempCwd,
+          diffText,
+          guidelinesPath: 'self-rules.md',
+          runnerFn,
+        });
+
+        assert.equal(result.status, 'passed');
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.path, 'self-rules.md');
+        assert.match(result.summary, /Repository Guidelines.*self-rules\.md/);
+        assert.match(subagentPrompt, /Pure functions only\./);
+      } finally {
+        fs.rmSync(tempCwd, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -255,6 +255,15 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     env.GH_TOKEN ||
     null;
 
+  // 11. Guidelines Path
+  const guidelinesPath =
+    options.guidelinesPath ||
+    options.guidelines_path ||
+    options.review_guidelines_path ||
+    env.INPUT_GUIDELINES_PATH ||
+    env.INPUT_GUIDELINES ||
+    null;
+
   return {
     prNumber,
     repo,
@@ -267,6 +276,7 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     replaceStandardRoles,
     verify,
     githubToken,
+    guidelinesPath,
     isComment: eventInfo.isComment,
     isCommentCommand,
     isAuthorized,
