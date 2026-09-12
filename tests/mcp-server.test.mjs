@@ -648,7 +648,7 @@ index 1111111..2222222 100644
 
       assert.equal(envResponse.id, 802);
       assert.equal(envResponse.result?.isError, true);
-      assert.match(envResponse.result.content[0].text, /Custom guidelines path must be a safe markdown file/);
+      assert.match(envResponse.result.content[0].text, /Custom guidelines path must be a safe markdown or text file/);
     });
 
     it('passes guidelinesPath to runReviewFn and runSelfReviewFn in MCP handlers (Increment 19)', async () => {
@@ -820,7 +820,7 @@ index 1111111..2222222 100644
       });
 
       assert.equal(traversalRes.result?.isError, true);
-      assert.match(traversalRes.result.content[0].text, /Custom guidelines path must be a safe markdown file/i);
+      assert.match(traversalRes.result.content[0].text, /Custom guidelines path must be a safe markdown or text file/i);
       assert.equal(selfReviewInvoked, false);
 
       const nonMdRes = await handler.handleMessage({
@@ -836,7 +836,7 @@ index 1111111..2222222 100644
       });
 
       assert.equal(nonMdRes.result?.isError, true);
-      assert.match(nonMdRes.result.content[0].text, /Custom guidelines path must be a safe markdown file/i);
+      assert.match(nonMdRes.result.content[0].text, /Custom guidelines path must be a safe markdown or text file/i);
       assert.equal(selfReviewInvoked, false);
     });
 

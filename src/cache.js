@@ -28,9 +28,10 @@ const memoryCache = new Map();
 export function getCacheKey(prNumber, headSha, repo) {
   const cleanPr = Number(prNumber);
   const repoPrefix = repo ? `${repo.replace(/[/\\:]/g, '__')}__` : '';
-  const shaSuffix = headSha && typeof headSha === 'string' && headSha.trim().length > 0
-    ? `_${headSha.trim().slice(0, 7)}`
+  const cleanSha = headSha && typeof headSha === 'string'
+    ? headSha.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 7)
     : '';
+  const shaSuffix = cleanSha.length > 0 ? `_${cleanSha}` : '';
   return `${repoPrefix}pr_${cleanPr}${shaSuffix}`;
 }
 

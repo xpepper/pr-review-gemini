@@ -904,7 +904,7 @@ export function createMcpHandler(options = {}) {
                     content: [
                       {
                         type: 'text',
-                        text: 'Error: Custom guidelines path must be a safe markdown file (.md or .markdown) within the workspace repository.',
+                        text: 'Error: Custom guidelines path must be a safe markdown or text file (.md, .markdown, or .txt) within the workspace repository.',
                       },
                     ],
                   },
@@ -958,7 +958,7 @@ export function createMcpHandler(options = {}) {
                       content: [
                         {
                           type: 'text',
-                          text: 'Error: Custom guidelines path must be a safe markdown file (.md or .markdown) within the workspace repository.',
+                          text: 'Error: Custom guidelines path must be a safe markdown or text file (.md, .markdown, or .txt) within the workspace repository.',
                         },
                       ],
                     },
