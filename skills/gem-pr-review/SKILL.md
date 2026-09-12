@@ -125,10 +125,10 @@ By default, custom roles run **alongside** the standard specialist lenses for th
 Repositories can define codebase-specific review guidelines, architecture invariants, conventions, and review checklists that subagents automatically discover and ingest during reviews.
 
 ### 1. File Discovery & Resolution
-Guidelines are discovered in the target repository in the following order:
-1. `.github/gem-pr-review.md` (recommended convention)
-2. `.github/review-instructions.md` (standard fallback)
-3. Explicit path configured via `guidelines.path` in `.github/gem-pr-review.json`, `--guidelines <path>` CLI flag, or `guidelines_path` CI input.
+Guidelines are discovered and loaded with the following precedence:
+1. **Explicit Custom Override**: Specified via CLI (`--guidelines <path>`), CI action input (`guidelines_path`), or configuration (`guidelines.path` in `.github/gem-pr-review.json`), evaluated directly as an override.
+2. **Default Convention**: `.github/gem-pr-review.md` (recommended convention, checked when no custom override is configured).
+3. **Fallback Convention**: `.github/review-instructions.md` (standard fallback, checked when default convention is not present).
 
 If no guidelines file exists or `guidelines.enabled: false`, reviews proceed seamlessly using default lens instructions.
 

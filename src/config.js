@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { ABSOLUTE_MAX_GUIDELINES_BYTES } from './guidelines.js';
+import { ABSOLUTE_MAX_GUIDELINES_BYTES, MAX_GUIDELINES_BYTES } from './guidelines.js';
 
 /**
  * Valid model tier names.
@@ -29,7 +29,7 @@ export const VALID_APPROVE_MAX_PRIORITY_LEVELS = Object.freeze(['off', 'P2', 'P3
 export const DEFAULT_GUIDELINES_CONFIG = Object.freeze({
   enabled: true,
   path: null,
-  max_bytes: 64 * 1024,
+  max_bytes: MAX_GUIDELINES_BYTES,
 });
 
 /**

@@ -929,7 +929,7 @@ export function createMcpHandler(options = {}) {
                           relativePath: guidelines.relativePath || null,
                           byteSize: guidelines.byteSize,
                           truncated: guidelines.truncated,
-                          rawContent: guidelines.rawContent,
+                          content: guidelines.content || guidelines.rawContent || '',
                           parsed: guidelines.parsed,
                         },
                         null,

@@ -533,7 +533,7 @@ export async function dispatchSubagentsParallel({
       const lensGuidelines =
         typeof repoGuidelines === 'string'
           ? repoGuidelines
-          : repoGuidelines?.formatForLens
+          : typeof repoGuidelines?.formatForLens === 'function'
             ? repoGuidelines.formatForLens(item.lensId, { lensName: item.lensDef?.name })
             : repoGuidelines?.content || '';
 

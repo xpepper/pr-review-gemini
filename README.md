@@ -352,10 +352,10 @@ Configuration is optional and works out of the box with sensible defaults. You c
 `gem-pr-review` dynamically discovers, parses, and injects project-specific review instructions, architecture invariants, conventions, and domain checklists into specialist subagents.
 
 ### Automatic Discovery & Precedence
-By default, the reviewer searches the target repository in the following order:
-1. `.github/gem-pr-review.md` (default convention)
-2. `.github/review-instructions.md` (fallback convention)
-3. Custom file path configured via `guidelines.path` in `.github/gem-pr-review.json`, `--guidelines <path>` CLI flag, or `guidelines_path` action input.
+Guidelines are discovered and loaded with the following precedence:
+1. **Explicit Custom Override**: If specified via CLI (`--guidelines <path>`), CI action input (`guidelines_path`), or repository configuration (`guidelines.path` in `.github/gem-pr-review.json`), that exact file is evaluated directly as an override.
+2. **Default Convention**: `.github/gem-pr-review.md` (checked when no custom override is configured).
+3. **Fallback Convention**: `.github/review-instructions.md` (checked when default convention is not present).
 
 If no guidelines file exists or if `guidelines.enabled: false`, the review runs with standard lens instructions without disruption.
 

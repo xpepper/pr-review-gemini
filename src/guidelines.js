@@ -36,7 +36,7 @@ const DISALLOWED_SENSITIVE_PATTERNS = [
   /\.git([\\/]|$)/i,
   /(^|[\\/])\.(?!github([\\/]|$))[a-z0-9_-]+/i, // hidden folders/files except .github
   /(id_rsa|id_ed25519|id_dsa|id_ecdsa)/i,
-  /\.(pem|key|p12|pfx|crt)$/i,
+  /\.(pem|key|p12|pfx|crt|p7b)$/i,
   /(credential|secret|token|password)/i,
 ];
 
@@ -216,37 +216,42 @@ function sanitizeRelativePath(filePath, cwd) {
 }
 
 /**
+ * Creates an empty/failed guideline read result object.
+ *
+ * @param {string|null} [filePath=null] - Candidate file path
+ * @param {string|null} [cwd=null] - Workspace root
+ * @returns {{ content: string, rawContent: string, byteSize: number, truncated: boolean, truncationWarning: null, path: string|null, relativePath: string|null, found: boolean }}
+ */
+function emptyGuidelinesResult(filePath = null, cwd = null) {
+  const rel = filePath && cwd ? sanitizeRelativePath(filePath, cwd) : null;
+  return {
+    content: '',
+    rawContent: '',
+    byteSize: 0,
+    truncated: false,
+    truncationWarning: null,
+    path: rel,
+    relativePath: rel,
+    found: false,
+  };
+}
+
+/**
  * Reads a guideline file with size bounding and relative path resolution.
  *
  * @param {string} filePath - Path to guideline file
  * @param {object} [options]
  * @param {number} [options.maxBytes=MAX_GUIDELINES_BYTES] - Maximum allowed bytes
  * @param {string} [options.cwd=process.cwd()] - Current working directory
- * @returns {{ content: string, rawContent: string, byteSize: number, truncated: boolean, path: string|null, relativePath: string|null, found: boolean }}
+ * @returns {{ content: string, rawContent: string, byteSize: number, truncated: boolean, truncationWarning: string|null, path: string|null, relativePath: string|null, found: boolean }}
  */
 export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, cwd = process.cwd() } = {}) {
   if (!filePath) {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: null,
-      relativePath: null,
-      found: false,
-    };
+    return emptyGuidelinesResult();
   }
 
   if (typeof filePath === 'string' && !isSafeGuidelinesPath(filePath, cwd)) {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: null,
-      relativePath: null,
-      found: false,
-    };
+    return emptyGuidelinesResult(filePath, cwd);
   }
 
   const target = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
@@ -257,41 +262,17 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     realCwd = fs.realpathSync(cwd);
     realTarget = fs.realpathSync(target);
   } catch {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: null,
-      relativePath: null,
-      found: false,
-    };
+    return emptyGuidelinesResult(target, cwd);
   }
 
   const realRel = path.relative(realCwd, realTarget);
   if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: null,
-      relativePath: null,
-      found: false,
-    };
+    return emptyGuidelinesResult(realTarget, realCwd);
   }
 
   // Prevent symlink bypass to sensitive files (e.g. symlink pointing to .env)
   if (!isSafeGuidelinesPath(realRel, realCwd) || !isSafeGuidelinesPath(realTarget, realCwd)) {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: null,
-      relativePath: null,
-      found: false,
-    };
+    return emptyGuidelinesResult(realTarget, realCwd);
   }
 
   const relativePath = sanitizeRelativePath(realTarget, realCwd);
@@ -308,15 +289,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     fd = fs.openSync(realTarget, openFlags);
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) {
-      return {
-        content: '',
-        rawContent: '',
-        byteSize: 0,
-        truncated: false,
-        path: relativePath,
-        relativePath,
-        found: false,
-      };
+      return emptyGuidelinesResult(realTarget, realCwd);
     }
 
     const fileSize = stat.size;
@@ -328,12 +301,13 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       if (slice.endsWith('\uFFFD')) {
         slice = slice.slice(0, -1);
       }
-      const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${effectiveMaxBytes} bytes]`;
+      const warning = `> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${effectiveMaxBytes} bytes]`;
       return {
-        content: slice + warning,
+        content: `${slice}\n\n${warning}`,
         rawContent: slice,
         byteSize: fileSize,
         truncated: true,
+        truncationWarning: warning,
         path: relativePath,
         relativePath,
         found: true,
@@ -348,20 +322,13 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       rawContent,
       byteSize: fileSize,
       truncated: false,
+      truncationWarning: null,
       path: relativePath,
       relativePath,
       found: true,
     };
   } catch {
-    return {
-      content: '',
-      rawContent: '',
-      byteSize: 0,
-      truncated: false,
-      path: relativePath,
-      relativePath,
-      found: false,
-    };
+    return emptyGuidelinesResult(realTarget, realCwd);
   } finally {
     if (fd !== undefined) {
       try {
@@ -543,7 +510,7 @@ export function parseGuidelines(markdown) {
  * @param {string} [options.lensName] - Optional display name for the lens
  * @returns {string} Formatted guidelines block
  */
-export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName } = {}) {
+export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName, truncationWarning = null } = {}) {
   if (!parsed) return '';
 
   const parsedObj = typeof parsed === 'string' ? parseGuidelines(parsed) : parsed;
@@ -556,15 +523,19 @@ export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName } = 
     (fallbackKey && parsedObj.lenses?.[fallbackKey]) ||
     null;
 
+  let result = '';
   if (lensSpecific) {
     const header = `### Specific Instructions for ${lensName || lensId || 'Specialist Lens'}:`;
-    if (globalText) {
-      return `${globalText}\n\n${header}\n${lensSpecific}`;
-    }
-    return `${header}\n${lensSpecific}`;
+    result = globalText ? `${globalText}\n\n${header}\n${lensSpecific}` : `${header}\n${lensSpecific}`;
+  } else {
+    result = globalText;
   }
 
-  return globalText;
+  if (truncationWarning && !result.includes(truncationWarning)) {
+    result = result ? `${result}\n\n${truncationWarning}` : truncationWarning;
+  }
+
+  return result;
 }
 
 /**
@@ -574,7 +545,7 @@ export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName } = 
  * @param {string} [options.cwd=process.cwd()] - Workspace root
  * @param {object} [options.config=null] - Resolved configuration object
  * @param {string} [options.guidelinesPath=null] - Explicit path override
- * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, truncated: boolean, rawContent: string, content: string, parsed: object, formatForLens: (lensId: string, options?: object) => string }}
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, truncated: boolean, truncationWarning: string|null, rawContent: string, content: string, parsed: object, formatForLens: (lensId: string, options?: object) => string }}
  */
 export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesPath = null } = {}) {
   const isEnabled = config?.guidelines?.enabled !== false;
@@ -586,6 +557,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
       relativePath: null,
       byteSize: 0,
       truncated: false,
+      truncationWarning: null,
       rawContent: '',
       content: '',
       parsed: { global: '', lenses: {}, sections: [], raw: '' },
@@ -609,6 +581,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
       relativePath: null,
       byteSize: 0,
       truncated: false,
+      truncationWarning: null,
       rawContent: '',
       content: '',
       parsed: { global: '', lenses: {}, sections: [], raw: '' },
@@ -622,7 +595,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
       ? Math.min(configuredMax, ABSOLUTE_MAX_GUIDELINES_BYTES)
       : MAX_GUIDELINES_BYTES;
   const fileResult = readGuidelinesFile(discoveredPath, { maxBytes, cwd });
-  const parsed = parseGuidelines(fileResult.content);
+  const parsed = parseGuidelines(fileResult.rawContent || fileResult.content);
 
   return {
     enabled: true,
@@ -631,11 +604,12 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
     relativePath: fileResult.relativePath,
     byteSize: fileResult.byteSize,
     truncated: fileResult.truncated,
+    truncationWarning: fileResult.truncationWarning,
     rawContent: fileResult.rawContent,
     content: fileResult.content,
     parsed,
     formatForLens: (lensId, opts = {}) =>
-      resolveGuidelinesForLens({ parsed, lensId, ...opts }),
+      resolveGuidelinesForLens({ parsed, lensId, truncationWarning: fileResult.truncationWarning, ...opts }),
   };
 }
 
