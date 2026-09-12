@@ -572,6 +572,26 @@ new file mode 100644
       });
       assert.equal(eventWithP2, 'APPROVE');
     });
+
+    it('refuses APPROVE when subagent execution errors are present (fail-closed Gate 5)', () => {
+      const eventWithError = determineReviewEvent({
+        approveMaxPriorityLevel: 'nit',
+        prAuthor: 'contributor',
+        currentUser: 'bot',
+        findings: [],
+        hasExecutionErrors: true,
+      });
+      assert.equal(eventWithError, 'COMMENT');
+
+      const eventWithErrorsArray = determineReviewEvent({
+        approveMaxPriorityLevel: 'nit',
+        prAuthor: 'contributor',
+        currentUser: 'bot',
+        findings: [],
+        executionErrors: [{ lensId: 'security', error: 'API failure' }],
+      });
+      assert.equal(eventWithErrorsArray, 'COMMENT');
+    });
   });
 
   // --------------------------------------------------------------------------

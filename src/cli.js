@@ -207,6 +207,59 @@ export function readOptionValue(args, index, optionName) {
 }
 
 /**
+ * Parses a string CLI option supporting both `--flag=value` and `--flag value` forms.
+ *
+ * @param {string[]} args - Argument list
+ * @param {number} index - Current argument index
+ * @param {string} flag - Flag name (e.g. '--guidelines')
+ * @returns {{ matched: boolean, value?: string, nextIndex?: number }}
+ */
+export function parseStringOption(args, index, flag) {
+  const arg = args[index];
+  const prefix = `${flag}=`;
+  if (typeof arg === 'string' && arg.startsWith(prefix)) {
+    return { matched: true, value: arg.slice(prefix.length), nextIndex: index };
+  }
+  if (arg === flag) {
+    const { value, nextIndex } = readOptionValue(args, index, flag);
+    return { matched: true, value, nextIndex };
+  }
+  return { matched: false };
+}
+
+/**
+ * Standardized string option parser alias for parseStringOption.
+ */
+export const parseOption = parseStringOption;
+
+/**
+ * Parses common role and guideline options shared across review CLI entrypoints:
+ * - `--replace-standard-roles`
+ * - `--role <name>` or `--role=<name>` (supports comma-separated list)
+ * - `--guidelines <path>` or `--guidelines=<path>`
+ *
+ * @param {string[]} args - Argument list
+ * @param {number} index - Current argument index
+ * @returns {{ matched: boolean, type?: 'replaceStandardRoles'|'role'|'guidelines', value?: any, nextIndex?: number }}
+ */
+export function parseCommonReviewOptions(args, index) {
+  const arg = args[index];
+  if (arg === '--replace-standard-roles') {
+    return { matched: true, type: 'replaceStandardRoles', value: true, nextIndex: index };
+  }
+  let opt = parseOption(args, index, '--role');
+  if (opt.matched) {
+    const roles = opt.value.split(',').map((s) => s.trim()).filter(Boolean);
+    return { matched: true, type: 'role', value: roles, nextIndex: opt.nextIndex };
+  }
+  opt = parseOption(args, index, '--guidelines');
+  if (opt.matched) {
+    return { matched: true, type: 'guidelines', value: opt.value, nextIndex: opt.nextIndex };
+  }
+  return { matched: false };
+}
+
+/**
  * Standardized direct execution runner. If invoked directly, executes mainFn,
  * traps unhandled rejections, prints formatted error, and terminates with code 1.
  *

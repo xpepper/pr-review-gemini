@@ -9,3 +9,4 @@ tmp/
 scratch/
 .gem-pr-cache/
 .cache/
+.worktrees/

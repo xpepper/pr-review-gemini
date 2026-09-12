@@ -4,8 +4,6 @@ import { filterFindings } from './selection.js';
 import { publishReview } from './publish.js';
 import { getPrDiff } from './diff.js';
 
-const DEFAULT_CACHE_DIR = path.join(process.cwd(), '.gem-pr-cache');
-
 const SEVERITY_RANK = Object.freeze({
   P0: 0,
   P1: 1,
@@ -30,17 +28,27 @@ const memoryCache = new Map();
 export function getCacheKey(prNumber, headSha, repo) {
   const cleanPr = Number(prNumber);
   const repoPrefix = repo ? `${repo.replace(/[/\\:]/g, '__')}__` : '';
-  return `${repoPrefix}pr_${cleanPr}`;
+  const cleanSha = headSha && typeof headSha === 'string'
+    ? headSha.trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 7)
+    : '';
+  const shaSuffix = cleanSha.length > 0 ? `_${cleanSha}` : '';
+  return `${repoPrefix}pr_${cleanPr}${shaSuffix}`;
 }
 
 /**
  * Resolves the cache directory path.
  *
  * @param {Object} [options]
+ * @param {string} [options.cacheDir]
+ * @param {string} [options.cwd]
  * @returns {string}
  */
-function resolveCacheDir(options = {}) {
-  return options.cacheDir || DEFAULT_CACHE_DIR;
+export function resolveCacheDir(options = {}) {
+  if (options.cacheDir && typeof options.cacheDir === 'string') {
+    return options.cacheDir;
+  }
+  const root = options.cwd && typeof options.cwd === 'string' ? options.cwd : process.cwd();
+  return path.join(root, '.gem-pr-cache');
 }
 
 /**
@@ -98,6 +106,7 @@ export async function saveReviewCache(data, options = {}) {
 
   const cacheDir = resolveCacheDir(options);
   const cacheKey = getCacheKey(prNumber, headSha, data.repo);
+  const prKey = getCacheKey(prNumber, null, data.repo);
 
   const record = {
     prNumber,
@@ -115,10 +124,15 @@ export async function saveReviewCache(data, options = {}) {
 
   // 1. Store in memory
   memoryCache.set(cacheKey, record);
+  memoryCache.set(prKey, record);
 
   // 2. Persist to disk
   const filePath = path.join(cacheDir, `${cacheKey}.json`);
   writeJsonSafely(filePath, record);
+  if (cacheKey !== prKey) {
+    const prFilePath = path.join(cacheDir, `${prKey}.json`);
+    writeJsonSafely(prFilePath, record);
+  }
 
   return record;
 }
@@ -140,30 +154,50 @@ export async function getReviewCache(query, options = {}) {
   if (!prNumber || prNumber <= 0) return null;
 
   const cacheDir = resolveCacheDir(options);
-  const cacheKey = getCacheKey(prNumber, null, query.repo);
+  const currentHead = query.currentHeadSha || null;
+  const requestedHead = query.headSha || null;
+  const expectedHead = currentHead || requestedHead;
+  const shaKey = expectedHead ? getCacheKey(prNumber, expectedHead, query.repo) : null;
+  const prKey = getCacheKey(prNumber, null, query.repo);
 
-  // 1. Check memory cache, then file
-  let record = memoryCache.get(cacheKey);
-  if (!record) {
-    const filePath = path.join(cacheDir, `${cacheKey}.json`);
+  // 1. Check sha-specific key first
+  let record = shaKey ? memoryCache.get(shaKey) : null;
+  if (!record && shaKey) {
+    const filePath = path.join(cacheDir, `${shaKey}.json`);
     record = readJsonSafely(filePath);
     if (record) {
-      memoryCache.set(cacheKey, record);
+      memoryCache.set(shaKey, record);
+    }
+  }
+
+  // 2. Fall back to PR canonical key
+  if (!record) {
+    record = memoryCache.get(prKey);
+    if (!record) {
+      const filePath = path.join(cacheDir, `${prKey}.json`);
+      record = readJsonSafely(filePath);
+      if (record) {
+        memoryCache.set(prKey, record);
+      }
     }
   }
 
   if (!record) return null;
 
-  const expectedHead = query.currentHeadSha || query.headSha;
+  // If a specific headSha was requested and does not match the record found (e.g. from canonical key),
+  // it is simply a cache miss for that specific commit (do not invalidate the newer/unrelated entry).
+  if (requestedHead && record.headSha !== requestedHead) {
+    return null;
+  }
 
-  // 2. Freshness check
-  if (expectedHead && record.headSha !== expectedHead) {
-    // Invalidate stale cache
-    await invalidateReviewCache({ prNumber, repo: query.repo }, options);
+  // 3. Freshness check against current PR head
+  if (currentHead && record.headSha !== currentHead) {
+    // Invalidate only the specific stale record's entries, preserving newer concurrent entries
+    await invalidateReviewCache({ prNumber, headSha: record.headSha, repo: query.repo }, options);
 
     if (options.throwOnStale) {
       throw new Error(
-        `Cached review for PR #${prNumber} is stale: cached commit ${record.headSha.slice(0, 7)} does not match current PR head ${expectedHead.slice(0, 7)}.`
+        `Cached review for PR #${prNumber} is stale: cached commit ${record.headSha.slice(0, 7)} does not match current PR head ${currentHead.slice(0, 7)}.`
       );
     }
     return null;
@@ -177,6 +211,7 @@ export async function getReviewCache(query, options = {}) {
  *
  * @param {Object} query
  * @param {number} query.prNumber
+ * @param {string} [query.headSha]
  * @param {string} [query.repo]
  * @param {Object} [options]
  * @returns {Promise<boolean>} True if cache entry was deleted
@@ -186,19 +221,71 @@ export async function invalidateReviewCache(query, options = {}) {
   if (!prNumber) return false;
 
   const cacheDir = resolveCacheDir(options);
-  const cacheKey = getCacheKey(prNumber, null, query.repo);
+  const repoPrefix = query.repo ? `${query.repo.replace(/[/\\:]/g, '__')}__` : '';
+  const prefix = `${repoPrefix}pr_${prNumber}`;
+  const targetSha = query.headSha && typeof query.headSha === 'string' && query.headSha.trim().length > 0
+    ? query.headSha.trim().slice(0, 7)
+    : null;
 
-  const inMemoryDeleted = memoryCache.delete(cacheKey);
+  let inMemoryDeleted = false;
+  for (const k of Array.from(memoryCache.keys())) {
+    if (targetSha) {
+      if (k === `${prefix}_${targetSha}`) {
+        memoryCache.delete(k);
+        inMemoryDeleted = true;
+      } else if (k === prefix) {
+        const rec = memoryCache.get(k);
+        if (!rec?.headSha || rec.headSha.startsWith(targetSha)) {
+          memoryCache.delete(k);
+          inMemoryDeleted = true;
+        }
+      }
+    } else {
+      if (k === prefix || k.startsWith(`${prefix}_`)) {
+        memoryCache.delete(k);
+        inMemoryDeleted = true;
+      }
+    }
+  }
 
-  const filePath = path.join(cacheDir, `${cacheKey}.json`);
   let fileDeleted = false;
   try {
-    if (fs.existsSync(filePath)) {
-      fs.rmSync(filePath, { force: true });
-      fileDeleted = true;
+    if (fs.existsSync(cacheDir)) {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files) {
+        if (targetSha) {
+          if (file === `${prefix}_${targetSha}.json`) {
+            try {
+              fs.rmSync(path.join(cacheDir, file), { force: true });
+              fileDeleted = true;
+            } catch {
+              // Ignore file removal errors
+            }
+          } else if (file === `${prefix}.json`) {
+            try {
+              const rec = readJsonSafely(path.join(cacheDir, file));
+              if (!rec?.headSha || rec.headSha.startsWith(targetSha)) {
+                fs.rmSync(path.join(cacheDir, file), { force: true });
+                fileDeleted = true;
+              }
+            } catch {
+              // Ignore file removal errors
+            }
+          }
+        } else {
+          if (file === `${prefix}.json` || file.startsWith(`${prefix}_`)) {
+            try {
+              fs.rmSync(path.join(cacheDir, file), { force: true });
+              fileDeleted = true;
+            } catch {
+              // Ignore file removal errors
+            }
+          }
+        }
+      }
     }
   } catch {
-    // Ignore file removal errors
+    // Ignore directory read errors
   }
 
   return inMemoryDeleted || fileDeleted;
@@ -222,7 +309,7 @@ export function clearAllCaches(options = {}) {
       }
     }
   } catch {
-    // Ignore cleanup errors
+    // Ignore cleanup error
   }
 }
 
@@ -244,7 +331,8 @@ export async function listReviewCaches(options = {}) {
         if (file.endsWith('.json')) {
           const content = readJsonSafely(path.join(cacheDir, file));
           if (content?.prNumber) {
-            results.set(file.replace(/\.json$/, ''), {
+            const dedupeKey = `${content.repo || ''}#${content.prNumber}#${content.headSha || ''}`;
+            results.set(dedupeKey, {
               prNumber: content.prNumber,
               headSha: content.headSha,
               repo: content.repo || null,
@@ -261,9 +349,10 @@ export async function listReviewCaches(options = {}) {
   }
 
   // 2. Merge memory cache
-  for (const [key, val] of memoryCache.entries()) {
-    if (!results.has(key)) {
-      results.set(key, {
+  for (const [, val] of memoryCache.entries()) {
+    const dedupeKey = `${val.repo || ''}#${val.prNumber}#${val.headSha || ''}`;
+    if (!results.has(dedupeKey)) {
+      results.set(dedupeKey, {
         prNumber: val.prNumber,
         headSha: val.headSha,
         repo: val.repo || null,
@@ -341,7 +430,7 @@ export async function publishCachedReview(options = {}) {
   const cached = await getReviewCache(
     {
       prNumber,
-      headSha: currentHeadSha,
+      headSha,
       currentHeadSha,
       repo,
     },

@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (clean, up to date with `origin/main`)
-* **Active PR**: None (PR #32 merged into `main`, commit `7f3af22`)
-* **Test Suite**: `npm test` runs and passes (608 tests across 118 suites, 0 failures)
+* **Current Branch**: `feat/review-guidelines` (Increment 19 implementation complete)
+* **Active PR**: Ready to open against `main`
+* **Test Suite**: `npm test` runs and passes (643 tests across 124 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -31,29 +31,29 @@
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
   - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (Merged, commit `7f3af22`)
+  - Increment 19 (In Progress / PR Pending): `feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)`
 
 ---
 
-## Status: READY_FOR_INCREMENT_19 — Repository Review Guidelines & Project Memory
+## Status: READY_FOR_PR_AND_DOGFOOD — Increment 19: Repository Review Guidelines
 
-Increment 18 was fully delivered, triaged, and squash-merged into `main`:
-- All 48 inline review threads on PR #32 were addressed, replied to, and resolved via GitHub GraphQL.
-- Final PR summary comment was posted to PR #32.
-- PR #32 squash-merged into `main` and branch deleted.
-- Full test suite verified green (`npm test` 608 tests, 118 suites pass).
-- Version checks verified synchronized at `0.1.0` across all 4 manifests.
+Increment 19 is fully implemented, documented, and verified:
+- `src/guidelines.js`: Guidelines discovery (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path), markdown section parser (global rules vs lens/role sections), prompt injector, 64 KB truncation safety, and zero machine path exposure.
+- `src/config.js`: Layered configuration for `guidelines: { enabled, path, max_bytes }` with aliases and sanitization.
+- `src/reviewer.js` & `src/subagents.js`: Prompt injection into parallel specialist subagents under `## Repository Review Guidelines & Invariants:`.
+- `src/self-review.js`: Automated discovery and inclusion in one-shot self-review summaries.
+- `src/ci.js`, `scripts/ci-action.mjs`, `action.yml`: `guidelines_path` CI input and runner parameter.
+- `scripts/dogfood-review.mjs` & `scripts/self-review.mjs`: `--guidelines <path>` CLI option.
+- `server/index.js`: `gem_pr_review_guidelines` and `pr_review_guidelines` MCP inspection tools.
+- `docs/roadmap.md`, `README.md`, `skills/gem-pr-review/SKILL.md`: Comprehensive documentation + GitHub Marketplace Action publication note.
+- Full test suite verified green (`npm test` 643 tests across 124 suites, 0 failures; `npm run version:check` clean).
 
-### Direct Action Item for the Incoming Agent (Increment 19):
-**Design and implement Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**:
-1. Create a feature branch `feat/review-guidelines`.
-2. Implement guidelines discovery and loader (`src/config.js`, `src/reviewer.js`):
-   - Check `.github/gem-pr-review.md`, `.github/review-instructions.md`, or configured guidelines file.
-   - Parse sections (architecture invariants, conventions, checklists, forbidden patterns).
-   - Inject repository guidelines dynamically into subagent system/user prompts.
-3. Add memory persistence / project guidelines configuration options to `~/.copilot/gem-pr-review.json` and `.github/gem-pr-review.json`.
-4. Write tests first in `tests/config.test.mjs`, `tests/reviewer.test.mjs`, and `tests/skills.test.mjs`.
-5. Verify green (`npm test`, `npm run version:check`).
-6. Open PR, conduct automated dogfood review, and merge.
+### Next Steps:
+1. Commit all verified changes using conventional commits (`feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)`).
+2. Push branch `feat/review-guidelines` and create pull request on GitHub via `gh pr create`.
+3. Run automated dogfood review via `npm run dogfood:pr <PR_NUMBER>`.
+4. Address and triage findings, resolve threads, and merge to `main`.
+5. Hand off to Increment 20 (PR review thread conversation replies and automated thread resolution).
 
 ---
 

@@ -268,6 +268,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       select: ciEnv.select,
       roles: ciEnv.roles,
       replaceStandardRoles: ciEnv.replaceStandardRoles,
+      guidelinesPath: ciEnv.guidelinesPath,
     });
 
     let verificationResult = null;

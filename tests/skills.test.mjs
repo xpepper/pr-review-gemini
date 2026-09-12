@@ -225,6 +225,29 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
     assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
   });
+
+  it('documents repository review guidelines in SKILL.md (Increment 19)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Repository Review Guidelines/i, 'Should document Repository Review Guidelines');
+    assert.match(content, /\.github\/gem-pr-review\.md/i, 'Should document .github/gem-pr-review.md');
+    assert.match(content, /\.github\/review-instructions\.md/i, 'Should document .github/review-instructions.md');
+    assert.match(content, /gem_pr_review_guidelines/i, 'Should document gem_pr_review_guidelines MCP tool');
+    assert.match(content, /--guidelines/i, 'Should document --guidelines flag');
+    assert.match(content, /guidelines_path/i, 'Should document guidelines_path input');
+  });
+
+  it('documents repository review guidelines in README.md (Increment 19)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Repository Review Guidelines/i, 'README should document Repository Review Guidelines');
+    assert.match(readmeContent, /\.github\/gem-pr-review\.md/i, 'README should document .github/gem-pr-review.md');
+    assert.match(readmeContent, /gem_pr_review_guidelines/i, 'README should document gem_pr_review_guidelines MCP tool');
+    assert.match(readmeContent, /guidelines_path/i, 'README should document guidelines_path');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
 
 

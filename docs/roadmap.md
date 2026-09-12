@@ -154,12 +154,40 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - GitHub Actions starter workflow `.github/workflows/gem-pr-review.yml` configured with `issue_comment: [created]` trigger, event-isolated concurrency serialization, and required permissions.
   - Added unit and integration tests across `tests/ci.test.mjs` and `tests/skills.test.mjs` (608 total tests passing across 118 suites with 0 failures).
   - Triaged, addressed, replied to, and resolved all 48 inline review threads on PR #32; squash-merged into `main`.
-- [ ] **Increment 19: Repository Review Guidelines & Project Memory (`.github/gem-pr-review.md`)**
-  - Project-specific review checklists, architecture invariants, and conventions dynamically ingested by subagents.
+- [x] **Increment 19: Repository Review Guidelines & Domain Invariants (`.github/gem-pr-review.md`)**
+  - Enabled repositories to define domain-specific guidelines, architecture invariants, conventions, and review checklists that subagents automatically ingest and enforce during reviews.
+  - Implemented automatic file discovery in `src/guidelines.js` checking `.github/gem-pr-review.md`, `.github/review-instructions.md`, or custom configured path via `guidelines.path`.
+  - Implemented markdown section-based parsing (`parseGuidelines`) dividing content into global rules (injected into all subagents) and lens/role specific sections (routed to targeted lenses like `## Security`, `## Performance`, `## Lens: Contracts`, `## Role: db`).
+  - Injected repository guidelines into subagent prompts in `src/reviewer.js` and `src/subagents.js` under `## Repository Review Guidelines & Invariants:`.
+  - Integrated into one-shot self-review (`src/self-review.js`), CI GitHub Action runner (`action.yml`, `scripts/ci-action.mjs`, `src/ci.js` with `guidelines_path`), and CLI runners (`--guidelines <path>`).
+  - Implemented MCP inspection tools `gem_pr_review_guidelines` and `pr_review_guidelines` in `server/index.js` for querying and validating active guidelines.
+  - Bounded reading to 64 KB (`guidelines.max_bytes`) with warning notice injection on truncation to prevent prompt overflow.
+  - Enforced strict repository-relative path sanitization to guarantee zero exposure of absolute machine paths.
+  - Added comprehensive test suites across `tests/guidelines.test.mjs`, `tests/reviewer.test.mjs`, `tests/subagents.test.mjs`, `tests/self-review.test.mjs`, `tests/ci.test.mjs`, `tests/mcp-server.test.mjs`, `tests/cli.test.mjs`, and `tests/skills.test.mjs`.
 - [ ] **Increment 20: PR Review Thread Conversation Replies & Automated Thread Resolution**
   - Conversational multi-turn verification when authors reply to inline findings; automatic GitHub review thread resolution upon fix verification.
 - [ ] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
   - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
+
+---
+
+## 6. GitHub Marketplace Action Publication Note
+
+With the completion of Increment 13 (Reusable GitHub Action manifest `action.yml`), Increment 15 (Release Management & Semantic Versioning), Increment 18 (PR Comment Command Dispatcher), and Increment 19 (Repository Review Guidelines), `gem-pr-review` is packaged as a standalone composite action ready for official GitHub Marketplace publication.
+
+GitHub surfaces the notification:
+> **"You can publish this Action to the GitHub Marketplace [Draft a release]"**
+> *(referencing the GitHub Action UI prompt banner displayed on repositories containing root `action.yml`)*
+
+### Marketplace Publication Checklist & Prerequisites
+- [x] Composite Action manifest at repository root (`action.yml`) with descriptive name, description, branding (icon: `check-circle`, color: `purple`), inputs, and outputs.
+- [x] Node.js 20+ zero-dependency runtime leveraging `@github/copilot-sdk` and GitHub CLI (`gh`).
+- [x] Automated release workflow (`.github/workflows/release.yml`) triggered on `v*` tags with manifest synchronization validation.
+- [ ] Draft a release in GitHub repository UI targeting tag `v0.1.0` (or next release tag).
+- [ ] Check the checkbox *"Publish this Action to the GitHub Marketplace"* in the release draft modal.
+- [ ] Confirm primary category (`Code quality`) and optional secondary category (`Continuous integration`).
+- [ ] Publish release to make `xpepper/pr-review-gemini` discoverable across the GitHub Actions Marketplace.
+
 
 

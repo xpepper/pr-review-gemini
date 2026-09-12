@@ -120,6 +120,59 @@ By default, custom roles run **alongside** the standard specialist lenses for th
 
 ---
 
+## Repository Review Guidelines & Domain Invariants (.github/gem-pr-review.md)
+
+Repositories can define codebase-specific review guidelines, architecture invariants, conventions, and review checklists that subagents automatically discover and ingest during reviews.
+
+### 1. File Discovery & Resolution
+Guidelines are discovered and loaded with the following precedence:
+1. **Explicit Custom Override**: Specified via CLI (`--guidelines <path>`), CI action input (`guidelines_path`), or configuration (`guidelines.path` in `.github/gem-pr-review.json`), evaluated directly as an override.
+2. **Default Convention**: `.github/gem-pr-review.md` (recommended convention, checked when no custom override is configured).
+3. **Fallback Convention**: `.github/review-instructions.md` (standard fallback, checked when default convention is not present).
+
+If no guidelines file exists or `guidelines.enabled: false`, reviews proceed seamlessly using default lens instructions.
+
+### 2. Guideline Structure & Specialist Section Routing
+Guidelines are parsed into global rules and per-lens/role specific sections:
+- **Global Invariants**: Content preceding the first section header or sections named `## Global Invariants`, `## General`, `## Project Rules`, or `## Architectural Rules` are injected into **all** specialist subagents.
+- **Specialist Lens & Role Sections**: Sections matching standard lenses (e.g. `## Security`, `## Performance`, `## Correctness`, `## Contracts`, `## Conventions`, `## Tests`) or explicit role markers (`## Lens: Security`, `## Role: db`) are routed exclusively to the corresponding specialist subagent prompt.
+
+```markdown
+# Repository Review Guidelines
+
+## Global Invariants
+- All state changes must be accompanied by automated unit or integration tests.
+- Never log, expose, or return raw authentication tokens, secret keys, or passwords.
+- Public functions and exported API contracts must remain strictly backwards-compatible.
+
+## Security
+- Validate origin and sanitize payload data on all external webhook endpoints.
+- Ensure all database queries use parameterized prepared statements.
+
+## Performance
+- Avoid N+1 query loops by batching lookups or using joins.
+- Stream large responses rather than buffering full payloads into memory.
+```
+
+### 3. Prompt Injection & Prioritization
+When loaded, repository guidelines are injected into each subagent's prompt directly following the specialist lens instructions under:
+```markdown
+## Repository Review Guidelines & Invariants:
+[Guidelines text]
+```
+Subagents evaluate diff hunks with respect to both general engineering standards and the repository's explicit invariants.
+
+### 4. Safety Bounds & Zero Machine Path Leakage
+- **Bounded Reading**: Ingestion is bounded to 64 KB (`guidelines.max_bytes`) by default. Files exceeding the bound are safely truncated with an explanatory warning note.
+- **Path Sanitization**: All reported paths in review summaries, logs, and outputs are strictly relative to the repository root, ensuring no local machine paths (e.g. absolute filesystem paths) are ever exposed.
+
+### 5. CLI Flags, Action Inputs & MCP Tools
+- **CLI Flags**: `--guidelines <path>` in `scripts/dogfood-review.mjs` and `scripts/self-review.mjs`.
+- **GitHub Action Input**: `guidelines_path` in `action.yml`.
+- **MCP Tool**: `gem_pr_review_guidelines` (alias: `pr_review_guidelines`) inspects and parses the active repository guidelines without executing a full review.
+
+---
+
 ## Structured Findings Contract
 
 Reviewers must format findings using structured representations so they can be parsed deterministically:

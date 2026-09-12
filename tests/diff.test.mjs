@@ -17,6 +17,7 @@ import {
   formatDiffManifest,
   createFileBackedDiff,
   createHostSupervisedDiffReader,
+  buildDiffFileIndex,
 } from '../src/diff.js';
 
 describe('Unified Diff Parser & Hunk Anchoring', () => {
@@ -889,6 +890,28 @@ new file mode 100644
         maxBudgetBytes: 2 * 1024 * 1024,
       });
       assert.equal(clampedReader.getBudgetState().maxBudgetBytes, 1024 * 1024);
+    });
+
+    it('buildDiffFileIndex maps file paths for O(1) lookups and handles prefix normalization', () => {
+      const parsed = parseUnifiedDiff(MULTI_FILE_COMBINED_DIFF);
+      const index = buildDiffFileIndex(parsed);
+      assert.ok(index.has('src/calc.js'));
+      assert.ok(index.has('src/utils/logger.js'));
+      assert.ok(index.has('src/new-name.js'));
+      assert.equal(index.get('src/calc.js').path, 'src/calc.js');
+    });
+
+    it('createHostSupervisedDiffReader uses provided fileIndex for fast lookups', async () => {
+      const parsed = parseUnifiedDiff(MULTI_FILE_COMBINED_DIFF);
+      const fileIndex = buildDiffFileIndex(parsed);
+      const reader = createHostSupervisedDiffReader({
+        parsedFiles: parsed,
+        fileIndex,
+      });
+
+      const res = await reader.read({ file: 'src/calc.js' });
+      assert.ok(!res.error);
+      assert.ok(res.content.includes('function calculate'));
     });
   });
 });

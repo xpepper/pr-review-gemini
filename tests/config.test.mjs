@@ -600,6 +600,26 @@ describe('Configuration & Model Tier Management', () => {
       const config = loadConfig(cwd);
       assert.equal(config.tiers.light, 'string-arg-model');
     });
+
+    it('rejects loading project config if it is a symlink pointing outside cwd', () => {
+      const homeDir = path.join(tmpDir, 'symlink-home');
+      const cwd = path.join(tmpDir, 'symlink-project');
+      const outsideDir = path.join(tmpDir, 'outside-secret');
+      fs.mkdirSync(homeDir, { recursive: true });
+      fs.mkdirSync(cwd, { recursive: true });
+      fs.mkdirSync(outsideDir, { recursive: true });
+
+      const secretFile = path.join(outsideDir, 'secret-config.json');
+      fs.writeFileSync(secretFile, JSON.stringify({ tiers: { light: 'escaped-model' } }));
+
+      const projectGithubDir = path.join(cwd, '.github');
+      fs.mkdirSync(projectGithubDir, { recursive: true });
+      fs.symlinkSync(secretFile, path.join(projectGithubDir, 'gem-pr-review.json'));
+
+      const config = loadConfig({ homeDir, cwd });
+      assert.notEqual(config.tiers.light, 'escaped-model');
+      assert.equal(config.tiers.light, DEFAULT_CONFIG.tiers.light);
+    });
   });
 
   describe('Tier helper functions', () => {
@@ -859,6 +879,115 @@ describe('Configuration & Model Tier Management', () => {
       assert.ok(roles.a11y);
       assert.equal(roles.a11y.prompt, 'a11y prompt');
       assert.deepEqual(getCustomRoles(null), {});
+    });
+  });
+
+  describe('Repository Review Guidelines Configuration (Increment 19)', () => {
+    it('provides sensible default configuration for guidelines', () => {
+      assert.ok(DEFAULT_CONFIG.guidelines);
+      assert.equal(DEFAULT_CONFIG.guidelines.enabled, true);
+      assert.equal(DEFAULT_CONFIG.guidelines.path, null);
+      assert.equal(DEFAULT_CONFIG.guidelines.max_bytes, 64 * 1024);
+    });
+
+    it('preserves default guidelines configuration when none provided', () => {
+      const config = resolveConfig();
+      assert.deepEqual(config.guidelines, {
+        enabled: true,
+        path: null,
+        max_bytes: 64 * 1024,
+      });
+    });
+
+    it('resolves explicit guidelines options from config object', () => {
+      const config = resolveConfig({
+        projectConfig: {
+          guidelines: {
+            enabled: false,
+            path: '.github/custom-rules.md',
+            max_bytes: 32 * 1024,
+          },
+        },
+      });
+
+      assert.equal(config.guidelines.enabled, false);
+      assert.equal(config.guidelines.path, '.github/custom-rules.md');
+      assert.equal(config.guidelines.max_bytes, 32 * 1024);
+    });
+
+    it('supports top-level aliases: review_guidelines_path, guidelines_path, guidelinesPath', () => {
+      const config1 = resolveConfig({
+        projectConfig: {
+          review_guidelines_path: 'docs/review-rules.md',
+        },
+      });
+      assert.equal(config1.guidelines.path, 'docs/review-rules.md');
+
+      const config2 = resolveConfig({
+        overrides: {
+          guidelines_path: '.github/guidelines-ci.md',
+        },
+      });
+      assert.equal(config2.guidelines.path, '.github/guidelines-ci.md');
+
+      const config3 = resolveConfig({
+        overrides: {
+          guidelinesPath: '.github/gem-pr-review.md',
+        },
+      });
+      assert.equal(config3.guidelines.path, '.github/gem-pr-review.md');
+    });
+
+    it('layers guidelines settings across user, project, and runtime overrides', () => {
+      const userConfig = {
+        guidelines: {
+          enabled: true,
+          path: '.github/user-default.md',
+          max_bytes: 16 * 1024,
+        },
+      };
+
+      const projectConfig = {
+        guidelines: {
+          path: '.github/gem-pr-review.md',
+        },
+      };
+
+      const overrides = {
+        guidelines: {
+          max_bytes: 48 * 1024,
+        },
+      };
+
+      const config = resolveConfig({ userConfig, projectConfig, overrides });
+      assert.equal(config.guidelines.enabled, true);
+      assert.equal(config.guidelines.path, '.github/gem-pr-review.md');
+      assert.equal(config.guidelines.max_bytes, 48 * 1024);
+    });
+
+    it('sanitizes invalid or malicious values and caps max_bytes to ABSOLUTE_MAX_GUIDELINES_BYTES', () => {
+      const config = resolveConfig({
+        overrides: {
+          guidelines: {
+            enabled: 'not-a-boolean',
+            path: '   ',
+            max_bytes: -100,
+          },
+        },
+      });
+
+      assert.equal(config.guidelines.enabled, true);
+      assert.equal(config.guidelines.path, null);
+      assert.equal(config.guidelines.max_bytes, 64 * 1024);
+
+      const cappedConfig = resolveConfig({
+        overrides: {
+          guidelines: {
+            max_bytes: 10 * 1024 * 1024,
+          },
+        },
+      });
+      assert.equal(cappedConfig.guidelines.max_bytes, 512 * 1024);
     });
   });
 });

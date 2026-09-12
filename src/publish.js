@@ -381,6 +381,8 @@ export function determineReviewEvent({
   prAuthor = null,
   currentUser = null,
   requestedEvent = null,
+  hasExecutionErrors = false,
+  executionErrors = [],
 } = {}) {
   // Gate 1: Never emit REQUEST_CHANGES
   if (requestedEvent === 'REQUEST_CHANGES') {
@@ -409,6 +411,14 @@ export function determineReviewEvent({
     if (rank < maxAllowedRank) {
       return 'COMMENT';
     }
+  }
+
+  // Gate 5: Subagent execution errors prevent approval (fail-closed)
+  if (
+    hasExecutionErrors === true ||
+    (Array.isArray(executionErrors) && executionErrors.length > 0)
+  ) {
+    return 'COMMENT';
   }
 
   return 'APPROVE';
@@ -579,6 +589,8 @@ export async function publishReview({
   execFileFn = null,
   cwd = process.cwd(),
   repo = null,
+  hasExecutionErrors = false,
+  executionErrors = [],
 } = {}) {
   const prNum = Number(prNumber);
   if (!Number.isInteger(prNum) || prNum <= 0) {
@@ -630,6 +642,8 @@ export async function publishReview({
     approveMaxPriorityLevel: config.approveMaxPriorityLevel ?? 'off',
     prAuthor: headInfo.author,
     currentUser,
+    hasExecutionErrors: hasExecutionErrors === true || (Array.isArray(executionErrors) && executionErrors.length > 0),
+    executionErrors: executionErrors || [],
   });
 
   // 7. Format review summary body

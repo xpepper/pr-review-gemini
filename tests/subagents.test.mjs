@@ -1080,6 +1080,40 @@ index 1111111..2222222 100644
       assert.equal(passedTools.length, 3);
       assert.equal(result.errors.length, 0);
     });
+
+    it('isolates diff reader state across parallel lens tasks so read budgets are not shared', async () => {
+      const largeDiff = 'diff --git a/main.js b/main.js\n' + '+line\n'.repeat(40000);
+      const collectedTools = [];
+
+      const mockRunner = async ({ lens, tools }) => {
+        collectedTools.push({ lensId: lens.id, tools });
+        if (lens.id === 'correctness') {
+          const readTool = tools.find((t) => t.name === 'diff_read');
+          await readTool.handler({ file: 'main.js', lineCount: 5 });
+        }
+        return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+      };
+
+      const plan = resolveLensPlan({ mode: 'balanced' });
+      await dispatchSubagentsParallel({
+        plan,
+        diffText: largeDiff,
+        runnerFn: mockRunner,
+      });
+
+      const correctnessEntry = collectedTools.find((e) => e.lensId === 'correctness');
+      const securityEntry = collectedTools.find((e) => e.lensId === 'security');
+
+      assert.ok(correctnessEntry, 'correctness lens should be executed');
+      assert.ok(securityEntry, 'security lens should be executed');
+
+      const correctnessReadTool = correctnessEntry.tools.find((t) => t.name === 'diff_read');
+      const securityReadTool = securityEntry.tools.find((t) => t.name === 'diff_read');
+
+      // Executing a read on correctness tool must not alter security tool's reader state
+      const secResult = await securityReadTool.handler({ file: 'main.js', lineCount: 2 });
+      assert.equal(secResult.readsCount, 1, 'security lens reader should have exactly 1 read of its own, isolated from correctness lens');
+    });
   });
 
   describe('isQuotaOrCapacityError and Error Classification', () => {
@@ -1314,6 +1348,38 @@ index 1111111..2222222 100644
       assert.equal(output.errors.length, 1);
       assert.equal(output.errors[0].lensId, 'correctness');
       assert.match(output.errors[0].error.message, /not available/);
+    });
+
+    it('injects repository review guidelines into subagent prompt during parallel execution (Increment 19)', async () => {
+      const sampleDiff = `diff --git a/src/index.js b/src/index.js\n+console.log("hello");`;
+      const plan = [
+        {
+          lensId: 'security',
+          lensDef: LENS_DEFINITIONS.security,
+          tier: 'heavy',
+          model: 'claude-3.7-sonnet',
+        },
+      ];
+
+      let receivedPrompt = '';
+      const runnerFn = async ({ prompt }) => {
+        receivedPrompt = prompt;
+        return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+      };
+
+      const guidelines = {
+        formatForLens: () => 'Security Invariant: No hardcoded secrets.',
+      };
+
+      await dispatchSubagentsParallel({
+        plan,
+        diffText: sampleDiff,
+        runnerFn,
+        repoGuidelines: guidelines,
+      });
+
+      assert.match(receivedPrompt, /## Repository Review Guidelines & Invariants:/);
+      assert.match(receivedPrompt, /Security Invariant: No hardcoded secrets\./);
     });
   });
 });
