@@ -407,6 +407,11 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
  * @param {Object} [options.overrides] - Runtime overrides
  * @returns {typeof DEFAULT_CONFIG} Resolved configuration object
  */
+export const PROJECT_CONFIG_REL_PATHS = [
+  '.github/gem-pr-review.json',
+  '.github/pr-review.json',
+];
+
 export function loadConfig(options = {}) {
   const opts = typeof options === 'string' ? { cwd: options } : (options || {});
   const homeDir = opts.homeDir || os.homedir();
@@ -418,11 +423,15 @@ export function loadConfig(options = {}) {
     fs.existsSync(userGemConfigPath) ? userGemConfigPath : userFallbackConfigPath
   );
 
-  const projectGemConfigPath = path.join(cwd, '.github', 'gem-pr-review.json');
-  const projectFallbackConfigPath = path.join(cwd, '.github', 'pr-review.json');
-  const projectConfigPath = opts.projectConfigPath || (
-    fs.existsSync(projectGemConfigPath) ? projectGemConfigPath : projectFallbackConfigPath
-  );
+  let discoveredProjectPath = null;
+  for (const relPath of PROJECT_CONFIG_REL_PATHS) {
+    const candidate = path.join(cwd, relPath);
+    if (fs.existsSync(candidate)) {
+      discoveredProjectPath = candidate;
+      break;
+    }
+  }
+  const projectConfigPath = opts.projectConfigPath || discoveredProjectPath;
 
   const userConfig = readJsonSafely(userConfigPath, opts.userConfigPath ? null : homeDir);
   const projectConfig = readJsonSafely(projectConfigPath, opts.projectConfigPath ? null : cwd);

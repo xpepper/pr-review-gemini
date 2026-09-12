@@ -680,6 +680,7 @@ Handle mutex locks carefully.
         path: '.github/gem-pr-review.md',
         relativePath: '.github/gem-pr-review.md',
         byteSize: 1024,
+        originalByteSize: 1024,
         truncated: false,
       });
       assert.doesNotMatch(JSON.stringify(summary), /\/mock\/absolute/);
@@ -748,6 +749,25 @@ Handle mutex locks carefully.
         relativePath: '.github/`malicious`.md',
       });
       assert.equal(line, '- **Repository Guidelines**: `.github/malicious.md`');
+    });
+
+    it('formats error warning when guidelines has an error', () => {
+      const lineWithError = formatGuidelinesSummaryLine({
+        error: 'Permission denied',
+        relativePath: '.github/gem-pr-review.md',
+      });
+      assert.equal(
+        lineWithError,
+        '- **Repository Guidelines**: `.github/gem-pr-review.md` ⚠️ (error: Permission denied)'
+      );
+
+      const lineWithoutPath = formatGuidelinesSummaryLine({
+        error: 'Cannot read file',
+      });
+      assert.equal(
+        lineWithoutPath,
+        '- **Repository Guidelines**: ⚠️ Error loading guidelines: Cannot read file'
+      );
     });
   });
 

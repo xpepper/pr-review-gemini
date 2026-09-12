@@ -622,12 +622,51 @@ export function formatDiffManifest(manifest) {
  * @param {number} [options.maxBudgetCap=MAX_SUPERVISED_BUDGET_BYTES] - Hard budget ceiling (1 MB)
  * @returns {object}
  */
+/**
+ * Builds a fast O(1) file index Map from normalized file path to parsed file object.
+ *
+ * @param {Array<object>} parsedFiles - Array of parsed unified diff file objects
+ * @returns {Map<string, object>}
+ */
+export function buildDiffFileIndex(parsedFiles) {
+  const map = new Map();
+  if (!Array.isArray(parsedFiles)) return map;
+  const normalize = (p) => {
+    if (!p) return '';
+    if (p.startsWith('a/') || p.startsWith('b/')) return p.slice(2);
+    return p;
+  };
+  for (const f of parsedFiles) {
+    if (f.path) map.set(normalize(f.path), f);
+    if (f.newPath) map.set(normalize(f.newPath), f);
+    if (f.oldPath) map.set(normalize(f.oldPath), f);
+  }
+  return map;
+}
+
+/**
+ * Creates a host-supervised diff reader for the diff inspection tool.
+ * Enforces per-pass read limits (default: 16) and cumulative byte budgets (~640 KB default, capped at 1 MB).
+ * Provides file-specific extraction and targeted hunk slicing.
+ *
+ * @param {object} options
+ * @param {string} [options.diffFilePath] - Path to temp diff file
+ * @param {string} [options.diffText] - Direct diff text (fallback if no file)
+ * @param {object} [options.manifest] - Pre-generated manifest
+ * @param {Array<object>} [options.parsedFiles] - Pre-parsed diff files
+ * @param {Map<string, object>} [options.fileIndex] - Pre-built file index Map
+ * @param {number} [options.maxReads=MAX_SUPERVISED_READS] - Maximum allowed read calls (default: 16)
+ * @param {number} [options.maxBudgetBytes=DEFAULT_SUPERVISED_BUDGET_BYTES] - Default budget (~640 KB)
+ * @param {number} [options.maxBudgetCap=MAX_SUPERVISED_BUDGET_BYTES] - Hard budget ceiling (1 MB)
+ * @returns {object}
+ */
 export function createHostSupervisedDiffReader(options = {}) {
   const {
     diffFilePath = null,
     diffText = '',
     manifest: providedManifest = null,
     parsedFiles: providedParsedFiles = null,
+    fileIndex: providedFileIndex = null,
     maxReads = MAX_SUPERVISED_READS,
     maxBudgetBytes = DEFAULT_SUPERVISED_BUDGET_BYTES,
     maxBudgetCap = MAX_SUPERVISED_BUDGET_BYTES,
@@ -635,6 +674,7 @@ export function createHostSupervisedDiffReader(options = {}) {
 
   const rawDiff = diffText || (!providedParsedFiles && diffFilePath ? fs.readFileSync(diffFilePath, 'utf8') : '');
   const parsedFiles = Array.isArray(providedParsedFiles) ? providedParsedFiles : parseUnifiedDiff(rawDiff);
+  const fileIndex = providedFileIndex || buildDiffFileIndex(parsedFiles);
   const manifest = providedManifest || generateDiffManifest(parsedFiles, { threshold: LARGE_DIFF_THRESHOLD_BYTES });
 
   const effectiveBudget = Math.min(
@@ -700,7 +740,13 @@ export function createHostSupervisedDiffReader(options = {}) {
         };
       }
 
-      const fileDiff = getFileDiff(parsedFiles, file);
+      const normalize = (p) => {
+        if (!p) return '';
+        if (p.startsWith('a/') || p.startsWith('b/')) return p.slice(2);
+        return p;
+      };
+      const target = normalize(file.trim());
+      const fileDiff = fileIndex.get(target) || getFileDiff(parsedFiles, file);
       if (!fileDiff) {
         return {
           error: `FILE_NOT_FOUND: File "${file}" was not found in the PR diff.`,
@@ -907,6 +953,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
   }
 
   const parsedFiles = parseUnifiedDiff(text);
+  const fileIndex = buildDiffFileIndex(parsedFiles);
   const manifest = generateDiffManifest(parsedFiles, { threshold });
   const formattedManifest = formatDiffManifest(manifest);
 
@@ -916,6 +963,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
       diffText: text,
       manifest,
       parsedFiles,
+      fileIndex,
       maxReads: options.maxReads ?? MAX_SUPERVISED_READS,
       maxBudgetBytes: options.maxBudgetBytes ?? DEFAULT_SUPERVISED_BUDGET_BYTES,
       maxBudgetCap: options.maxBudgetCap ?? MAX_SUPERVISED_BUDGET_BYTES,
@@ -939,6 +987,7 @@ export async function createFileBackedDiff(diffText, options = {}) {
     manifest,
     formattedManifest,
     parsedFiles,
+    fileIndex,
     reader,
     createReader,
     cleanup,

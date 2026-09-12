@@ -25,13 +25,8 @@ import {
 import {
   resolveActiveGuidelines,
   formatGuidelinesSummaryLine,
-  buildBaseRefGuidelines,
-  createGuidelinesSummary,
-  markGuidelinesUntrusted,
   getTouchedFilesFromDiff,
-  isFileTouchedInDiff,
   verifyGuidelinesAuthenticity,
-  DEFAULT_GUIDELINE_FILENAMES,
 } from './guidelines.js';
 import {
   resolveLensPlan,
@@ -409,9 +404,9 @@ export async function runSelfReview(options = {}) {
 
     const lensResults = dispatchOutput.results || [];
     const executionErrors = dispatchOutput.errors || lensResults.filter((r) => r.status === 'error');
-    const allLensesErrored = executionErrors.length > 0 && executionErrors.length === plan.length;
+    const hasExecutionErrors = executionErrors.length > 0;
 
-    if (allLensesErrored) {
+    if (hasExecutionErrors) {
       const summary = formatSelfReviewSummary({
         verdict: 'FAIL',
         status: 'failed',

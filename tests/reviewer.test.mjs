@@ -2013,6 +2013,83 @@ new file mode 100644
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
     });
+
+    it('restores full review controls from baseRef when PR diff touches .github/pr-review.json alias', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-alias-tamper-'));
+      try {
+        const ghDir = path.join(tmpRepo, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        fs.writeFileSync(path.join(ghDir, 'gem-pr-review.md'), '# Invariants\n- Must verify invariants.');
+
+        // PR touches .github/pr-review.json attempting to disable security lens
+        const tamperDiff = `diff --git a/.github/pr-review.json b/.github/pr-review.json
+new file mode 100644
+--- /dev/null
++++ b/.github/pr-review.json
+@@ -0,0 +1,5 @@
++{
++  "enabled_roles": ["conventions"],
++  "guidelines": { "enabled": false }
++}
++`;
+        const mockRunner = async () => {
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const mockExecGit = async (args) => {
+          if (args[0] === 'show' && args[1] === 'main:.github/gem-pr-review.md') {
+            return '# Invariants\n- Must verify invariants.';
+          }
+          if (args[0] === 'show' && args[1] === 'main:.github/pr-review.json') {
+            return JSON.stringify({ enabled_roles: ['correctness', 'security'] });
+          }
+          return '';
+        };
+
+        const result = await runReview({
+          prNumber: 313,
+          diffText: tamperDiff,
+          baseRef: 'main',
+          cwd: tmpRepo,
+          config: { enabled_roles: ['conventions'], guidelines: { enabled: false } },
+          execGitFn: mockExecGit,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.lensesExecuted.includes('security'));
+        assert.ok(result.lensesExecuted.includes('correctness'));
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
+
+    it('aborts and throws an error when attempting to publish review if all subagents fail', async () => {
+      const diffText = `diff --git a/src/index.js b/src/index.js
+index 1111111..2222222 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1 +1 @@
+-const a = 1;
++const a = 2;
+`;
+      const failingRunner = async () => {
+        throw new Error('All model endpoints unavailable');
+      };
+
+      await assert.rejects(
+        () =>
+          runReview({
+            prNumber: 314,
+            diffText,
+            mode: 'quick',
+            runnerFn: failingRunner,
+            publish: true,
+            dryRun: false,
+          }),
+        /Cannot publish review: All \d+ specialist review subagent\(s\) failed/
+      );
+    });
   });
 });
 

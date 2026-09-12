@@ -551,6 +551,8 @@ export async function dispatchSubagentsParallel({
                 diffFilePath: activeTransport.diffFilePath,
                 diffText: activeTransport.diffText || (typeof diffText === 'string' ? diffText : ''),
                 manifest: activeTransport.manifest,
+                parsedFiles: activeTransport.parsedFiles,
+                fileIndex: activeTransport.fileIndex,
               })
             : null);
 

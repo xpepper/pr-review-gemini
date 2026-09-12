@@ -618,6 +618,38 @@ new file mode 100644
       assert.ok(result.summary.includes('Execution Error') || result.summary.includes('FAILED'));
     });
 
+    it('fails closed when a partial specialist lens encounters an execution error', async () => {
+      const diffText = `diff --git a/src/index.js b/src/index.js
+new file mode 100644
+--- /dev/null
++++ b/src/index.js
+@@ -0,0 +1,2 @@
++console.log(1);
++`;
+
+      // quick mode executes multiple lenses; simulate one failing while another succeeds with no findings
+      let callCount = 0;
+      const runnerFn = async () => {
+        callCount++;
+        if (callCount === 2) {
+          throw new Error('Specialist subagent crashed');
+        }
+        return { output: '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>' };
+      };
+
+      const result = await runSelfReview({
+        diffText,
+        mode: 'quick',
+        runnerFn,
+      });
+
+      assert.equal(result.status, 'failed');
+      assert.equal(result.verdict, 'FAIL');
+      assert.ok(result.executionErrors.length > 0);
+      assert.ok(result.summary.includes('SELF-REVIEW FAILED (FAIL)'));
+      assert.ok(result.summary.includes('Specialist subagent crashed'));
+    });
+
     it('recovers findings from degraded/malformed JSON envelope in self-review and fails closed on blocking defect', async () => {
       const diffText = `diff --git a/src/auth.js b/src/auth.js
 new file mode 100644

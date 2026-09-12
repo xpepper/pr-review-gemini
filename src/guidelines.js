@@ -889,9 +889,11 @@ export function createGuidelinesSummary(guidelines) {
     path: rel,
     relativePath: rel,
     byteSize: guidelines.byteSize || 0,
+    originalByteSize: guidelines.originalByteSize ?? guidelines.byteSize ?? 0,
     truncated: Boolean(guidelines.truncated),
     ...(guidelines.source ? { source: guidelines.source } : {}),
     ...(guidelines.untrustedInPr ? { untrustedInPr: true } : {}),
+    ...(guidelines.error ? { error: guidelines.error } : {}),
   };
 }
 
@@ -902,7 +904,16 @@ export function createGuidelinesSummary(guidelines) {
  * @returns {string} Formatted markdown line or empty string
  */
 export function formatGuidelinesSummaryLine(guidelines) {
-  if (!guidelines || !guidelines.found) return '';
+  if (!guidelines) return '';
+  if (guidelines.error) {
+    const rawPath = guidelines.relativePath || guidelines.path;
+    if (rawPath && typeof rawPath === 'string') {
+      const clean = !path.isAbsolute(rawPath) ? rawPath.replace(/\\/g, '/') : path.basename(rawPath);
+      return `- **Repository Guidelines**: \`${clean.replace(/`/g, '')}\` ⚠️ (error: ${guidelines.error})`;
+    }
+    return `- **Repository Guidelines**: ⚠️ Error loading guidelines: ${guidelines.error}`;
+  }
+  if (!guidelines.found) return '';
   const rawPath = guidelines.relativePath || guidelines.path;
   if (!rawPath || typeof rawPath !== 'string') return '';
   const rawClean = !path.isAbsolute(rawPath) ? rawPath.replace(/\\/g, '/') : path.basename(rawPath);
@@ -926,7 +937,7 @@ export function formatGuidelinesSummaryLine(guidelines) {
  * @param {string|null} [options.guidelinesPath=null] - Explicit path override
  * @param {object|null} [options.config=null] - Loaded configuration
  * @param {string} [options.cwd=process.cwd()] - Current working directory
- * @returns {{ activeGuidelines: object|null, guidelinesSummary: object|null }}
+ * @returns {{ activeGuidelines: object|null, guidelinesSummary: object|null, error: string|null }}
  */
 export function resolveActiveGuidelines({
   repoGuidelines = null,
@@ -935,6 +946,7 @@ export function resolveActiveGuidelines({
   cwd = process.cwd(),
 } = {}) {
   let activeGuidelines = null;
+  let loadError = null;
   if (typeof repoGuidelines === 'string') {
     activeGuidelines = {
       ...buildBaseRefGuidelines(
@@ -953,15 +965,19 @@ export function resolveActiveGuidelines({
         config,
         guidelinesPath: guidelinesPath || config?.guidelines?.path,
       });
-    } catch {
-      activeGuidelines = createEmptyGuidelines({
-        enabled: config?.guidelines?.enabled !== false,
-        found: false,
-      });
+    } catch (err) {
+      loadError = err && typeof err.message === 'string' ? err.message : String(err);
+      activeGuidelines = {
+        ...createEmptyGuidelines({
+          enabled: config?.guidelines?.enabled !== false,
+          found: false,
+        }),
+        error: loadError,
+      };
     }
   }
   const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
-  return { activeGuidelines, guidelinesSummary };
+  return { activeGuidelines, guidelinesSummary, error: loadError };
 }
 
 /**

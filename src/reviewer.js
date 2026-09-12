@@ -25,7 +25,7 @@ import {
   normalizeFindingCandidate,
   isValidFindingCandidate,
 } from './publish.js';
-import { loadConfig, resolveConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
+import { loadConfig, resolveConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName, PROJECT_CONFIG_REL_PATHS } from './config.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -667,7 +667,7 @@ export async function runReview({
     throw new Error(`Invalid PR number: ${prNumber}`);
   }
 
-  const resolvedConfig = config || (await loadConfig({ cwd }));
+  let resolvedConfig = config || (await loadConfig({ cwd }));
   const resolvedMode = resolveReviewMode(mode);
   const effectiveExecGit =
     typeof execGitFn === 'function'
@@ -694,7 +694,7 @@ export async function runReview({
   }
 
   // Detect if diff exceeds 200 KB threshold
-  const isLarge = isLargeDiff(unifiedDiffText);
+  let isLarge = isLargeDiff(unifiedDiffText);
   let diffTransport = null;
   let autoCreatedTransport = false;
 
@@ -780,27 +780,39 @@ export async function runReview({
     };
 
     let isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
-    const isConfigTouchedInPr =
-      isFileTouchedInDiff(unifiedDiffText, '.github/gem-pr-review.json', touchedFiles) ||
-      isFileTouchedInDiff(unifiedDiffText, '.gem-pr-review.json', touchedFiles);
+    const isConfigTouchedInPr = PROJECT_CONFIG_REL_PATHS.some((cfgPath) =>
+      isFileTouchedInDiff(unifiedDiffText, cfgPath, touchedFiles)
+    );
 
-    // Prevent PR-controlled config tampering: if PR modified config files, load authoritative guidelines config from baseRef
-    if (isConfigTouchedInPr && confirmedBaseRef) {
-      try {
-        const baseConfigRaw =
-          (await fetchBaseRefFile('.github/gem-pr-review.json', { allowConfig: true })) ||
-          (await fetchBaseRefFile('.gem-pr-review.json', { allowConfig: true }));
-        if (baseConfigRaw) {
-          const baseConfig = JSON.parse(baseConfigRaw);
-          const baseResolved = resolveConfig({ projectConfig: baseConfig });
-          resolvedConfig.guidelines = { ...baseResolved.guidelines };
-        } else {
-          // baseRef had no custom config, reset guidelines config to defaults so PR diff cannot tamper with it
-          resolvedConfig.guidelines = { ...DEFAULT_GUIDELINES_CONFIG };
+    // Prevent PR-controlled config tampering: if PR modified config files, load authoritative configuration from baseRef
+    if (isConfigTouchedInPr) {
+      let baseConfig = null;
+      if (confirmedBaseRef) {
+        for (const cfgPath of PROJECT_CONFIG_REL_PATHS) {
+          try {
+            const raw = await fetchBaseRefFile(cfgPath, { allowConfig: true });
+            if (raw) {
+              baseConfig = JSON.parse(raw);
+              break;
+            }
+          } catch {
+            // continue
+          }
         }
-      } catch {
-        resolvedConfig.guidelines = { ...DEFAULT_GUIDELINES_CONFIG };
       }
+      const baseResolved = resolveConfig({
+        projectConfig: baseConfig,
+      });
+      resolvedConfig = {
+        ...resolvedConfig,
+        ...baseResolved,
+        guidelines: { ...baseResolved.guidelines },
+        enabled_roles: baseResolved.enabled_roles,
+        replace_standard_roles: baseResolved.replace_standard_roles,
+        custom_roles: baseResolved.custom_roles,
+        tiers: baseResolved.tiers,
+        approveMaxPriorityLevel: baseResolved.approveMaxPriorityLevel,
+      };
       isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
     }
 
@@ -968,6 +980,20 @@ export async function runReview({
 
         if (incDiff && incDiff.trim()) {
           unifiedDiffText = incDiff;
+          if (autoCreatedTransport && diffTransport) {
+            try {
+              await diffTransport.cleanup();
+            } catch {
+              // ignore cleanup error
+            }
+            diffTransport = null;
+            autoCreatedTransport = false;
+          }
+          isLarge = isLargeDiff(unifiedDiffText);
+          if (isLarge) {
+            diffTransport = await createFileBackedDiff(unifiedDiffText);
+            autoCreatedTransport = true;
+          }
         }
 
         revalidation = revalidatePriorFindings({
@@ -1035,13 +1061,32 @@ export async function runReview({
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
     const gLine = formatGuidelinesSummaryLine(activeGuidelines);
     const guidelinesLine = gLine ? `${gLine}\n` : '';
-    let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
+    const allSubagentsFailed = plan.length > 0 && subagentErrors.length >= plan.length;
+    let summary;
+    if (allSubagentsFailed) {
+      summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
+
+- **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
+- **Specialist Lenses Inspected**: ${lensesList}
+- **Status**: ❌ **Execution Failed**
+${guidelinesLine}${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
+> ⚠️ **All specialist review subagents encountered execution errors during analysis.**
+${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${e.error}`).join('\n')}
+
+Review was aborted and cannot approve the PR.`;
+    } else {
+      summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Specialist Lenses Inspected**: ${lensesList}
 - **Total Findings**: ${deduplicated.length} (${countsSummary})
 ${guidelinesLine}${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
 ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
+
+      if (subagentErrors.length > 0) {
+        summary += `\n\n> ⚠️ **Partial Execution Errors Encountered**:\n${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${e.error}`).join('\n')}`;
+      }
+    }
 
     if (revalidation) {
       summary += '\n\n' + formatRevalidationSummary(revalidation);
@@ -1086,6 +1131,12 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
     const diffs = parseUnifiedDiff(unifiedDiffText);
 
     if (publish && !dryRun) {
+      if (allSubagentsFailed) {
+        throw new Error(
+          `Cannot publish review: All ${plan.length} specialist review subagent(s) failed with execution errors.`
+        );
+      }
+
       let findingsToPublish = deduplicated;
       if (Array.isArray(selectedIndices)) {
         findingsToPublish = filterFindings(deduplicated, selectedIndices);
@@ -1104,6 +1155,8 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         execFileFn,
         cwd,
         repo,
+        hasExecutionErrors: subagentErrors.length > 0,
+        executionErrors: subagentErrors,
       });
 
       return {
