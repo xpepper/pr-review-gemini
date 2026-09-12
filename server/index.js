@@ -430,11 +430,7 @@ export const MCP_TOOLS = [
       properties: {
         path: {
           type: 'string',
-          description: 'Optional custom path to guidelines file (defaults to .github/gem-pr-review.md)',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Optional workspace directory to search from',
+          description: 'Optional custom relative path to guidelines file (defaults to .github/gem-pr-review.md)',
         },
       },
     },
@@ -447,11 +443,7 @@ export const MCP_TOOLS = [
       properties: {
         path: {
           type: 'string',
-          description: 'Optional custom path to guidelines file (defaults to .github/gem-pr-review.md)',
-        },
-        cwd: {
-          type: 'string',
-          description: 'Optional workspace directory to search from',
+          description: 'Optional custom relative path to guidelines file (defaults to .github/gem-pr-review.md)',
         },
       },
     },
@@ -912,10 +904,9 @@ export function createMcpHandler(options = {}) {
               toolName === 'gem_pr_review_guidelines' ||
               toolName === 'pr_review_guidelines'
             ) {
-              const targetCwd = args.cwd || cwd;
-              const config = loadConfig(targetCwd);
+              const config = loadConfig(cwd);
               const guidelines = loadGuidelinesFn({
-                cwd: targetCwd,
+                cwd,
                 config,
                 guidelinesPath: args.path,
               });

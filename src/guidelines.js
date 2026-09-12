@@ -63,9 +63,17 @@ export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null 
   for (const filename of DEFAULT_GUIDELINE_FILENAMES) {
     const candidate = path.resolve(cwd, filename);
     try {
-      if (fs.statSync(candidate).isFile()) {
-        return candidate;
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile()) continue;
+
+      // Ensure candidate does not escape cwd via symlinks
+      const realCwd = fs.realpathSync(cwd);
+      const realCandidate = fs.realpathSync(candidate);
+      const realRel = path.relative(realCwd, realCandidate);
+      if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+        continue;
       }
+      return candidate;
     } catch {
       continue;
     }
@@ -132,21 +140,27 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       };
     }
 
-    const rawContent = fs.readFileSync(filePath, 'utf8');
-    const byteSize = Buffer.byteLength(rawContent, 'utf8');
+    const fileSize = stat.size;
 
-    if (byteSize > maxBytes) {
-      // O(N) bounded slice via buffer subarray
-      const buf = Buffer.from(rawContent, 'utf8');
-      let truncatedSlice = buf.subarray(0, maxBytes).toString('utf8');
-      if (truncatedSlice.endsWith('\uFFFD')) {
-        truncatedSlice = truncatedSlice.slice(0, -1);
+    if (fileSize > maxBytes) {
+      // Read ONLY up to maxBytes to avoid reading multi-MB files into memory
+      const fd = fs.openSync(filePath, 'r');
+      const buf = Buffer.alloc(maxBytes);
+      let slice = '';
+      try {
+        const bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0);
+        slice = buf.subarray(0, bytesRead).toString('utf8');
+        if (slice.endsWith('\uFFFD')) {
+          slice = slice.slice(0, -1);
+        }
+      } finally {
+        fs.closeSync(fd);
       }
-      const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${byteSize} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`;
+      const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`;
       return {
-        content: truncatedSlice + warning,
-        rawContent,
-        byteSize,
+        content: slice + warning,
+        rawContent: slice,
+        byteSize: fileSize,
         truncated: true,
         path: relativePath,
         relativePath,
@@ -154,6 +168,8 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       };
     }
 
+    const rawContent = fs.readFileSync(filePath, 'utf8');
+    const byteSize = Buffer.byteLength(rawContent, 'utf8');
     return {
       content: rawContent,
       rawContent,

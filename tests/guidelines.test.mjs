@@ -101,6 +101,24 @@ describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
       }
     });
 
+    it('rejects default guideline discovery if .github/gem-pr-review.md is a symlink pointing outside cwd', () => {
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-outside-sym-'));
+      try {
+        const outsideFile = path.join(outsideDir, 'external.md');
+        fs.writeFileSync(outsideFile, '# External');
+
+        const githubDir = path.join(tmpDir, '.github');
+        fs.mkdirSync(githubDir, { recursive: true });
+        const symlinkPath = path.join(githubDir, 'gem-pr-review.md');
+        fs.symlinkSync(outsideFile, symlinkPath);
+
+        const found = discoverGuidelinesFile({ cwd: tmpDir });
+        assert.equal(found, null);
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
     it('returns null if guidelines file does not exist', () => {
       const found = discoverGuidelinesFile({ cwd: tmpDir });
       assert.equal(found, null);
@@ -135,6 +153,7 @@ describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
       const result = readGuidelinesFile(filePath, { maxBytes: 100, cwd: tmpDir });
       assert.equal(result.truncated, true);
       assert.equal(result.byteSize, 500);
+      assert.equal(result.rawContent.length, 100);
       assert.match(result.content, /^A{100}/);
       assert.match(result.content, /Guidelines truncated: file size \(500 bytes\) exceeded maximum allowed limit of 100 bytes/);
     });
