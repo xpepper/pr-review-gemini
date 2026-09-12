@@ -447,6 +447,20 @@ function extractTargetLensId(headingText) {
   return null;
 }
 
+const GLOBAL_HEADING_PATTERN = /^(?:global|general|invariant|architecture|common|overview|shared|core|project\s+memory|checklist)/i;
+
+/**
+ * Checks if a heading signifies global/domain repository guidelines rather than a specialist lens.
+ *
+ * @param {string} headingText - Heading text
+ * @returns {boolean}
+ */
+export function isGlobalHeading(headingText) {
+  if (!headingText) return false;
+  const clean = headingText.trim();
+  return GLOBAL_HEADING_PATTERN.test(clean);
+}
+
 /**
  * Parses markdown review guidelines into global instructions and per-lens/role sections.
  *
@@ -528,8 +542,14 @@ export function parseGuidelines(markdown) {
       }
 
       // If already inside a lens section and heading is a nested subsection (level > currentLensLevel),
-      // preserve it within the active lens section!
-      if (currentTargetLens && level > currentLensLevel) {
+      // preserve it within the active lens section UNLESS it is a distinct lens or global heading!
+      const isNestedLensSubsection =
+        currentTargetLens &&
+        level > currentLensLevel &&
+        !targetLens &&
+        !isGlobalHeading(headingText);
+
+      if (isNestedLensSubsection) {
         if (currentSection) {
           currentSection.lines.push(line);
         }
@@ -819,6 +839,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
     parsed,
     formatForLens: (lensId, opts = {}) =>
       resolveGuidelinesForLens({ parsed, lensId, truncationWarning: fileResult.truncationWarning, ...opts }),
+    source: 'disk',
   };
 }
 
@@ -826,7 +847,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
  * Creates a sanitized, public-safe guidelines summary object without local machine paths.
  *
  * @param {object|null} guidelines - Guidelines object from loadGuidelines
- * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, originalByteSize: number, truncated: boolean }|null}
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, originalByteSize: number, truncated: boolean, source?: string }|null}
  */
 export function createGuidelinesSummary(guidelines) {
   if (!guidelines) return null;
@@ -846,6 +867,7 @@ export function createGuidelinesSummary(guidelines) {
     relativePath: rel,
     byteSize: guidelines.byteSize || 0,
     truncated: Boolean(guidelines.truncated),
+    ...(guidelines.source ? { source: guidelines.source } : {}),
     ...(guidelines.untrustedInPr ? { untrustedInPr: true } : {}),
   };
 }
@@ -891,11 +913,14 @@ export function resolveActiveGuidelines({
 } = {}) {
   let activeGuidelines = null;
   if (typeof repoGuidelines === 'string') {
-    activeGuidelines = buildBaseRefGuidelines(
-      repoGuidelines,
-      guidelinesPath || '.github/gem-pr-review.md',
-      config?.guidelines?.max_bytes
-    );
+    activeGuidelines = {
+      ...buildBaseRefGuidelines(
+        repoGuidelines,
+        guidelinesPath || '.github/gem-pr-review.md',
+        config?.guidelines?.max_bytes
+      ),
+      source: 'caller',
+    };
   } else if (repoGuidelines && typeof repoGuidelines === 'object') {
     activeGuidelines = repoGuidelines;
   } else {
@@ -917,42 +942,88 @@ export function resolveActiveGuidelines({
 }
 
 /**
- * Checks whether a given relative file path is modified in a unified diff text.
- * Performs fast parsed diff comparison with regex fallback.
+ * Extracts a normalized Set of relative file paths modified in unified diff text.
+ * Caches lowercase forward-slash paths from diff headers, renames, copies, and parsed chunks.
  *
  * @param {string} diffText - Raw unified diff text
- * @param {string} relPath - Relative file path to check
- * @returns {boolean}
+ * @returns {Set<string>} Set of normalized lowercase relative paths
  */
-export function isFileTouchedInDiff(diffText, relPath) {
-  if (!diffText || typeof diffText !== 'string' || !relPath || typeof relPath !== 'string') {
-    return false;
-  }
-  const normRel = relPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+export function getTouchedFilesFromDiff(diffText) {
+  const touched = new Set();
+  if (!diffText || typeof diffText !== 'string') return touched;
 
   try {
     const parsedDiffs = parseUnifiedDiff(diffText);
     for (const d of parsedDiffs) {
-      const f = (d.file || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
-      const oldF = (d.oldPath || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
-      if (f === normRel || oldF === normRel) {
-        return true;
-      }
+      if (d.path) touched.add(d.path.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
+      if (d.file) touched.add(d.file.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
+      if (d.newPath) touched.add(d.newPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
+      if (d.oldPath) touched.add(d.oldPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
     }
   } catch {
-    // fallback to regex pattern below
+    // fallback to regex parsing below
   }
 
-  const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(
-    `(?:diff --git [^\n]*"?\\b(?:a|b)/${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `--- "?(?:a/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `\\+\\+\\+ "?(?:b/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `rename (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `copy (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$))`,
-    'i'
-  );
-  return pattern.test(diffText);
+  // Scan git diff header patterns line-by-line to ensure full coverage of renamed, copied, and quoted paths
+  const lines = diffText.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      const rest = line.slice('diff --git '.length).trim();
+      const quotedMatch = rest.match(/^"((?:[^"\\]|\\.)*)"\s+"((?:[^"\\]|\\.)*)"$/);
+      if (quotedMatch) {
+        const p1 = quotedMatch[1].replace(/^(?:a|b)\//, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+        const p2 = quotedMatch[2].replace(/^(?:a|b)\//, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+        if (p1) touched.add(p1);
+        if (p2) touched.add(p2);
+      } else {
+        const parts = rest.split(/\s+/);
+        if (parts[0]) {
+          const p1 = parts[0].replace(/^"|"$/g, '').replace(/^(?:a|b)\//, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+          if (p1) touched.add(p1);
+        }
+        if (parts[1]) {
+          const p2 = parts[1].replace(/^"|"$/g, '').replace(/^(?:a|b)\//, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+          if (p2) touched.add(p2);
+        }
+      }
+    } else if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+      const raw = line.slice(4).trim();
+      if (raw && raw !== '/dev/null') {
+        const cleaned = raw.replace(/^"|"$/g, '').replace(/^(?:a|b)\//, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+        if (cleaned) touched.add(cleaned);
+      }
+    } else if (line.startsWith('rename from ') || line.startsWith('rename to ') ||
+               line.startsWith('copy from ') || line.startsWith('copy to ')) {
+      const cleaned = line.replace(/^(?:rename|copy) (?:from|to) /, '').trim().replace(/^"|"$/g, '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      if (cleaned) touched.add(cleaned);
+    }
+  }
+
+  return touched;
+}
+
+/**
+ * Checks whether a given relative file path is modified in a unified diff text.
+ * Performs fast O(1) set lookup when pre-parsed touchedFiles Set is provided.
+ *
+ * @param {string} diffText - Raw unified diff text
+ * @param {string} relPath - Relative file path to check
+ * @param {Set<string>} [touchedFiles=null] - Optional pre-computed touched files Set
+ * @returns {boolean}
+ */
+export function isFileTouchedInDiff(diffText, relPath, touchedFiles = null) {
+  if (!relPath || typeof relPath !== 'string') {
+    return false;
+  }
+  const normRel = relPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+  if (touchedFiles && touchedFiles instanceof Set) {
+    return touchedFiles.has(normRel);
+  }
+  if (!diffText || typeof diffText !== 'string') {
+    return false;
+  }
+  const computed = getTouchedFilesFromDiff(diffText);
+  return computed.has(normRel);
 }
 
 /**
@@ -983,4 +1054,156 @@ export function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
     : null;
   return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
 }
+
+/**
+ * Verifies the authenticity of active review guidelines against an authoritative base reference
+ * (e.g. PR target baseRef or local worktree HEAD).
+ *
+ * Enforces fail-closed protection against PR/worktree prompt injection attacks:
+ * - If guidelines were already retrieved from base ref, avoids redundant network/git refetches.
+ * - Unconditionally compares local/caller content with base reference ground truth.
+ * - Replaces modified or truncated content with authoritative base content.
+ * - If the file does not exist on base ref (e.g. introduced in untrusted PR), marks it untrusted
+ *   and attempts recovery from alternative default base ref candidates.
+ * - Fails closed if the base reference is unconfirmed and diff modifies guidelines or is custom.
+ *
+ * @param {object} params
+ * @param {object} params.activeGuidelines - Current active guidelines object
+ * @param {object|null} params.guidelinesSummary - Current guidelines summary object
+ * @param {Function} params.fetchBaseContentFn - Async function (relPath) => Promise<string|null>
+ * @param {string} [params.unifiedDiffText=''] - Raw unified diff text
+ * @param {Set<string>} [params.touchedFiles=null] - Pre-parsed set of lowercase modified file paths
+ * @param {object|null} [params.config=null] - Resolved configuration object
+ * @param {string|null} [params.safeCustomGuidelinesPath=null] - Validated safe custom path override
+ * @param {boolean} [params.isBaseRefConfirmed=false] - Whether baseRef is authoritative
+ * @param {boolean} [params.isCustomDiff=false] - Whether caller provided explicit custom diffText
+ * @param {boolean} [params.requireModified=false] - If true, only verifies against base if guidelines are touched in diff
+ * @returns {Promise<{ activeGuidelines: object, guidelinesSummary: object|null }>}
+ */
+export async function verifyGuidelinesAuthenticity({
+  activeGuidelines,
+  guidelinesSummary,
+  fetchBaseContentFn,
+  unifiedDiffText = '',
+  touchedFiles = null,
+  config = null,
+  safeCustomGuidelinesPath = null,
+  isBaseRefConfirmed = false,
+  isCustomDiff = false,
+  requireModified = false,
+}) {
+  let updatedGuidelines = activeGuidelines;
+  let updatedSummary = guidelinesSummary;
+
+  let relGuidelines = updatedGuidelines?.relativePath || updatedGuidelines?.path;
+
+  // If initial discovery found no guidelines, but baseRef is confirmed,
+  // check if authoritative guidelines exist on baseRef (e.g. PR deleted them or sparse checkout)
+  if (!relGuidelines && isBaseRefConfirmed && typeof fetchBaseContentFn === 'function') {
+    const candidates = safeCustomGuidelinesPath
+      ? [safeCustomGuidelinesPath]
+      : DEFAULT_GUIDELINE_FILENAMES;
+
+    for (const cand of candidates) {
+      try {
+        const rawBaseContent = await fetchBaseContentFn(cand);
+        if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
+          updatedGuidelines = buildBaseRefGuidelines(
+            rawBaseContent,
+            cand,
+            config?.guidelines?.max_bytes
+          );
+          updatedSummary = createGuidelinesSummary(updatedGuidelines);
+          if (updatedSummary) {
+            updatedSummary.source = 'base_ref';
+          }
+          relGuidelines = cand;
+          break;
+        }
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  if (relGuidelines) {
+    const isModified = isFileTouchedInDiff(unifiedDiffText, relGuidelines, touchedFiles);
+
+    if (requireModified && !isModified) {
+      return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
+    }
+
+    if (updatedGuidelines?.source === 'base_ref') {
+      // If remote guidelines were fetched without confirmed baseRef in an untrusted or modified diff, fail closed
+      if (!isBaseRefConfirmed && (isModified || isCustomDiff)) {
+        return markGuidelinesUntrusted(updatedGuidelines, updatedSummary);
+      }
+      return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
+    }
+
+    if (isBaseRefConfirmed && typeof fetchBaseContentFn === 'function') {
+      try {
+        const rawBaseContent = await fetchBaseContentFn(relGuidelines);
+        if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
+          const baseGuidelines = buildBaseRefGuidelines(
+            rawBaseContent,
+            relGuidelines,
+            config?.guidelines?.max_bytes
+          );
+
+          if (updatedGuidelines.rawContent !== baseGuidelines.rawContent || baseGuidelines.truncated) {
+            // Local disk or caller content was modified or truncated relative to base branch.
+            // Adopt authoritative base branch content.
+            updatedGuidelines = baseGuidelines;
+            if (updatedSummary) {
+              Object.assign(updatedSummary, createGuidelinesSummary(updatedGuidelines));
+              updatedSummary.source = 'base_ref';
+            }
+          } else {
+            updatedGuidelines.source = 'base_ref';
+            if (updatedSummary) {
+              updatedSummary.source = 'base_ref';
+            }
+          }
+        } else {
+          // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR) or is empty: fail closed
+          ({ activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary } =
+            markGuidelinesUntrusted(updatedGuidelines, updatedSummary));
+
+          // If the PR introduced an untrusted candidate, check if a legitimate fallback candidate exists on confirmedBaseRef
+          if (!safeCustomGuidelinesPath) {
+            const remainingCandidates = DEFAULT_GUIDELINE_FILENAMES.filter((cand) => cand !== relGuidelines);
+            for (const cand of remainingCandidates) {
+              try {
+                const fallbackRaw = await fetchBaseContentFn(cand);
+                if (typeof fallbackRaw === 'string' && fallbackRaw.length > 0) {
+                  updatedGuidelines = buildBaseRefGuidelines(
+                    fallbackRaw,
+                    cand,
+                    config?.guidelines?.max_bytes
+                  );
+                  updatedSummary = createGuidelinesSummary(updatedGuidelines);
+                  if (updatedSummary) {
+                    updatedSummary.source = 'base_ref';
+                  }
+                  break;
+                }
+              } catch {
+                // continue
+              }
+            }
+          }
+        }
+      } catch {
+        return markGuidelinesUntrusted(updatedGuidelines, updatedSummary);
+      }
+    } else if (isModified || isCustomDiff) {
+      // No confirmed baseRef to verify authenticity against, and diff modifies guidelines or is custom: fail closed
+      return markGuidelinesUntrusted(updatedGuidelines, updatedSummary);
+    }
+  }
+
+  return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
+}
+
 

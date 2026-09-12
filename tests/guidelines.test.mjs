@@ -25,6 +25,9 @@ import {
   buildBaseRefGuidelines,
   formatGuidelinesForLens,
   formatGuidelinesSummaryLine,
+  getTouchedFilesFromDiff,
+  isFileTouchedInDiff,
+  verifyGuidelinesAuthenticity,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -430,6 +433,40 @@ Performance rules.
 
       assert.ok(parsed.lenses.performance.includes('Performance rules.'));
       assert.ok(!parsed.lenses.performance.includes('Token expiration rules'));
+    });
+
+    it('includes global section content in global text even when defined after a lens section', () => {
+      const markdown = `# Title
+Preamble.
+
+## Security
+Security instructions.
+
+## Global Invariants
+- Invariant 1: Must authenticate.
+- Invariant 2: Must validate inputs.
+`;
+      const parsed = parseGuidelines(markdown);
+      assert.match(parsed.global, /Preamble\./);
+      assert.match(parsed.global, /## Global Invariants/);
+      assert.match(parsed.global, /Must authenticate\./);
+      assert.match(parsed.global, /Must validate inputs\./);
+      assert.ok(!parsed.lenses.security.includes('Must authenticate'));
+    });
+
+    it('includes global section content in global text when lens is level 1 heading', () => {
+      const markdown = `# Title
+
+# Security
+Security instructions.
+
+## Global Invariants
+- Must verify invariants.
+`;
+      const parsed = parseGuidelines(markdown);
+      assert.match(parsed.global, /## Global Invariants/);
+      assert.match(parsed.global, /Must verify invariants\./);
+      assert.ok(!parsed.lenses.security.includes('Must verify invariants'));
     });
 
     it('does not misroute hyphenated non-role headings as role definitions', () => {
@@ -845,6 +882,110 @@ ValueOf instructions.
       assert.equal(desc.parsed.sections.length, 2);
       assert.equal(typeof desc.formatForLens, 'function');
       assert.match(desc.formatForLens('security'), /Secure all endpoints\./);
+    });
+  });
+
+  describe('getTouchedFilesFromDiff & verifyGuidelinesAuthenticity', () => {
+    it('extracts normalized set of touched files from diff text', () => {
+      const diff = `diff --git a/.github/gem-pr-review.md b/.github/gem-pr-review.md
+--- a/.github/gem-pr-review.md
++++ b/.github/gem-pr-review.md
+@@ -1 +1 @@
+-# a
++# b
+diff --git "a/src/file with space.js" "b/src/file with space.js"
+--- a/src/file with space.js
++++ b/src/file with space.js
+`;
+      const touched = getTouchedFilesFromDiff(diff);
+      assert.ok(touched.has('.github/gem-pr-review.md'));
+      assert.ok(touched.has('src/file with space.js'));
+      assert.equal(touched.has('non-existent.md'), false);
+    });
+
+    it('isFileTouchedInDiff uses pre-parsed touched files Set for O(1) checks', () => {
+      const touched = new Set(['.github/gem-pr-review.md']);
+      assert.equal(isFileTouchedInDiff('', '.github/gem-pr-review.md', touched), true);
+      assert.equal(isFileTouchedInDiff('', '.github/other.md', touched), false);
+    });
+
+    it('verifyGuidelinesAuthenticity skips refetching when source is base_ref', async () => {
+      let fetchCalled = false;
+      const mockFetch = async () => {
+        fetchCalled = true;
+        return 'content';
+      };
+      const active = {
+        path: '.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
+        source: 'base_ref',
+        enabled: true,
+        found: true,
+      };
+      const summary = { path: '.github/gem-pr-review.md', enabled: true, found: true, source: 'base_ref' };
+
+      const res = await verifyGuidelinesAuthenticity({
+        activeGuidelines: active,
+        guidelinesSummary: summary,
+        fetchBaseContentFn: mockFetch,
+        isBaseRefConfirmed: true,
+      });
+
+      assert.equal(fetchCalled, false);
+      assert.equal(res.activeGuidelines.source, 'base_ref');
+    });
+
+    it('verifyGuidelinesAuthenticity adopts baseRef content when caller or local content differs', async () => {
+      const mockFetch = async (relPath) => {
+        if (relPath === '.github/gem-pr-review.md') {
+          return '# Authoritative Invariants\n- Must verify.';
+        }
+        return null;
+      };
+      const active = {
+        path: '.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
+        source: 'caller',
+        rawContent: '# Injected Rules',
+        enabled: true,
+        found: true,
+      };
+      const summary = { path: '.github/gem-pr-review.md', enabled: true, found: true };
+
+      const res = await verifyGuidelinesAuthenticity({
+        activeGuidelines: active,
+        guidelinesSummary: summary,
+        fetchBaseContentFn: mockFetch,
+        isBaseRefConfirmed: true,
+      });
+
+      assert.equal(res.activeGuidelines.source, 'base_ref');
+      assert.match(res.activeGuidelines.rawContent, /Authoritative Invariants/);
+      assert.equal(res.guidelinesSummary.source, 'base_ref');
+    });
+
+    it('verifyGuidelinesAuthenticity marks untrusted when file is absent on baseRef and no candidate exists', async () => {
+      const mockFetch = async () => null;
+      const active = {
+        path: '.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
+        source: 'disk',
+        rawContent: '# New Untrusted Rules',
+        enabled: true,
+        found: true,
+      };
+      const summary = { path: '.github/gem-pr-review.md', enabled: true, found: true };
+
+      const res = await verifyGuidelinesAuthenticity({
+        activeGuidelines: active,
+        guidelinesSummary: summary,
+        fetchBaseContentFn: mockFetch,
+        isBaseRefConfirmed: true,
+      });
+
+      assert.equal(res.activeGuidelines.untrustedInPr, true);
+      assert.equal(res.guidelinesSummary.untrustedInPr, true);
+      assert.equal(res.activeGuidelines.content, '');
     });
   });
 });

@@ -25,7 +25,7 @@ import {
   normalizeFindingCandidate,
   isValidFindingCandidate,
 } from './publish.js';
-import { loadConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
+import { loadConfig, resolveConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -106,7 +106,9 @@ import {
   isSafeGuidelinesPath,
   createEmptyGuidelines,
   buildBaseRefGuidelines,
+  getTouchedFilesFromDiff,
   isFileTouchedInDiff,
+  verifyGuidelinesAuthenticity,
   markGuidelinesUntrusted,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
@@ -570,6 +572,7 @@ async function fetchPrMetadataWithFallback({ prNumber, repo, execGhFn, cwd }) {
   if (!Number.isFinite(num)) return null;
 
   const queryFieldSets = [
+    'headRefOid,baseRefOid,baseRefName,author,title',
     'headRefOid,baseRefName,author,title',
     'headRefOid,author,title',
   ];
@@ -586,6 +589,7 @@ async function fetchPrMetadataWithFallback({ prNumber, repo, execGhFn, cwd }) {
           title: meta.title || `PR #${num}`,
           author: meta.author?.login || null,
           headSha: meta.headRefOid || null,
+          baseSha: meta.baseRefOid || null,
           baseRefName: meta.baseRefName || null,
         };
       }
@@ -693,6 +697,8 @@ export async function runReview({
         ? baseRef.trim()
         : prMetadata?.baseRefName || null;
 
+    const touchedFiles = getTouchedFilesFromDiff(unifiedDiffText);
+
     const fetchBaseRefFile = async (filePath, { allowConfig = false } = {}) => {
       if (!confirmedBaseRef || !filePath || typeof filePath !== 'string') return null;
       const cleanPath = path.normalize(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/');
@@ -703,11 +709,13 @@ export async function runReview({
       if (allowConfig && cleanPath !== '.github/gem-pr-review.json' && cleanPath !== '.gem-pr-review.json') {
         return null;
       }
-      try {
-        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${cleanPath}`], { cwd });
-        if (typeof out === 'string' && out.length > 0) return out;
-      } catch {
-        // continue
+      if (prMetadata?.baseSha) {
+        try {
+          const out = await effectiveExecGit(['show', `${prMetadata.baseSha}:${cleanPath}`], { cwd });
+          if (typeof out === 'string' && out.length > 0) return out;
+        } catch {
+          // continue
+        }
       }
       if (!confirmedBaseRef.startsWith('origin/')) {
         try {
@@ -716,6 +724,12 @@ export async function runReview({
         } catch {
           // continue
         }
+      }
+      try {
+        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${cleanPath}`], { cwd });
+        if (typeof out === 'string' && out.length > 0) return out;
+      } catch {
+        // continue
       }
       if (execGhFn && repo) {
         try {
@@ -736,8 +750,8 @@ export async function runReview({
 
     let isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
     const isConfigTouchedInPr =
-      isFileTouchedInDiff(unifiedDiffText, '.github/gem-pr-review.json') ||
-      isFileTouchedInDiff(unifiedDiffText, '.gem-pr-review.json');
+      isFileTouchedInDiff(unifiedDiffText, '.github/gem-pr-review.json', touchedFiles) ||
+      isFileTouchedInDiff(unifiedDiffText, '.gem-pr-review.json', touchedFiles);
 
     // Prevent PR-controlled config tampering: if PR modified config files, load authoritative guidelines config from baseRef
     if (isConfigTouchedInPr && confirmedBaseRef) {
@@ -747,10 +761,8 @@ export async function runReview({
           (await fetchBaseRefFile('.gem-pr-review.json', { allowConfig: true }));
         if (baseConfigRaw) {
           const baseConfig = JSON.parse(baseConfigRaw);
-          resolvedConfig.guidelines = {
-            ...DEFAULT_GUIDELINES_CONFIG,
-            ...(baseConfig?.guidelines || {}),
-          };
+          const baseResolved = resolveConfig({ projectConfig: baseConfig });
+          resolvedConfig.guidelines = { ...baseResolved.guidelines };
         } else {
           // baseRef had no custom config, reset guidelines config to defaults so PR diff cannot tamper with it
           resolvedConfig.guidelines = { ...DEFAULT_GUIDELINES_CONFIG };
@@ -847,104 +859,18 @@ export async function runReview({
       relGuidelines = null;
     }
 
-    if (!relGuidelines && !repoGuidelines && confirmedBaseRef && isGuidelinesEnabled && !isExplicitPathUnsafe) {
-      const candidates = (safeCustomGuidelinesPath
-        ? [safeCustomGuidelinesPath]
-        : DEFAULT_GUIDELINE_FILENAMES
-      ).filter((cand) => isSafeGuidelinesPath(cand, cwd));
-
-      for (const cand of candidates) {
-        try {
-          const rawBaseContent = await fetchBaseRefFile(cand);
-          if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
-            activeGuidelines = buildBaseRefGuidelines(
-              rawBaseContent,
-              cand,
-              resolvedConfig?.guidelines?.max_bytes
-            );
-            guidelinesSummary = createGuidelinesSummary(activeGuidelines);
-            if (guidelinesSummary) {
-              guidelinesSummary.source = 'base_ref';
-            }
-            relGuidelines = cand;
-            break;
-          }
-        } catch {
-          // continue
-        }
-      }
-    }
-
-    if (relGuidelines) {
-      const isModifiedInPr = isFileTouchedInDiff(unifiedDiffText, relGuidelines);
-      const isCustomDiff = diffText !== undefined && diffText !== null;
-
-      if (activeGuidelines?.source === 'base_ref') {
-        // If remote guidelines were fetched without confirmed baseRef in an untrusted or modified diff, fail closed
-        if (!confirmedBaseRef && (isModifiedInPr || isCustomDiff)) {
-          ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
-        }
-      } else if (confirmedBaseRef) {
-        // When baseRef is confirmed, unconditionally verify against authoritative base branch ground truth.
-        // This avoids reliance on heuristic diff-detection patterns to decide whether to trust on-disk content.
-        try {
-          const rawBaseContent = await fetchBaseRefFile(relGuidelines);
-          if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
-            const baseGuidelines = buildBaseRefGuidelines(
-              rawBaseContent,
-              relGuidelines,
-              resolvedConfig?.guidelines?.max_bytes
-            );
-
-            if (activeGuidelines.rawContent !== baseGuidelines.rawContent || baseGuidelines.truncated) {
-              // Local disk content was modified or truncated relative to base branch.
-              // Adopt authoritative base branch content.
-              activeGuidelines = baseGuidelines;
-              if (guidelinesSummary) {
-                Object.assign(guidelinesSummary, createGuidelinesSummary(activeGuidelines));
-                guidelinesSummary.source = 'base_ref';
-              }
-            } else {
-              activeGuidelines.source = 'base_ref';
-              if (guidelinesSummary) {
-                guidelinesSummary.source = 'base_ref';
-              }
-            }
-          } else {
-            // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR) or is empty: fail closed
-            ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
-            // If the PR introduced an untrusted candidate, check if a legitimate fallback candidate exists on confirmedBaseRef
-            if (!safeCustomGuidelinesPath && confirmedBaseRef) {
-              const remainingCandidates = DEFAULT_GUIDELINE_FILENAMES.filter((cand) => cand !== relGuidelines);
-              for (const cand of remainingCandidates) {
-                try {
-                  const fallbackRaw = await fetchBaseRefFile(cand);
-                  if (typeof fallbackRaw === 'string' && fallbackRaw.length > 0) {
-                    activeGuidelines = buildBaseRefGuidelines(
-                      fallbackRaw,
-                      cand,
-                      resolvedConfig?.guidelines?.max_bytes
-                    );
-                    guidelinesSummary = createGuidelinesSummary(activeGuidelines);
-                    if (guidelinesSummary) {
-                      guidelinesSummary.source = 'base_ref';
-                    }
-                    relGuidelines = cand;
-                    break;
-                  }
-                } catch {
-                  // continue
-                }
-              }
-            }
-          }
-        } catch {
-          ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
-        }
-      } else if (isModifiedInPr || isCustomDiff) {
-        // No confirmed baseRef to verify authenticity against, and diff modifies guidelines or is custom: fail closed
-        ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
-      }
+    if (isGuidelinesEnabled && !isExplicitPathUnsafe) {
+      ({ activeGuidelines, guidelinesSummary } = await verifyGuidelinesAuthenticity({
+        activeGuidelines,
+        guidelinesSummary,
+        fetchBaseContentFn: fetchBaseRefFile,
+        unifiedDiffText,
+        touchedFiles,
+        config: resolvedConfig,
+        safeCustomGuidelinesPath,
+        isBaseRefConfirmed: Boolean(confirmedBaseRef),
+        isCustomDiff: diffText !== undefined && diffText !== null,
+      }));
     }
 
     // 2b. Incremental re-review discovery & relationship classification
