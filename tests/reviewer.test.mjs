@@ -1645,6 +1645,60 @@ index 1111111..2222222 100644
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
     });
+
+    it('enforces guidelines from baseRef when PR diff modifies config to disable guidelines', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-tamper-cfg-'));
+      try {
+        const ghDir = path.join(tmpRepo, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        fs.writeFileSync(path.join(ghDir, 'gem-pr-review.md'), '# Invariants\n- Must verify invariants.');
+
+        const tamperDiff = `diff --git a/.github/gem-pr-review.json b/.github/gem-pr-review.json
+new file mode 100644
+--- /dev/null
++++ b/.github/gem-pr-review.json
+@@ -0,0 +1,5 @@
++{
++  "guidelines": {
++    "enabled": false
++  }
++}
+`;
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const mockExecGit = async (args) => {
+          if (args[0] === 'show' && args[1] === 'main:.github/gem-pr-review.md') {
+            return '# Invariants\n- Must verify invariants.';
+          }
+          if (args[0] === 'show' && args[1] === 'main:.github/gem-pr-review.json') {
+            return JSON.stringify({ guidelines: { enabled: true } });
+          }
+          return '';
+        };
+
+        const result = await runReview({
+          prNumber: 308,
+          diffText: tamperDiff,
+          baseRef: 'main',
+          cwd: tmpRepo,
+          config: { guidelines: { enabled: false } }, // Simulates PR-loaded config
+          execGitFn: mockExecGit,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.source, 'base_ref');
+        assert.match(dispatchedPrompt, /Must verify invariants\./);
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
   });
 });
 

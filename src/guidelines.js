@@ -718,15 +718,16 @@ export function formatGuidelinesForLens(repoGuidelines, lensId, options = {}) {
 export function createEmptyGuidelines({
   enabled = true,
   found = false,
-  path = null,
-  relativePath = null,
+  path: targetPath = null,
+  relativePath: targetRelativePath = null,
   untrustedInPr = false,
 } = {}) {
+  const resolvedPath = targetRelativePath || targetPath || null;
   return {
     enabled,
     found,
-    path,
-    relativePath,
+    path: resolvedPath,
+    relativePath: resolvedPath,
     byteSize: 0,
     originalByteSize: 0,
     truncated: false,
@@ -886,8 +887,16 @@ export function resolveActiveGuidelines({
   config = null,
   cwd = process.cwd(),
 } = {}) {
-  let activeGuidelines = repoGuidelines || null;
-  if (!activeGuidelines) {
+  let activeGuidelines = null;
+  if (typeof repoGuidelines === 'string') {
+    activeGuidelines = buildBaseRefGuidelines(
+      repoGuidelines,
+      guidelinesPath || '.github/gem-pr-review.md',
+      config?.guidelines?.max_bytes
+    );
+  } else if (repoGuidelines && typeof repoGuidelines === 'object') {
+    activeGuidelines = repoGuidelines;
+  } else {
     try {
       activeGuidelines = loadGuidelines({
         cwd,

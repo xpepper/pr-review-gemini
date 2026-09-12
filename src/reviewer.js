@@ -105,9 +105,6 @@ import {
   isConfinedWithinRoot,
   isSafeGuidelinesPath,
   createEmptyGuidelines,
-  truncateUtf8Safe,
-  formatTruncationWarning,
-  applyGuidelinesContentLimit,
   buildBaseRefGuidelines,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
@@ -747,7 +744,71 @@ export async function runReview({
         ? baseRef.trim()
         : prMetadata?.baseRefName || null;
 
-    const isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
+    const fetchBaseRefFile = async (filePath, { allowConfig = false } = {}) => {
+      if (!confirmedBaseRef || !filePath || typeof filePath !== 'string') return null;
+      const cleanPath = path.normalize(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/');
+      if (cleanPath.startsWith('..')) return null;
+      if (!allowConfig && !isSafeGuidelinesPath(cleanPath, cwd)) {
+        return null;
+      }
+      if (allowConfig && cleanPath !== '.github/gem-pr-review.json' && cleanPath !== '.gem-pr-review.json') {
+        return null;
+      }
+      try {
+        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${cleanPath}`], { cwd });
+        if (typeof out === 'string' && out.length > 0) return out;
+      } catch {
+        // continue
+      }
+      if (!confirmedBaseRef.startsWith('origin/')) {
+        try {
+          const out = await effectiveExecGit(['show', `origin/${confirmedBaseRef}:${cleanPath}`], { cwd });
+          if (typeof out === 'string' && out.length > 0) return out;
+        } catch {
+          // continue
+        }
+      }
+      if (execGhFn && repo) {
+        try {
+          const out = await fetchRemoteRepoGuidelines({
+            repo,
+            relPath: cleanPath,
+            ref: confirmedBaseRef,
+            execGhFn,
+            cwd,
+          });
+          if (typeof out === 'string' && out.length > 0) return out;
+        } catch {
+          // continue
+        }
+      }
+      return null;
+    };
+
+    let isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
+    const isConfigTouchedInPr =
+      isFileTouchedInDiff(unifiedDiffText, '.github/gem-pr-review.json') ||
+      isFileTouchedInDiff(unifiedDiffText, '.gem-pr-review.json');
+
+    // Prevent PR-controlled config bypass: if PR modified config to disable guidelines, check baseRef
+    if (!isGuidelinesEnabled && isConfigTouchedInPr && confirmedBaseRef) {
+      try {
+        const baseConfigRaw =
+          (await fetchBaseRefFile('.github/gem-pr-review.json', { allowConfig: true })) ||
+          (await fetchBaseRefFile('.gem-pr-review.json', { allowConfig: true }));
+        if (baseConfigRaw) {
+          const baseConfig = JSON.parse(baseConfigRaw);
+          if (baseConfig?.guidelines?.enabled !== false) {
+            isGuidelinesEnabled = true;
+            if (resolvedConfig?.guidelines) {
+              resolvedConfig.guidelines.enabled = true;
+            }
+          }
+        }
+      } catch {
+        // continue
+      }
+    }
 
     // Validate and sanitize custom guidelines path if provided to prevent arbitrary file disclosure
     const rawCandidateGuidelinesPath = guidelinesPath || resolvedConfig?.guidelines?.path || null;
@@ -828,43 +889,6 @@ export async function runReview({
       }
     }
 
-    const fetchBaseRefFile = async (filePath) => {
-      if (!confirmedBaseRef || !filePath || typeof filePath !== 'string') return null;
-      const cleanPath = path.normalize(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/');
-      if (cleanPath.startsWith('..') || !isSafeGuidelinesPath(cleanPath, cwd)) {
-        return null;
-      }
-      try {
-        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${cleanPath}`], { cwd });
-        if (typeof out === 'string' && out.length > 0) return out;
-      } catch {
-        // continue
-      }
-      if (!confirmedBaseRef.startsWith('origin/')) {
-        try {
-          const out = await effectiveExecGit(['show', `origin/${confirmedBaseRef}:${cleanPath}`], { cwd });
-          if (typeof out === 'string' && out.length > 0) return out;
-        } catch {
-          // continue
-        }
-      }
-      if (execGhFn && repo) {
-        try {
-          const out = await fetchRemoteRepoGuidelines({
-            repo,
-            relPath: cleanPath,
-            ref: confirmedBaseRef,
-            execGhFn,
-            cwd,
-          });
-          if (typeof out === 'string' && out.length > 0) return out;
-        } catch {
-          // continue
-        }
-      }
-      return null;
-    };
-
     let relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
     if (relGuidelines && (!isSafeGuidelinesPath(relGuidelines, cwd) || isExplicitPathUnsafe)) {
       activeGuidelines = createEmptyGuidelines({ enabled: true, found: false });
@@ -872,7 +896,7 @@ export async function runReview({
       relGuidelines = null;
     }
 
-    if (!relGuidelines && confirmedBaseRef && isGuidelinesEnabled && !isExplicitPathUnsafe) {
+    if (!relGuidelines && !repoGuidelines && confirmedBaseRef && isGuidelinesEnabled && !isExplicitPathUnsafe) {
       const candidates = (safeCustomGuidelinesPath
         ? [safeCustomGuidelinesPath]
         : DEFAULT_GUIDELINE_FILENAMES
