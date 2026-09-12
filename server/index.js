@@ -34,6 +34,7 @@ import {
   runVerification,
   listVerificationProfiles,
   formatVerificationSummary,
+  validateCiVerificationCommand,
 } from '../src/verify.js';
 import { runSelfReview } from '../src/self-review.js';
 import { loadGuidelines, createGuidelinesSummary, isSafeGuidelinesPath } from '../src/guidelines.js';
@@ -829,6 +830,22 @@ export function createMcpHandler(options = {}) {
 
               // Custom command overlay if supplied
               if (command) {
+                const validation = validateCiVerificationCommand(command);
+                if (!validation.safe) {
+                  return {
+                    jsonrpc: '2.0',
+                    id,
+                    result: {
+                      isError: true,
+                      content: [
+                        {
+                          type: 'text',
+                          text: `Invalid verification command: ${validation.reason}`,
+                        },
+                      ],
+                    },
+                  };
+                }
                 config.verificationProfiles = {
                   ...config.verificationProfiles,
                   [profile]: {
@@ -971,11 +988,11 @@ export function createMcpHandler(options = {}) {
                           enabled: summary?.enabled ?? false,
                           found: summary?.found ?? false,
                           path: summary?.path ?? null,
-                          relativePath: summary?.path ?? null,
+                          relativePath: summary?.relativePath ?? summary?.path ?? null,
                           byteSize: summary?.byteSize ?? 0,
                           truncated: summary?.truncated ?? false,
-                          content: guidelines.content || guidelines.rawContent || '',
-                          parsed: guidelines.parsed,
+                          source: summary?.source || guidelines.source || 'disk',
+                          lenses: Object.keys(guidelines.parsed?.lenses || {}),
                         },
                         null,
                         2

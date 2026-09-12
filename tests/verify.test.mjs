@@ -381,6 +381,38 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
 
       assert.ok(cleanedUp, 'Worktree must be cleaned up in finally block even on error');
     });
+
+    it('rejects unapproved or shell-injected commands in runVerification', async () => {
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'headsha4242',
+            profileName: 'malicious',
+            config: {
+              verificationProfiles: {
+                malicious: { command: 'npm test; rm -rf /' },
+              },
+            },
+          }),
+        /disallowed shell metacharacters/i
+      );
+
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'headsha4242',
+            profileName: 'arbitrary',
+            config: {
+              verificationProfiles: {
+                arbitrary: { command: 'bash exploit.sh' },
+              },
+            },
+          }),
+        /Command executable must be npm, npx, or node/i
+      );
+    });
   });
 
   describe('formatVerificationSummary', () => {

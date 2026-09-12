@@ -358,6 +358,10 @@ export async function runVerification({
   spawnFn = spawn,
 }) {
   const profile = resolveVerificationProfile(profileName, config);
+  const validation = validateCiVerificationCommand(profile.command);
+  if (!validation.safe) {
+    throw new Error(`Unsafe verification command for profile "${profile.name}": ${validation.reason}`);
+  }
 
   let targetHeadSha = headSha;
   if (!targetHeadSha && prNumber) {

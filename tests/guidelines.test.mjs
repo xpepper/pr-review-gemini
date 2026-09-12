@@ -987,6 +987,39 @@ diff --git "a/src/file with space.js" "b/src/file with space.js"
       assert.equal(res.guidelinesSummary.untrustedInPr, true);
       assert.equal(res.activeGuidelines.content, '');
     });
+
+    it('verifyGuidelinesAuthenticity memoizes base content fetches to avoid repeated I/O', async () => {
+      const fetchCounts = {};
+      const mockFetch = async (relPath) => {
+        fetchCounts[relPath] = (fetchCounts[relPath] || 0) + 1;
+        if (relPath === '.github/review-instructions.md') {
+          return '# Fallback Rules\n- Rule 1.';
+        }
+        return null;
+      };
+
+      const active = {
+        path: '.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
+        source: 'disk',
+        rawContent: '# Untrusted Disk Rules',
+        enabled: true,
+        found: true,
+      };
+      const summary = { path: '.github/gem-pr-review.md', enabled: true, found: true };
+
+      const res = await verifyGuidelinesAuthenticity({
+        activeGuidelines: active,
+        guidelinesSummary: summary,
+        fetchBaseContentFn: mockFetch,
+        isBaseRefConfirmed: true,
+      });
+
+      assert.equal(res.activeGuidelines.source, 'base_ref');
+      assert.equal(res.activeGuidelines.relativePath, '.github/review-instructions.md');
+      assert.equal(fetchCounts['.github/gem-pr-review.md'], 1);
+      assert.equal(fetchCounts['.github/review-instructions.md'], 1);
+    });
   });
 });
 

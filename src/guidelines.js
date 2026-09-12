@@ -1095,6 +1095,17 @@ export async function verifyGuidelinesAuthenticity({
   let updatedGuidelines = activeGuidelines;
   let updatedSummary = guidelinesSummary;
 
+  const baseFetchCache = new Map();
+  const safeFetchBase = async (filePath) => {
+    if (typeof fetchBaseContentFn !== 'function' || !filePath) return null;
+    if (baseFetchCache.has(filePath)) {
+      return baseFetchCache.get(filePath);
+    }
+    const res = await fetchBaseContentFn(filePath);
+    baseFetchCache.set(filePath, res);
+    return res;
+  };
+
   let relGuidelines = updatedGuidelines?.relativePath || updatedGuidelines?.path;
 
   // If initial discovery found no guidelines, but baseRef is confirmed,
@@ -1106,7 +1117,7 @@ export async function verifyGuidelinesAuthenticity({
 
     for (const cand of candidates) {
       try {
-        const rawBaseContent = await fetchBaseContentFn(cand);
+        const rawBaseContent = await safeFetchBase(cand);
         if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
           updatedGuidelines = buildBaseRefGuidelines(
             rawBaseContent,
@@ -1143,7 +1154,7 @@ export async function verifyGuidelinesAuthenticity({
 
     if (isBaseRefConfirmed && typeof fetchBaseContentFn === 'function') {
       try {
-        const rawBaseContent = await fetchBaseContentFn(relGuidelines);
+        const rawBaseContent = await safeFetchBase(relGuidelines);
         if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
           const baseGuidelines = buildBaseRefGuidelines(
             rawBaseContent,
@@ -1175,7 +1186,7 @@ export async function verifyGuidelinesAuthenticity({
             const remainingCandidates = DEFAULT_GUIDELINE_FILENAMES.filter((cand) => cand !== relGuidelines);
             for (const cand of remainingCandidates) {
               try {
-                const fallbackRaw = await fetchBaseContentFn(cand);
+                const fallbackRaw = await safeFetchBase(cand);
                 if (typeof fallbackRaw === 'string' && fallbackRaw.length > 0) {
                   updatedGuidelines = buildBaseRefGuidelines(
                     fallbackRaw,

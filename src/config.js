@@ -67,7 +67,7 @@ export const DEFAULT_CONFIG = Object.freeze({
 
 const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'prototype', 'constructor']);
 
-function sanitizeModelList(list) {
+export function sanitizeStringList(list) {
   if (!Array.isArray(list)) return [];
   const result = [];
   for (const item of list) {
@@ -78,16 +78,7 @@ function sanitizeModelList(list) {
   return result;
 }
 
-function sanitizeStringList(list) {
-  if (!Array.isArray(list)) return [];
-  const result = [];
-  for (const item of list) {
-    if (typeof item === 'string' && item.trim().length > 0) {
-      result.push(item.trim());
-    }
-  }
-  return result;
-}
+const sanitizeModelList = sanitizeStringList;
 
 export function formatDefaultRoleName(roleId) {
   if (!roleId || typeof roleId !== 'string') return 'Custom Role';
