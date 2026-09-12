@@ -25,7 +25,7 @@ import {
   normalizeFindingCandidate,
   isValidFindingCandidate,
 } from './publish.js';
-import { loadConfig, DEFAULT_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
+import { loadConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName } from './config.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -106,6 +106,8 @@ import {
   isSafeGuidelinesPath,
   createEmptyGuidelines,
   buildBaseRefGuidelines,
+  isFileTouchedInDiff,
+  markGuidelinesUntrusted,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -493,59 +495,6 @@ async function defaultExecGit(args, options = {}) {
   return stdout;
 }
 
-function isFileTouchedInDiff(diffText, relPath) {
-  if (!diffText || !relPath) return false;
-  const normRel = relPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
-  try {
-    const parsedDiffs = parseUnifiedDiff(diffText);
-    for (const d of parsedDiffs) {
-      const f = (d.file || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
-      const oldF = (d.oldPath || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
-      if (f === normRel || oldF === normRel) {
-        return true;
-      }
-    }
-  } catch {
-    // fallback to regex pattern below
-  }
-
-  const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(
-    `(?:diff --git [^\n]*"?\\b(?:a|b)/${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `--- "?(?:a/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `\\+\\+\\+ "?(?:b/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `rename (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$)|` +
-    `copy (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$))`,
-    'i'
-  );
-  return pattern.test(diffText);
-}
-
-/**
- * Marks guidelines as untrusted and resets active content to prevent prompt injection.
- */
-function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
-  const relPath = activeGuidelines?.relativePath || activeGuidelines?.path || null;
-  const updatedGuidelines = {
-    ...activeGuidelines,
-    ...createEmptyGuidelines({
-      enabled: activeGuidelines?.enabled !== false,
-      found: Boolean(activeGuidelines?.found),
-      path: relPath,
-      relativePath: relPath,
-      untrustedInPr: true,
-    }),
-  };
-  const updatedSummary = guidelinesSummary
-    ? {
-        ...guidelinesSummary,
-        untrustedInPr: true,
-        byteSize: 0,
-      }
-    : null;
-  return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
-}
-
 /**
  * Checks if the local git working directory matches the target PR repository.
  *
@@ -790,24 +739,26 @@ export async function runReview({
       isFileTouchedInDiff(unifiedDiffText, '.github/gem-pr-review.json') ||
       isFileTouchedInDiff(unifiedDiffText, '.gem-pr-review.json');
 
-    // Prevent PR-controlled config bypass: if PR modified config to disable guidelines, check baseRef
-    if (!isGuidelinesEnabled && isConfigTouchedInPr && confirmedBaseRef) {
+    // Prevent PR-controlled config tampering: if PR modified config files, load authoritative guidelines config from baseRef
+    if (isConfigTouchedInPr && confirmedBaseRef) {
       try {
         const baseConfigRaw =
           (await fetchBaseRefFile('.github/gem-pr-review.json', { allowConfig: true })) ||
           (await fetchBaseRefFile('.gem-pr-review.json', { allowConfig: true }));
         if (baseConfigRaw) {
           const baseConfig = JSON.parse(baseConfigRaw);
-          if (baseConfig?.guidelines?.enabled !== false) {
-            isGuidelinesEnabled = true;
-            if (resolvedConfig?.guidelines) {
-              resolvedConfig.guidelines.enabled = true;
-            }
-          }
+          resolvedConfig.guidelines = {
+            ...DEFAULT_GUIDELINES_CONFIG,
+            ...(baseConfig?.guidelines || {}),
+          };
+        } else {
+          // baseRef had no custom config, reset guidelines config to defaults so PR diff cannot tamper with it
+          resolvedConfig.guidelines = { ...DEFAULT_GUIDELINES_CONFIG };
         }
       } catch {
-        // continue
+        resolvedConfig.guidelines = { ...DEFAULT_GUIDELINES_CONFIG };
       }
+      isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
     }
 
     // Validate and sanitize custom guidelines path if provided to prevent arbitrary file disclosure
@@ -962,6 +913,30 @@ export async function runReview({
           } else {
             // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR) or is empty: fail closed
             ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
+            // If the PR introduced an untrusted candidate, check if a legitimate fallback candidate exists on confirmedBaseRef
+            if (!safeCustomGuidelinesPath && confirmedBaseRef) {
+              const remainingCandidates = DEFAULT_GUIDELINE_FILENAMES.filter((cand) => cand !== relGuidelines);
+              for (const cand of remainingCandidates) {
+                try {
+                  const fallbackRaw = await fetchBaseRefFile(cand);
+                  if (typeof fallbackRaw === 'string' && fallbackRaw.length > 0) {
+                    activeGuidelines = buildBaseRefGuidelines(
+                      fallbackRaw,
+                      cand,
+                      resolvedConfig?.guidelines?.max_bytes
+                    );
+                    guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+                    if (guidelinesSummary) {
+                      guidelinesSummary.source = 'base_ref';
+                    }
+                    relGuidelines = cand;
+                    break;
+                  }
+                } catch {
+                  // continue
+                }
+              }
+            }
           }
         } catch {
           ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));

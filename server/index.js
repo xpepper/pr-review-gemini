@@ -104,6 +104,7 @@ export const MCP_TOOLS = [
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
+        guidelines_path: GUIDELINES_PATH_PROPERTY,
       },
       required: ['prNumber'],
     },
@@ -363,6 +364,7 @@ export const MCP_TOOLS = [
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
+        guidelines_path: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -419,6 +421,7 @@ export const MCP_TOOLS = [
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
+        guidelines_path: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -431,6 +434,7 @@ export const MCP_TOOLS = [
       properties: {
         path: GUIDELINES_TOOL_PATH_PROPERTY,
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
+        guidelines_path: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -442,6 +446,7 @@ export const MCP_TOOLS = [
       properties: {
         path: GUIDELINES_TOOL_PATH_PROPERTY,
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
+        guidelines_path: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -655,7 +660,7 @@ export function createMcpHandler(options = {}) {
                 roles: args.roles || args.enabledRoles,
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
-                guidelinesPath: args.guidelinesPath,
+                guidelinesPath: args.guidelinesPath || args.guidelines_path,
               });
 
               return {
@@ -880,7 +885,7 @@ export function createMcpHandler(options = {}) {
                 roles: args.roles || args.enabledRoles,
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
-                guidelinesPath: args.guidelinesPath,
+                guidelinesPath: args.guidelinesPath || args.guidelines_path,
               });
 
               return {

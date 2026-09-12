@@ -673,6 +673,54 @@ index 1111111..2222222 100644
       assert.ok(passedSelfReviewArgs);
       assert.equal(passedSelfReviewArgs.guidelinesPath, 'self-guidelines.md');
     });
+
+    it('accepts guidelines_path snake_case alias in MCP review and self-review handlers', async () => {
+      let passedReviewArgs = null;
+      let passedSelfReviewArgs = null;
+
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => 'diff --git a/app.js b/app.js\n+test',
+        runReviewFn: async (args) => {
+          passedReviewArgs = args;
+          return { prNumber: args.prNumber, findings: [] };
+        },
+        runSelfReviewFn: async (args) => {
+          passedSelfReviewArgs = args;
+          return { status: 'passed', findings: [] };
+        },
+      });
+
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 83,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_subagents',
+          arguments: {
+            prNumber: 100,
+            guidelines_path: 'custom-guidelines.md',
+          },
+        },
+      });
+
+      assert.ok(passedReviewArgs);
+      assert.equal(passedReviewArgs.guidelinesPath, 'custom-guidelines.md');
+
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 84,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            guidelines_path: 'self-guidelines.md',
+          },
+        },
+      });
+
+      assert.ok(passedSelfReviewArgs);
+      assert.equal(passedSelfReviewArgs.guidelinesPath, 'self-guidelines.md');
+    });
   });
 
   describe('startMcpServer stream processing', () => {

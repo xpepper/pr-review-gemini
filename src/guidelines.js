@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseUnifiedDiff } from './diff.js';
 
 /**
  * Default guideline filenames checked in order of priority.
@@ -859,7 +860,8 @@ export function formatGuidelinesSummaryLine(guidelines) {
   if (!guidelines || !guidelines.found) return '';
   const rawPath = guidelines.relativePath || guidelines.path;
   if (!rawPath || typeof rawPath !== 'string') return '';
-  const gPath = !path.isAbsolute(rawPath) ? rawPath.replace(/\\/g, '/') : path.basename(rawPath);
+  const rawClean = !path.isAbsolute(rawPath) ? rawPath.replace(/\\/g, '/') : path.basename(rawPath);
+  const gPath = rawClean.replace(/`/g, '');
   let suffix = '';
   if (guidelines.untrustedInPr) {
     suffix = ' ⚠️ (modified in PR; excluded from prompt to prevent injection)';
@@ -912,5 +914,73 @@ export function resolveActiveGuidelines({
   }
   const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
   return { activeGuidelines, guidelinesSummary };
+}
+
+/**
+ * Checks whether a given relative file path is modified in a unified diff text.
+ * Performs fast parsed diff comparison with regex fallback.
+ *
+ * @param {string} diffText - Raw unified diff text
+ * @param {string} relPath - Relative file path to check
+ * @returns {boolean}
+ */
+export function isFileTouchedInDiff(diffText, relPath) {
+  if (!diffText || typeof diffText !== 'string' || !relPath || typeof relPath !== 'string') {
+    return false;
+  }
+  const normRel = relPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+
+  try {
+    const parsedDiffs = parseUnifiedDiff(diffText);
+    for (const d of parsedDiffs) {
+      const f = (d.file || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      const oldF = (d.oldPath || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      if (f === normRel || oldF === normRel) {
+        return true;
+      }
+    }
+  } catch {
+    // fallback to regex pattern below
+  }
+
+  const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `(?:diff --git [^\n]*"?\\b(?:a|b)/${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `--- "?(?:a/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `\\+\\+\\+ "?(?:b/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `rename (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `copy (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$))`,
+    'i'
+  );
+  return pattern.test(diffText);
+}
+
+/**
+ * Marks guidelines as untrusted and resets active content to prevent prompt injection.
+ *
+ * @param {object} activeGuidelines - Active guidelines object
+ * @param {object|null} guidelinesSummary - Guidelines summary object
+ * @returns {{ activeGuidelines: object, guidelinesSummary: object|null }}
+ */
+export function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
+  const relPath = activeGuidelines?.relativePath || activeGuidelines?.path || null;
+  const updatedGuidelines = {
+    ...activeGuidelines,
+    ...createEmptyGuidelines({
+      enabled: activeGuidelines?.enabled !== false,
+      found: Boolean(activeGuidelines?.found),
+      path: relPath,
+      relativePath: relPath,
+      untrustedInPr: true,
+    }),
+  };
+  const updatedSummary = guidelinesSummary
+    ? {
+        ...guidelinesSummary,
+        untrustedInPr: true,
+        byteSize: 0,
+      }
+    : null;
+  return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
 }
 

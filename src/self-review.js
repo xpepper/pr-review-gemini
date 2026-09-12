@@ -1,5 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 import {
   getWorktreeDiff,
   generateSyntheticDiff,
@@ -18,7 +22,15 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
-import { resolveActiveGuidelines, formatGuidelinesSummaryLine } from './guidelines.js';
+import {
+  resolveActiveGuidelines,
+  formatGuidelinesSummaryLine,
+  buildBaseRefGuidelines,
+  createGuidelinesSummary,
+  markGuidelinesUntrusted,
+  isFileTouchedInDiff,
+  DEFAULT_GUIDELINE_FILENAMES,
+} from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -242,7 +254,7 @@ export async function runSelfReview(options = {}) {
   const resolvedConfig = options.config || loadConfig({ cwd });
 
   // Load repository review guidelines
-  const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+  let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
     repoGuidelines: options.repoGuidelines,
     guidelinesPath: options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path,
     config: resolvedConfig,
@@ -260,6 +272,73 @@ export async function runSelfReview(options = {}) {
       execFileFn,
       fsModule,
     });
+  }
+
+  // Validate guidelines integrity against uncommitted worktree changes
+  if (!options.repoGuidelines) {
+    const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
+    const runGit = async (args) => {
+      if (execGitFn) return execGitFn(args, { cwd });
+      if (execFileFn) {
+        return new Promise((resolve, reject) => {
+          execFileFn('git', args, { cwd }, (err, stdout, stderr) => {
+            if (err) return reject(new Error(stderr || err.message));
+            resolve(typeof stdout === 'string' ? stdout : stdout?.toString?.() ?? '');
+          });
+        });
+      }
+      try {
+        const { stdout } = await execFileAsync('git', args, { cwd });
+        return stdout;
+      } catch (err) {
+        throw new Error(err.stderr || err.message);
+      }
+    };
+
+    if (relGuidelines && diffText && isFileTouchedInDiff(diffText, relGuidelines)) {
+      try {
+        const headContent = await runGit(['show', `HEAD:${relGuidelines}`]);
+        if (typeof headContent === 'string' && headContent.length > 0) {
+          activeGuidelines = buildBaseRefGuidelines(
+            headContent,
+            relGuidelines,
+            resolvedConfig?.guidelines?.max_bytes
+          );
+          guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+          if (guidelinesSummary) {
+            guidelinesSummary.source = 'base_ref';
+          }
+        } else {
+          ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
+        }
+      } catch {
+        ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
+      }
+    } else if (!activeGuidelines?.found && diffText) {
+      const customPath = options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path;
+      const candidates = customPath ? [customPath] : DEFAULT_GUIDELINE_FILENAMES;
+      for (const cand of candidates) {
+        if (isFileTouchedInDiff(diffText, cand)) {
+          try {
+            const headContent = await runGit(['show', `HEAD:${cand}`]);
+            if (typeof headContent === 'string' && headContent.length > 0) {
+              activeGuidelines = buildBaseRefGuidelines(
+                headContent,
+                cand,
+                resolvedConfig?.guidelines?.max_bytes
+              );
+              guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+              if (guidelinesSummary) {
+                guidelinesSummary.source = 'base_ref';
+              }
+              break;
+            }
+          } catch {
+            // continue
+          }
+        }
+      }
+    }
   }
 
   // 2. Handle empty diff (clean worktree)

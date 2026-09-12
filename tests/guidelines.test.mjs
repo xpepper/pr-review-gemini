@@ -698,6 +698,14 @@ Handle mutex locks carefully.
       assert.equal(line, '- **Repository Guidelines**: `gem-pr-review.md`');
       assert.doesNotMatch(line, /\/mock\/developer/);
     });
+
+    it('sanitizes backticks in file path to prevent markdown formatting breakout', () => {
+      const line = formatGuidelinesSummaryLine({
+        found: true,
+        relativePath: '.github/`malicious`.md',
+      });
+      assert.equal(line, '- **Repository Guidelines**: `.github/malicious.md`');
+    });
   });
 
   describe('resolveActiveGuidelines', () => {
