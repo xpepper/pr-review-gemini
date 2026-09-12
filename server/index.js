@@ -900,6 +900,32 @@ export function createMcpHandler(options = {}) {
               toolName === 'pr_review_guidelines'
             ) {
               const config = loadConfig(cwd);
+
+              if (args.path) {
+                const norm = path.normalize(String(args.path)).replace(/^[\\/]+/, '');
+                const configured =
+                  config?.guidelines?.path || config?.review_guidelines_path || config?.guidelines_path;
+                const isConfigured =
+                  configured && path.normalize(String(configured)).replace(/^[\\/]+/, '') === norm;
+                const isGithubDir = norm.startsWith('.github/') || norm.startsWith('.github\\');
+
+                if (!isGithubDir && !isConfigured) {
+                  return {
+                    jsonrpc: '2.0',
+                    id,
+                    result: {
+                      isError: true,
+                      content: [
+                        {
+                          type: 'text',
+                          text: 'Error: Custom guidelines path must reside in .github/ or match configured guidelines.path in repository configuration.',
+                        },
+                      ],
+                    },
+                  };
+                }
+              }
+
               const guidelines = loadGuidelinesFn({
                 cwd,
                 config,

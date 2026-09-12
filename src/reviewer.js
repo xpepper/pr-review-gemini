@@ -498,11 +498,11 @@ function isFileTouchedInDiff(diffText, relPath) {
   if (!diffText || !relPath) return false;
   const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(
-    `(?:diff --git [^\n]*(?:a|b)/${escaped}(?=[\\s\r\n]|$)|` +
-    `--- (?:a/)?${escaped}(?=[\\s\r\n]|$)|` +
-    `\\+\\+\\+ (?:b/)?${escaped}(?=[\\s\r\n]|$)|` +
-    `rename (?:from|to) ${escaped}(?=[\\s\r\n]|$)|` +
-    `copy (?:from|to) ${escaped}(?=[\\s\r\n]|$))`,
+    `(?:diff --git [^\n]*"?\\b(?:a|b)/${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `--- "?(?:a/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `\\+\\+\\+ "?(?:b/)?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `rename (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$)|` +
+    `copy (?:from|to) "?${escaped}"?(?=[\\s\r\n"]|$))`,
     'i'
   );
   return pattern.test(diffText);
@@ -531,6 +531,61 @@ function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
       }
     : null;
   return { activeGuidelines: updatedGuidelines, guidelinesSummary: updatedSummary };
+}
+
+/**
+ * Checks if the local git working directory matches the target PR repository.
+ *
+ * @param {string|null} repo - Target repository in owner/repo format
+ * @param {Function} execGitFn - Git execution function
+ * @param {string} cwd - Working directory
+ * @returns {Promise<boolean>} True if cwd matches repo or repo is not specified
+ */
+async function isLocalCwdMatchingRepo(repo, execGitFn, cwd) {
+  if (!repo) return true;
+  if (!execGitFn) return false;
+  try {
+    const rawOrigin = await execGitFn(['remote', 'get-url', 'origin'], { cwd });
+    if (!rawOrigin || typeof rawOrigin !== 'string') return false;
+    const cleanOrigin = rawOrigin.trim().replace(/\.git$/, '').toLowerCase();
+    const cleanRepo = repo.trim().replace(/^\/+|\/+$/g, '').replace(/\.git$/, '').toLowerCase();
+    return (
+      cleanOrigin.endsWith(`/${cleanRepo}`) ||
+      cleanOrigin.endsWith(`:${cleanRepo}`) ||
+      cleanOrigin === cleanRepo
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetches repository review guidelines from a remote GitHub repository via gh API.
+ * Used when reviewing a PR in a different repository than the local checkout.
+ *
+ * @param {object} params
+ * @param {string} params.repo - Target repository in owner/repo format
+ * @param {string} params.relPath - Relative path to guidelines file
+ * @param {string|null} [params.ref] - Target branch/ref
+ * @param {Function} params.execGhFn - GitHub CLI execution function
+ * @param {string} [params.cwd] - Working directory
+ * @returns {Promise<string|null>} File contents or null
+ */
+async function fetchRemoteRepoGuidelines({ repo, relPath, ref, execGhFn, cwd }) {
+  if (!execGhFn || !repo || !relPath) return null;
+  try {
+    const ghArgs = ['api', `repos/${repo}/contents/${relPath}`];
+    if (ref) ghArgs.push('--field', `ref=${ref}`);
+    const raw = await execGhFn(ghArgs, { cwd });
+    if (!raw || !raw.trim()) return null;
+    const data = JSON.parse(raw);
+    if (data.content && data.encoding === 'base64') {
+      return Buffer.from(data.content.replace(/\s/g, ''), 'base64').toString('utf8');
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -618,13 +673,8 @@ export async function runReview({
       ? execGitFn
       : (args, opts) => defaultExecGit(args, { cwd, ...opts });
 
-  // Discover and load repository review guidelines
-  let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
-    repoGuidelines,
-    guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
-    config: resolvedConfig,
-    cwd,
-  });
+  let activeGuidelines = null;
+  let guidelinesSummary = null;
 
   // 1. Retrieve diff if not provided directly
   let unifiedDiffText = diffText;
@@ -676,13 +726,90 @@ export async function runReview({
       typeof baseRef === 'string' && baseRef.trim()
         ? baseRef.trim()
         : prMetadata?.baseRefName || null;
+
+    if (repoGuidelines) {
+      ({ activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+        repoGuidelines,
+        guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+        config: resolvedConfig,
+        cwd,
+      }));
+    } else {
+      const isLocalRepo = await isLocalCwdMatchingRepo(repo, effectiveExecGit, cwd);
+      if (isLocalRepo) {
+        ({ activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+          guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+          config: resolvedConfig,
+          cwd,
+        }));
+      } else if (execGhFn && repo) {
+        const candidatePaths = (guidelinesPath || resolvedConfig?.guidelines?.path)
+          ? [guidelinesPath || resolvedConfig?.guidelines?.path]
+          : ['.github/gem-pr-review.md', '.github/review-instructions.md'];
+
+        let remoteContent = null;
+        let matchedPath = null;
+        for (const cand of candidatePaths) {
+          remoteContent = await fetchRemoteRepoGuidelines({
+            repo,
+            relPath: cand,
+            ref: confirmedBaseRef || undefined,
+            execGhFn,
+            cwd,
+          });
+          if (remoteContent !== null) {
+            matchedPath = cand;
+            break;
+          }
+        }
+
+        if (remoteContent !== null) {
+          const limited = applyGuidelinesContentLimit(
+            remoteContent,
+            resolvedConfig?.guidelines?.max_bytes
+          );
+          const parsed = parseGuidelines(limited.rawContent);
+          activeGuidelines = {
+            enabled: true,
+            found: true,
+            path: matchedPath,
+            relativePath: matchedPath,
+            byteSize: limited.byteSize,
+            truncated: limited.truncated,
+            truncationWarning: limited.truncationWarning,
+            rawContent: limited.rawContent,
+            content: limited.content,
+            parsed,
+            formatForLens: (lensId, opts = {}) =>
+              resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
+            source: 'base_ref',
+          };
+          guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+          if (guidelinesSummary) {
+            guidelinesSummary.source = 'base_ref';
+          }
+        } else {
+          activeGuidelines = createEmptyGuidelines({ enabled: true, found: false });
+          guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+        }
+      } else {
+        activeGuidelines = createEmptyGuidelines({ enabled: true, found: false });
+        guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+      }
+    }
+
     const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
 
     if (relGuidelines) {
       const isModifiedInPr = isFileTouchedInDiff(unifiedDiffText, relGuidelines);
       const isCustomDiff = diffText !== undefined && diffText !== null;
 
-      if ((isModifiedInPr || isCustomDiff) && confirmedBaseRef) {
+      if (activeGuidelines?.source === 'base_ref') {
+        // If remote guidelines were fetched without confirmed baseRef in an untrusted or modified diff, fail closed
+        if (!confirmedBaseRef && (isModifiedInPr || isCustomDiff)) {
+          ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
+        }
+      } else if ((isModifiedInPr || isCustomDiff) && confirmedBaseRef) {
         try {
           let rawBaseContent = null;
           try {

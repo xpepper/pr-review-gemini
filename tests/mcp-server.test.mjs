@@ -589,6 +589,26 @@ index 1111111..2222222 100644
       assert.match(parsed.notice, /UNTRUSTED_REPOSITORY_CONTENT/);
     });
 
+    it('rejects arbitrary unconfigured guidelines paths outside .github/ in MCP inspector', async () => {
+      const handler = createMcpHandler();
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 801,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_guidelines',
+          arguments: {
+            path: 'docs/sensitive-architecture.md',
+          },
+        },
+      });
+
+      assert.equal(response.id, 801);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /Custom guidelines path must reside in \.github\//);
+    });
+
     it('passes guidelinesPath to runReviewFn and runSelfReviewFn in MCP handlers (Increment 19)', async () => {
       let passedReviewArgs = null;
       let passedSelfReviewArgs = null;

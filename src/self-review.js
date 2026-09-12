@@ -18,7 +18,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
-import { loadGuidelines, createGuidelinesSummary, resolveActiveGuidelines } from './guidelines.js';
+import { resolveActiveGuidelines } from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,

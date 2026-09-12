@@ -110,30 +110,6 @@ export function isSafeGuidelinesPath(filePath, cwd = null) {
   return true;
 }
 
-const GLOBAL_SECTION_PATTERNS = Object.freeze([
-  /^global/i,
-  /^general/i,
-  /^architectur(?:e|al)/i,
-  /^(?:code|coding|codebase)\s+(?:rules|standards|invariants|guidelines)/i,
-  /^repository (?:rules|invariants|guidelines|standards)/i,
-  /^invariants?$/i,
-  /^rules?$/i,
-  /^standards?$/i,
-  /^overview$/i,
-]);
-
-/**
- * Checks if a section heading designates global repository guidelines.
- *
- * @param {string} headingText - Heading title
- * @returns {boolean} True if heading matches global section patterns
- */
-export function isGlobalHeading(headingText) {
-  if (!headingText) return false;
-  const clean = headingText.trim();
-  return GLOBAL_SECTION_PATTERNS.some((pattern) => pattern.test(clean));
-}
-
 /**
  * Verifies that a target file path resides strictly within a root directory,
  * resolving all symlinks to protect against traversal attacks and symlink escapes.
@@ -302,7 +278,7 @@ export function formatTruncationWarning(byteSize, maxBytes) {
  */
 export function resolveMaxGuidelinesBytes(maxBytes) {
   if (typeof maxBytes === 'number' && Number.isFinite(maxBytes) && maxBytes > 0) {
-    return Math.min(maxBytes, ABSOLUTE_MAX_GUIDELINES_BYTES);
+    return Math.min(Math.max(1, Math.floor(maxBytes)), ABSOLUTE_MAX_GUIDELINES_BYTES);
   }
   return MAX_GUIDELINES_BYTES;
 }
@@ -659,22 +635,49 @@ export function resolveGuidelinesForLens({
     null;
 
   let result = '';
-  if (lensSpecific) {
-    const header = `### Specific Instructions for ${lensName || lensId || 'Specialist Lens'}:`;
-    result = globalText ? `${globalText}\n\n${header}\n${lensSpecific}` : `${header}\n${lensSpecific}`;
-  } else {
-    result = globalText;
-  }
+  const header = lensSpecific
+    ? `### Specific Instructions for ${lensName || lensId || 'Specialist Lens'}:`
+    : '';
+  const lensBlock = lensSpecific ? `${header}\n${lensSpecific}` : '';
 
-  if (truncationWarning && !result.includes(truncationWarning)) {
-    result = result ? `${result}\n\n${truncationWarning}` : truncationWarning;
-  }
+  const exceedsBudget =
+    typeof maxPromptBytes === 'number' &&
+    maxPromptBytes > 0 &&
+    Buffer.byteLength(globalText + (lensBlock ? `\n\n${lensBlock}` : ''), 'utf8') > maxPromptBytes;
 
-  // Budget capping to avoid context blowout across parallel specialist calls
-  if (typeof maxPromptBytes === 'number' && maxPromptBytes > 0 && Buffer.byteLength(result, 'utf8') > maxPromptBytes) {
+  if (exceedsBudget) {
     const budgetWarning = `\n\n> ⚠️ [Guidelines truncated: prompt budget (${Math.round(maxPromptBytes / 1024)} KB) exceeded]`;
-    const sliced = truncateUtf8Safe(result, maxPromptBytes);
-    result = sliced + budgetWarning;
+    const warningBytes = Buffer.byteLength(budgetWarning, 'utf8');
+    const contentBudget = Math.max(10, maxPromptBytes - warningBytes);
+
+    if (lensBlock) {
+      // Ensure lens-specific instructions are preserved and not crowded out by global instructions
+      const maxLensBytes = Math.max(10, Math.floor(contentBudget * 0.5));
+      const trimmedLensBlock =
+        Buffer.byteLength(lensBlock, 'utf8') > maxLensBytes
+          ? truncateUtf8Safe(lensBlock, maxLensBytes)
+          : lensBlock;
+
+      const remainingForGlobal = Math.max(
+        0,
+        contentBudget - Buffer.byteLength(trimmedLensBlock, 'utf8') - 2
+      );
+      const trimmedGlobal = remainingForGlobal > 0 ? truncateUtf8Safe(globalText, remainingForGlobal) : '';
+      result = trimmedGlobal ? `${trimmedGlobal}\n\n${trimmedLensBlock}` : trimmedLensBlock;
+    } else {
+      result = truncateUtf8Safe(globalText, contentBudget);
+    }
+    result = `${result}${budgetWarning}`;
+  } else {
+    if (lensBlock) {
+      result = globalText ? `${globalText}\n\n${lensBlock}` : lensBlock;
+    } else {
+      result = globalText;
+    }
+
+    if (truncationWarning && !result.includes(truncationWarning)) {
+      result = result ? `${result}\n\n${truncationWarning}` : truncationWarning;
+    }
   }
 
   return result;

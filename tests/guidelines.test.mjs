@@ -16,7 +16,6 @@ import {
   isConfinedWithinRoot,
   sanitizeGuidelinesForPrompt,
   isSafeGuidelinesPath,
-  isGlobalHeading,
   ABSOLUTE_MAX_GUIDELINES_BYTES,
   truncateUtf8Safe,
   createEmptyGuidelines,
@@ -483,27 +482,18 @@ Global rules apply everywhere.
       assert.ok(!parsed.lenses.performance.includes('parameterized SQL queries'));
     });
 
-    it('enforces prompt budget capping in resolveGuidelinesForLens', () => {
+    it('enforces prompt budget capping in resolveGuidelinesForLens and preserves lens instructions', () => {
       const hugeGlobal = 'X'.repeat(50000);
-      const parsed = { global: hugeGlobal, lenses: {}, sections: [], raw: hugeGlobal };
+      const parsed = {
+        global: hugeGlobal,
+        lenses: { security: 'Crucial security invariant that must be preserved.' },
+        sections: [],
+        raw: hugeGlobal,
+      };
       const result = resolveGuidelinesForLens({ parsed, lensId: 'security', maxPromptBytes: 1024 });
-      assert.ok(result.length <= 1024 + 100);
+      assert.ok(Buffer.byteLength(result, 'utf8') <= 1024);
       assert.match(result, /prompt budget \(1 KB\) exceeded/);
-    });
-
-    it('isGlobalHeading identifies global guidelines headings and rejects domain headings', () => {
-      assert.equal(isGlobalHeading('Global Invariants'), true);
-      assert.equal(isGlobalHeading('General Rules'), true);
-      assert.equal(isGlobalHeading('Architectural Invariants'), true);
-      assert.equal(isGlobalHeading('Codebase Standards'), true);
-      assert.equal(isGlobalHeading('Repository Guidelines'), true);
-      assert.equal(isGlobalHeading('Invariants'), true);
-      assert.equal(isGlobalHeading('Overview'), true);
-
-      assert.equal(isGlobalHeading('Database Setup'), false);
-      assert.equal(isGlobalHeading('Frontend Design'), false);
-      assert.equal(isGlobalHeading('GraphQL Mutations'), false);
-      assert.equal(isGlobalHeading(null), false);
+      assert.ok(result.includes('Crucial security invariant that must be preserved.'));
     });
 
     it('ignores headings inside fenced code blocks during section parsing', () => {
