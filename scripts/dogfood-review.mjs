@@ -20,7 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue, parseStringOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseOption, parseStringOption } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +47,7 @@ Options:
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
   --cache-dir <dir> Custom directory for session cache (defaults to .gem-pr-cache)
   --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
+  --base, --base-ref <ref> Target base git ref or branch name for diff and ground truth checks
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
   --mock            Use synthetic runner for testing without inference
@@ -77,6 +78,8 @@ export function parseCliArgs(args) {
   let replaceStandardRoles = false;
   let guidelinesPath = null;
 
+  let baseRef = null;
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--help' || arg === '-h') {
@@ -87,12 +90,6 @@ export function parseCliArgs(args) {
       self = true;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
-    } else if (arg.startsWith('--mode=')) {
-      mode = arg.slice('--mode='.length);
-    } else if (arg === '--mode') {
-      const { value, nextIndex } = readOptionValue(args, i, '--mode');
-      mode = value;
-      i = nextIndex;
     } else if (arg === '--incremental') {
       incremental = true;
     } else if (arg === '--dry-run' || arg === '--no-comment') {
@@ -105,49 +102,67 @@ export function parseCliArgs(args) {
       all = true;
     } else if (arg === '--interactive') {
       interactive = true;
-    } else if (arg.startsWith('--select=')) {
-      select = arg.slice('--select='.length);
-    } else if (arg === '--select') {
-      const { value, nextIndex } = readOptionValue(args, i, '--select');
-      select = value;
-      i = nextIndex;
-    } else if (arg.startsWith('--role=')) {
-      const val = arg.slice('--role='.length);
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
-    } else if (arg === '--role') {
-      const { value, nextIndex } = readOptionValue(args, i, '--role');
-      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
-      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
-    } else if (arg.startsWith('--cache-dir=')) {
-      cacheDir = arg.slice('--cache-dir='.length);
-    } else if (arg === '--cache-dir') {
-      const { value, nextIndex } = readOptionValue(args, i, '--cache-dir');
-      cacheDir = value;
-      i = nextIndex;
-    } else if (arg.startsWith('--repo=')) {
-      repo = arg.slice('--repo='.length);
-    } else if (arg === '--repo') {
-      const { value, nextIndex } = readOptionValue(args, i, '--repo');
-      repo = value;
-      i = nextIndex;
-    } else if (arg.startsWith('--guidelines=') || arg === '--guidelines') {
-      const opt = parseStringOption(args, i, '--guidelines');
-      guidelinesPath = opt.value;
-      i = opt.nextIndex;
-    } else if (arg.startsWith('--model=')) {
-      model = arg.slice('--model='.length);
-    } else if (arg === '--model') {
-      const { value, nextIndex } = readOptionValue(args, i, '--model');
-      model = value;
-      i = nextIndex;
     } else if (arg === '--mock') {
       mock = true;
     } else if (arg === '--mock-gh') {
       mockGh = true;
-    } else if (/^\d+$/.test(arg) && !prNumber) {
-      prNumber = parseInt(arg, 10);
+    } else {
+      let opt = parseOption(args, i, '--mode');
+      if (opt.matched) {
+        mode = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--select');
+      if (opt.matched) {
+        select = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--role');
+      if (opt.matched) {
+        roles.push(...opt.value.split(',').map((s) => s.trim()).filter(Boolean));
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--cache-dir');
+      if (opt.matched) {
+        cacheDir = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--repo');
+      if (opt.matched) {
+        repo = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--guidelines');
+      if (opt.matched) {
+        guidelinesPath = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--base');
+      if (!opt.matched) {
+        opt = parseOption(args, i, '--base-ref');
+      }
+      if (opt.matched) {
+        baseRef = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--model');
+      if (opt.matched) {
+        model = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      if (/^\d+$/.test(arg) && !prNumber) {
+        prNumber = parseInt(arg, 10);
+      }
     }
   }
 
@@ -163,6 +178,7 @@ export function parseCliArgs(args) {
     select,
     cacheDir,
     guidelinesPath,
+    baseRef,
     repo,
     model,
     mock,
@@ -209,6 +225,7 @@ export async function main() {
     roles,
     replaceStandardRoles,
     guidelinesPath,
+    baseRef,
   } = parseCliArgs(rawArgs);
 
   if (self) {
@@ -377,6 +394,7 @@ export async function main() {
       roles,
       replaceStandardRoles,
       guidelinesPath,
+      baseRef,
     });
 
     console.log('\n────────────────────────────────────────────────────────');

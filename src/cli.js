@@ -228,6 +228,11 @@ export function parseStringOption(args, index, flag) {
 }
 
 /**
+ * Standardized string option parser alias for parseStringOption.
+ */
+export const parseOption = parseStringOption;
+
+/**
  * Standardized direct execution runner. If invoked directly, executes mainFn,
  * traps unhandled rejections, prints formatted error, and terminates with code 1.
  *

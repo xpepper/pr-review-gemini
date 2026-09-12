@@ -29,6 +29,7 @@ import {
   hasActiveFailClosedHookCommandInLines,
   readOptionValue,
   parseStringOption,
+  parseOption,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
@@ -1501,6 +1502,14 @@ echo "prior test"
 
       const unmatched = parseStringOption(['--other', 'rules.md'], 0, '--guidelines');
       assert.equal(unmatched.matched, false);
+    });
+
+    it('parseOption is an alias of parseStringOption and parses options identically', () => {
+      assert.equal(parseOption, parseStringOption);
+      const res = parseOption(['--mode=quick'], 0, '--mode');
+      assert.equal(res.matched, true);
+      assert.equal(res.value, 'quick');
+      assert.equal(res.nextIndex, 0);
     });
   });
 

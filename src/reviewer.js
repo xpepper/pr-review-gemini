@@ -478,6 +478,24 @@ export function deduplicateFindings(findings) {
 }
 
 /**
+ * Marks guidelines as untrusted and resets active content to prevent prompt injection.
+ */
+function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
+  const updated = {
+    ...activeGuidelines,
+    untrustedInPr: true,
+    content: '',
+    rawContent: '',
+    parsed: { global: '', lenses: {}, sections: [] },
+    formatForLens: () => '',
+  };
+  if (guidelinesSummary) {
+    guidelinesSummary.untrustedInPr = true;
+  }
+  return updated;
+}
+
+/**
  * Orchestrates an end-to-end multi-lens review for a pull request.
  */
 export async function runReview({
@@ -492,6 +510,7 @@ export async function runReview({
   cwd = process.cwd(),
   repo,
   expectedHeadSha,
+  baseRef,
   dryRun = false,
   publish = false,
   customInstructions,
@@ -575,27 +594,35 @@ export async function runReview({
       }
     }
 
-    // Verify that guidelines are not modified within the untrusted PR diff.
-    // If the guidelines file was modified or introduced in this PR, reading it from
-    // the checked-out PR branch would allow an attacker PR to inject instructions into
-    // the reviewer prompt (e.g. attempting to suppress findings).
+    // Verify that guidelines are authentic and not tampered with or introduced in the untrusted PR.
+    // If the guidelines file was modified or introduced in this PR, reading it from the PR branch
+    // would allow an attacker to inject prompt instructions into reviewer subagents.
+    // Ground truth: When confirmed base ref and execGitFn are available, we verify against
+    // `${confirmedBaseRef}:${relGuidelines}` directly. We never fall back to HEAD~1 because in a
+    // multi-commit PR, HEAD~1 is on the PR branch itself.
+    const confirmedBaseRef =
+      typeof baseRef === 'string' && baseRef.trim()
+        ? baseRef.trim()
+        : prMetadata?.baseRefName || null;
     const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
-    if (relGuidelines && unifiedDiffText) {
+
+    if (relGuidelines) {
       const gitDiffA = `--- a/${relGuidelines}`;
       const gitDiffB = `+++ b/${relGuidelines}`;
       const gitDiffHeader = `diff --git a/${relGuidelines} b/${relGuidelines}`;
       const isModifiedInPr =
-        unifiedDiffText.includes(gitDiffHeader) ||
-        unifiedDiffText.includes(gitDiffA) ||
-        unifiedDiffText.includes(gitDiffB);
+        unifiedDiffText &&
+        (unifiedDiffText.includes(gitDiffHeader) ||
+          unifiedDiffText.includes(gitDiffA) ||
+          unifiedDiffText.includes(gitDiffB));
 
-      if (isModifiedInPr) {
-        let loadedFromBase = false;
-        const baseRef = prMetadata?.baseRefName || 'HEAD~1';
-        if (execGitFn) {
-          try {
-            const baseContent = await execGitFn(['show', `${baseRef}:${relGuidelines}`], { cwd });
-            if (typeof baseContent === 'string' && baseContent.length > 0) {
+      if (confirmedBaseRef && execGitFn) {
+        try {
+          const baseContent = await execGitFn(['show', `${confirmedBaseRef}:${relGuidelines}`], { cwd });
+          if (typeof baseContent === 'string' && baseContent.length > 0) {
+            if (activeGuidelines.rawContent !== baseContent) {
+              // Guidelines file differs from base branch version (modified in PR or locally).
+              // Discard untrusted on-disk content and load verified base ref content.
               const parsed = parseGuidelines(baseContent);
               activeGuidelines = {
                 ...activeGuidelines,
@@ -610,27 +637,19 @@ export async function runReview({
               if (guidelinesSummary) {
                 guidelinesSummary.source = 'base_ref';
               }
-              loadedFromBase = true;
             }
-          } catch {
-            // File does not exist on base ref (e.g. newly introduced in PR)
+          } else {
+            // Empty base content or unreadable file
+            activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
           }
+        } catch {
+          // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR)
+          activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
         }
-
-        if (!loadedFromBase) {
-          // Exclude untrusted guidelines modified in PR from subagent prompts
-          activeGuidelines = {
-            ...activeGuidelines,
-            untrustedInPr: true,
-            content: '',
-            rawContent: '',
-            parsed: { global: '', lenses: {}, sections: [] },
-            formatForLens: () => '',
-          };
-          if (guidelinesSummary) {
-            guidelinesSummary.untrustedInPr = true;
-          }
-        }
+      } else if (isModifiedInPr) {
+        // Guidelines were modified or introduced in PR diff, but no confirmed base ref or git runner
+        // is available to safely retrieve base branch content. Fail closed to prevent prompt injection.
+        activeGuidelines = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary);
       }
     }
 

@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue, parseStringOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseOption, parseStringOption } from '../src/cli.js';
 import {
   installPreCommitHook,
   uninstallPreCommitHook,
@@ -69,31 +69,8 @@ export function parseCliArgs(args) {
       installHook = true;
     } else if (arg === '--uninstall-hook') {
       uninstallHook = true;
-    } else if (arg.startsWith('--command=')) {
-      const val = arg.slice('--command='.length).trim();
-      if (!val) {
-        throw new Error('Option --command requires a non-empty command string');
-      }
-      command = val;
-    } else if (arg === '--command') {
-      const { value, nextIndex } = readOptionValue(args, i, '--command');
-      command = value.trim();
-      if (!command) {
-        throw new Error('Option --command requires a non-empty command string');
-      }
-      i = nextIndex;
-    } else if (arg.startsWith('--guidelines=') || arg === '--guidelines') {
-      const opt = parseStringOption(args, i, '--guidelines');
-      guidelinesPath = opt.value;
-      i = opt.nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
-    } else if (arg.startsWith('--mode=')) {
-      mode = arg.slice('--mode='.length);
-    } else if (arg === '--mode') {
-      const { value, nextIndex } = readOptionValue(args, i, '--mode');
-      mode = value;
-      i = nextIndex;
     } else if (arg === '--staged') {
       scope = 'staged';
     } else if (arg === '--unstaged') {
@@ -104,25 +81,47 @@ export function parseCliArgs(args) {
       scope = 'head';
     } else if (arg === '--no-untracked') {
       includeUntracked = false;
-    } else if (arg.startsWith('--fail-on=')) {
-      failOn = arg.slice('--fail-on='.length);
-    } else if (arg === '--fail-on') {
-      const { value, nextIndex } = readOptionValue(args, i, '--fail-on');
-      failOn = value;
-      i = nextIndex;
-    } else if (arg.startsWith('--role=')) {
-      const val = arg.slice('--role='.length);
-      roles.push(...val.split(',').map((s) => s.trim()).filter(Boolean));
-    } else if (arg === '--role') {
-      const { value, nextIndex } = readOptionValue(args, i, '--role');
-      roles.push(...value.split(',').map((s) => s.trim()).filter(Boolean));
-      i = nextIndex;
     } else if (arg === '--replace-standard-roles') {
       replaceStandardRoles = true;
     } else if (arg === '--json') {
       json = true;
     } else if (arg === '--mock') {
       mock = true;
+    } else {
+      let opt = parseOption(args, i, '--command');
+      if (opt.matched) {
+        const val = opt.value.trim();
+        if (!val) {
+          throw new Error('Option --command requires a non-empty command string');
+        }
+        command = val;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--guidelines');
+      if (opt.matched) {
+        guidelinesPath = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--mode');
+      if (opt.matched) {
+        mode = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--fail-on');
+      if (opt.matched) {
+        failOn = opt.value;
+        i = opt.nextIndex;
+        continue;
+      }
+      opt = parseOption(args, i, '--role');
+      if (opt.matched) {
+        roles.push(...opt.value.split(',').map((s) => s.trim()).filter(Boolean));
+        i = opt.nextIndex;
+        continue;
+      }
     }
   }
 

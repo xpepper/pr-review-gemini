@@ -398,7 +398,6 @@ export function parseGuidelines(markdown) {
   let currentTargetLens = null;
   let currentLensLevel = 0;
   let currentSection = null;
-  let isCurrentGlobal = true; // Initial document preamble is global
 
   for (const line of lines) {
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
@@ -416,7 +415,6 @@ export function parseGuidelines(markdown) {
         }
         currentTargetLens = null;
         currentLensLevel = 0;
-        isCurrentGlobal = true;
         currentSection = {
           heading: headingText,
           level,
@@ -452,7 +450,6 @@ export function parseGuidelines(markdown) {
 
       currentTargetLens = targetLens;
       currentLensLevel = targetLens ? level : 0;
-      isCurrentGlobal = isGlobal;
 
       currentSection = {
         heading: headingText,
@@ -477,7 +474,7 @@ export function parseGuidelines(markdown) {
         lenses[currentTargetLens] = [];
       }
       lenses[currentTargetLens].push(line);
-    } else if (isCurrentGlobal) {
+    } else {
       globalLines.push(line);
     }
   }
