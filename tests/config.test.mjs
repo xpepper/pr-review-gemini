@@ -600,6 +600,26 @@ describe('Configuration & Model Tier Management', () => {
       const config = loadConfig(cwd);
       assert.equal(config.tiers.light, 'string-arg-model');
     });
+
+    it('rejects loading project config if it is a symlink pointing outside cwd', () => {
+      const homeDir = path.join(tmpDir, 'symlink-home');
+      const cwd = path.join(tmpDir, 'symlink-project');
+      const outsideDir = path.join(tmpDir, 'outside-secret');
+      fs.mkdirSync(homeDir, { recursive: true });
+      fs.mkdirSync(cwd, { recursive: true });
+      fs.mkdirSync(outsideDir, { recursive: true });
+
+      const secretFile = path.join(outsideDir, 'secret-config.json');
+      fs.writeFileSync(secretFile, JSON.stringify({ tiers: { light: 'escaped-model' } }));
+
+      const projectGithubDir = path.join(cwd, '.github');
+      fs.mkdirSync(projectGithubDir, { recursive: true });
+      fs.symlinkSync(secretFile, path.join(projectGithubDir, 'gem-pr-review.json'));
+
+      const config = loadConfig({ homeDir, cwd });
+      assert.notEqual(config.tiers.light, 'escaped-model');
+      assert.equal(config.tiers.light, DEFAULT_CONFIG.tiers.light);
+    });
   });
 
   describe('Tier helper functions', () => {

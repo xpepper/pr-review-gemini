@@ -97,6 +97,12 @@ export function isSafeGuidelinesPath(filePath, cwd = null) {
 
   const normalized = candidate.replace(/\\/g, '/');
 
+  // Traversal attack protection: reject any segment that escapes parent directories
+  const segments = normalized.split('/');
+  if (segments.some((seg) => seg === '..')) {
+    return false;
+  }
+
   for (const pattern of DISALLOWED_SENSITIVE_PATTERNS) {
     if (pattern.test(normalized)) {
       return false;
@@ -968,18 +974,6 @@ export function resolveActiveGuidelines({
 export function getTouchedFilesFromDiff(diffText) {
   const touched = new Set();
   if (!diffText || typeof diffText !== 'string') return touched;
-
-  try {
-    const parsedDiffs = parseUnifiedDiff(diffText);
-    for (const d of parsedDiffs) {
-      if (d.path) touched.add(d.path.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
-      if (d.file) touched.add(d.file.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
-      if (d.newPath) touched.add(d.newPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
-      if (d.oldPath) touched.add(d.oldPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase());
-    }
-  } catch {
-    // fallback to regex parsing below
-  }
 
   // Scan git diff header patterns line-by-line to ensure full coverage of renamed, copied, and quoted paths
   const lines = diffText.split('\n');

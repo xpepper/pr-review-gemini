@@ -166,9 +166,24 @@ function isPlainObject(val) {
   return val !== null && typeof val === 'object' && !Array.isArray(val);
 }
 
-function readJsonSafely(filePath) {
+function isConfinedWithinRoot(filePath, rootDir) {
+  if (!filePath || !rootDir) return false;
+  try {
+    const realRoot = fs.realpathSync(rootDir);
+    const realFile = fs.realpathSync(filePath);
+    const rel = path.relative(realRoot, realFile);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
+function readJsonSafely(filePath, rootDir = null) {
   try {
     if (!filePath || !fs.existsSync(filePath)) {
+      return null;
+    }
+    if (rootDir && !isConfinedWithinRoot(filePath, rootDir)) {
       return null;
     }
     const content = fs.readFileSync(filePath, 'utf8');
@@ -409,8 +424,8 @@ export function loadConfig(options = {}) {
     fs.existsSync(projectGemConfigPath) ? projectGemConfigPath : projectFallbackConfigPath
   );
 
-  const userConfig = readJsonSafely(userConfigPath);
-  const projectConfig = readJsonSafely(projectConfigPath);
+  const userConfig = readJsonSafely(userConfigPath, opts.userConfigPath ? null : homeDir);
+  const projectConfig = readJsonSafely(projectConfigPath, opts.projectConfigPath ? null : cwd);
 
   return resolveConfig({
     userConfig,

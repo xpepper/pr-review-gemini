@@ -28,7 +28,10 @@ const memoryCache = new Map();
 export function getCacheKey(prNumber, headSha, repo) {
   const cleanPr = Number(prNumber);
   const repoPrefix = repo ? `${repo.replace(/[/\\:]/g, '__')}__` : '';
-  return `${repoPrefix}pr_${cleanPr}`;
+  const shaSuffix = headSha && typeof headSha === 'string' && headSha.trim().length > 0
+    ? `_${headSha.trim().slice(0, 7)}`
+    : '';
+  return `${repoPrefix}pr_${cleanPr}${shaSuffix}`;
 }
 
 /**
@@ -102,6 +105,7 @@ export async function saveReviewCache(data, options = {}) {
 
   const cacheDir = resolveCacheDir(options);
   const cacheKey = getCacheKey(prNumber, headSha, data.repo);
+  const prKey = getCacheKey(prNumber, null, data.repo);
 
   const record = {
     prNumber,
@@ -119,10 +123,15 @@ export async function saveReviewCache(data, options = {}) {
 
   // 1. Store in memory
   memoryCache.set(cacheKey, record);
+  memoryCache.set(prKey, record);
 
   // 2. Persist to disk
   const filePath = path.join(cacheDir, `${cacheKey}.json`);
   writeJsonSafely(filePath, record);
+  if (cacheKey !== prKey) {
+    const prFilePath = path.join(cacheDir, `${prKey}.json`);
+    writeJsonSafely(prFilePath, record);
+  }
 
   return record;
 }
@@ -144,23 +153,35 @@ export async function getReviewCache(query, options = {}) {
   if (!prNumber || prNumber <= 0) return null;
 
   const cacheDir = resolveCacheDir(options);
-  const cacheKey = getCacheKey(prNumber, null, query.repo);
+  const expectedHead = query.currentHeadSha || query.headSha || null;
+  const shaKey = expectedHead ? getCacheKey(prNumber, expectedHead, query.repo) : null;
+  const prKey = getCacheKey(prNumber, null, query.repo);
 
-  // 1. Check memory cache, then file
-  let record = memoryCache.get(cacheKey);
-  if (!record) {
-    const filePath = path.join(cacheDir, `${cacheKey}.json`);
+  // 1. Check sha-specific key first
+  let record = shaKey ? memoryCache.get(shaKey) : null;
+  if (!record && shaKey) {
+    const filePath = path.join(cacheDir, `${shaKey}.json`);
     record = readJsonSafely(filePath);
     if (record) {
-      memoryCache.set(cacheKey, record);
+      memoryCache.set(shaKey, record);
+    }
+  }
+
+  // 2. Fall back to PR canonical key
+  if (!record) {
+    record = memoryCache.get(prKey);
+    if (!record) {
+      const filePath = path.join(cacheDir, `${prKey}.json`);
+      record = readJsonSafely(filePath);
+      if (record) {
+        memoryCache.set(prKey, record);
+      }
     }
   }
 
   if (!record) return null;
 
-  const expectedHead = query.currentHeadSha || query.headSha;
-
-  // 2. Freshness check
+  // 3. Freshness check
   if (expectedHead && record.headSha !== expectedHead) {
     // Invalidate stale cache
     await invalidateReviewCache({ prNumber, repo: query.repo }, options);
@@ -190,19 +211,34 @@ export async function invalidateReviewCache(query, options = {}) {
   if (!prNumber) return false;
 
   const cacheDir = resolveCacheDir(options);
-  const cacheKey = getCacheKey(prNumber, null, query.repo);
+  const repoPrefix = query.repo ? `${query.repo.replace(/[/\\:]/g, '__')}__` : '';
+  const prefix = `${repoPrefix}pr_${prNumber}`;
 
-  const inMemoryDeleted = memoryCache.delete(cacheKey);
+  let inMemoryDeleted = false;
+  for (const k of Array.from(memoryCache.keys())) {
+    if (k === prefix || k.startsWith(`${prefix}_`)) {
+      memoryCache.delete(k);
+      inMemoryDeleted = true;
+    }
+  }
 
-  const filePath = path.join(cacheDir, `${cacheKey}.json`);
   let fileDeleted = false;
   try {
-    if (fs.existsSync(filePath)) {
-      fs.rmSync(filePath, { force: true });
-      fileDeleted = true;
+    if (fs.existsSync(cacheDir)) {
+      const files = fs.readdirSync(cacheDir);
+      for (const file of files) {
+        if (file === `${prefix}.json` || file.startsWith(`${prefix}_`)) {
+          try {
+            fs.rmSync(path.join(cacheDir, file), { force: true });
+            fileDeleted = true;
+          } catch {
+            // Ignore file removal errors
+          }
+        }
+      }
     }
   } catch {
-    // Ignore file removal errors
+    // Ignore directory read errors
   }
 
   return inMemoryDeleted || fileDeleted;
@@ -226,7 +262,7 @@ export function clearAllCaches(options = {}) {
       }
     }
   } catch {
-    // Ignore cleanup errors
+    // Ignore cleanup error
   }
 }
 
@@ -248,7 +284,8 @@ export async function listReviewCaches(options = {}) {
         if (file.endsWith('.json')) {
           const content = readJsonSafely(path.join(cacheDir, file));
           if (content?.prNumber) {
-            results.set(file.replace(/\.json$/, ''), {
+            const dedupeKey = `${content.repo || ''}#${content.prNumber}#${content.headSha || ''}`;
+            results.set(dedupeKey, {
               prNumber: content.prNumber,
               headSha: content.headSha,
               repo: content.repo || null,
@@ -265,9 +302,10 @@ export async function listReviewCaches(options = {}) {
   }
 
   // 2. Merge memory cache
-  for (const [key, val] of memoryCache.entries()) {
-    if (!results.has(key)) {
-      results.set(key, {
+  for (const [, val] of memoryCache.entries()) {
+    const dedupeKey = `${val.repo || ''}#${val.prNumber}#${val.headSha || ''}`;
+    if (!results.has(dedupeKey)) {
+      results.set(dedupeKey, {
         prNumber: val.prNumber,
         headSha: val.headSha,
         repo: val.repo || null,

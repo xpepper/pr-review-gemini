@@ -552,6 +552,30 @@ index 1111111..2222222 100644
       assert.match(response.result.content[0].text, /Unknown tool/);
     });
 
+    it('sanitizes internal exception details and redacts local machine paths on tool failure', async () => {
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => {
+          throw new Error('Failed opening /Users/alice/projects/repo/.git/HEAD: access denied');
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 99,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diff',
+          arguments: { prNumber: 42 },
+        },
+      });
+
+      assert.equal(response.id, 99);
+      assert.equal(response.result.isError, true);
+      const text = response.result.content[0].text;
+      assert.ok(!text.includes('/Users/alice'));
+      assert.ok(text.includes('[REDACTED_PATH]'));
+    });
+
     it('handles gem_pr_review_guidelines and pr_review_guidelines inspection tools (Increment 19)', async () => {
       const mockLoadGuidelines = () => ({
         enabled: true,

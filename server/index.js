@@ -1017,6 +1017,13 @@ export function createMcpHandler(options = {}) {
               },
             };
           } catch (err) {
+            const rawMsg = err && typeof err.message === 'string' ? err.message : 'Internal execution error';
+            const sanitizedMsg = rawMsg
+              .replace(/(?:\/[A-Za-z0-9._-]+)*\/(?:Users|home)\/[A-Za-z0-9._-]+(?:\/[^\s:'"]*)?/g, '[REDACTED_PATH]')
+              .replace(/(?:\/Users\/|\/home\/)[^\s:'"]+/g, '[REDACTED_PATH]')
+              .replace(/[A-Za-z]:\\[^\s:'"]+/g, '[REDACTED_PATH]')
+              .slice(0, 500);
+
             return {
               jsonrpc: '2.0',
               id,
@@ -1025,7 +1032,7 @@ export function createMcpHandler(options = {}) {
                 content: [
                   {
                     type: 'text',
-                    text: `Tool execution failed: ${err.message}`,
+                    text: `Tool execution failed: ${sanitizedMsg}`,
                   },
                 ],
               },

@@ -564,8 +564,8 @@ async function isLocalCwdMatchingRepo(repo, execGitFn, cwd) {
  */
 async function fetchRemoteRepoGuidelines({ repo, relPath, ref, execGhFn, cwd }) {
   if (!execGhFn || !repo || !relPath) return null;
-  const cleanPath = String(relPath).replace(/^[\\/]+/, '');
-  if (cleanPath.startsWith('..') || !isSafeGuidelinesPath(cleanPath)) {
+  const cleanPath = path.posix.normalize(String(relPath).replace(/^[\\/]+/, '').replace(/\\/g, '/'));
+  if (cleanPath.startsWith('..') || cleanPath.split('/').includes('..') || !isSafeGuidelinesPath(cleanPath)) {
     return null;
   }
   try {
@@ -732,8 +732,8 @@ export async function runReview({
 
     const fetchBaseRefFile = async (filePath, { allowConfig = false } = {}) => {
       if (!confirmedBaseRef || !filePath || typeof filePath !== 'string') return null;
-      const cleanPath = path.normalize(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/');
-      if (cleanPath.startsWith('..')) return null;
+      const cleanPath = path.posix.normalize(String(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/'));
+      if (cleanPath.startsWith('..') || cleanPath.split('/').includes('..')) return null;
       if (!allowConfig && !isSafeGuidelinesPath(cleanPath, cwd)) {
         return null;
       }

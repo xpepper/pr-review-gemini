@@ -309,4 +309,18 @@ index 0000000..1111111 100644
       assert.equal(resolved, explicit);
     });
   });
+
+  describe('getCacheKey', () => {
+    it('generates distinct cache keys when headSha is provided', () => {
+      const keyWithoutSha = getCacheKey(33);
+      const keyWithSha = getCacheKey(33, 'abcdef123456');
+      assert.equal(keyWithoutSha, 'pr_33');
+      assert.equal(keyWithSha, 'pr_33_abcdef1');
+    });
+
+    it('includes repo prefix in cache key', () => {
+      const key = getCacheKey(33, 'abcdef123456', 'xpepper/pr-review-gemini');
+      assert.equal(key, 'xpepper__pr-review-gemini__pr_33_abcdef1');
+    });
+  });
 });
