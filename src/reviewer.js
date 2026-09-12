@@ -42,6 +42,14 @@ import {
   getIncrementalDiff,
   revalidatePriorFindings,
   formatRevalidationSummary,
+  fetchReviewThreads,
+  normalizeReviewThreads,
+  evaluateReviewThread,
+  evaluateReviewThreads,
+  formatThreadResolutionSummary,
+  resolveReviewThread,
+  replyToReviewThread,
+  resolveVerifiedThreads,
 } from './prior.js';
 import {
   saveReviewCache,
@@ -127,6 +135,14 @@ export {
   getIncrementalDiff,
   revalidatePriorFindings,
   formatRevalidationSummary,
+  fetchReviewThreads,
+  normalizeReviewThreads,
+  evaluateReviewThread,
+  evaluateReviewThreads,
+  formatThreadResolutionSummary,
+  resolveReviewThread,
+  replyToReviewThread,
+  resolveVerifiedThreads,
   saveReviewCache,
   getReviewCache,
   invalidateReviewCache,
@@ -662,6 +678,9 @@ export async function runReview({
   guidelinesPath,
   repoGuidelines,
   isCustomDiff: explicitCustomDiff,
+  resolveThreads = false,
+  autoReplyThreads = true,
+  checkThreads = null,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -927,6 +946,7 @@ export async function runReview({
     let priorData = null;
     let commitRel = null;
     let revalidation = null;
+    let incDiff = '';
 
     if (incremental) {
       priorData = await fetchPriorReviews({ prNumber: num, repo, execGhFn, cwd });
@@ -938,10 +958,41 @@ export async function runReview({
       });
 
       if (commitRel.relationship === 'same_head') {
-        const summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${resolvedMode.name}\` [Incremental])
+        let sameHeadThreads = [];
+        let sameHeadEval = null;
+        let sameHeadResolution = null;
+
+        try {
+          sameHeadThreads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });
+          if (sameHeadThreads.length > 0) {
+            sameHeadEval = evaluateReviewThreads({
+              threads: sameHeadThreads,
+              diffText: unifiedDiffText,
+            });
+
+            if (resolveThreads) {
+              sameHeadResolution = await resolveVerifiedThreads({
+                threads: sameHeadEval.threads,
+                prNumber: num,
+                repo,
+                reply: autoReplyThreads !== false,
+                execGhFn,
+                cwd,
+              });
+            }
+          }
+        } catch {
+          // non-fatal
+        }
+
+        let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${resolvedMode.name}\` [Incremental])
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}
 - **Status**: ℹ️ PR head commit (${currentHeadSha || 'unknown'}) has not changed since the last review. No new commits to evaluate.`;
+
+        if (sameHeadEval && sameHeadEval.threads.length > 0) {
+          summary += '\n\n' + formatThreadResolutionSummary(sameHeadEval);
+        }
 
         return {
           prNumber: num,
@@ -972,11 +1023,14 @@ export async function runReview({
                 byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
               },
           guidelines: guidelinesSummary,
+          threads: sameHeadEval?.threads || sameHeadThreads,
+          threadCounts: sameHeadEval?.counts || null,
+          threadResolution: sameHeadResolution,
         };
       }
 
       if (commitRel.relationship === 'incremental') {
-        const incDiff = await getIncrementalDiff({
+        incDiff = await getIncrementalDiff({
           priorHeadSha: commitRel.priorHeadSha,
           currentHeadSha,
           repo,
@@ -1007,6 +1061,39 @@ export async function runReview({
           priorFindings: priorData?.findings || [],
           incrementalDiffText: incDiff || '',
         });
+      }
+    }
+
+    // 2c. Review thread discovery and discussion state tracking (Increment 20)
+    let reviewThreads = [];
+    let threadEvaluation = null;
+    let threadResolution = null;
+
+    const shouldCheckThreads = checkThreads === true || (checkThreads !== false && (incremental || resolveThreads));
+
+    if (num && shouldCheckThreads) {
+      try {
+        reviewThreads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });
+        if (reviewThreads && reviewThreads.length > 0) {
+          threadEvaluation = evaluateReviewThreads({
+            threads: reviewThreads,
+            diffText: unifiedDiffText,
+            incrementalDiffText: incDiff || '',
+          });
+
+          if (resolveThreads) {
+            threadResolution = await resolveVerifiedThreads({
+              threads: threadEvaluation.threads,
+              prNumber: num,
+              repo,
+              reply: autoReplyThreads !== false,
+              execGhFn,
+              cwd,
+            });
+          }
+        }
+      } catch {
+        // Non-fatal: thread tracking failure should not block core review passes
       }
     }
 
@@ -1099,6 +1186,10 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       summary += '\n\n' + formatRevalidationSummary(revalidation);
     }
 
+    if (threadEvaluation && threadEvaluation.threads.length > 0) {
+      summary += '\n\n' + formatThreadResolutionSummary(threadEvaluation);
+    }
+
     const transportInfo = diffTransport
       ? {
           isLarge: true,
@@ -1175,6 +1266,9 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         canIncremental: commitRel?.canIncremental ?? false,
         priorReview: priorData?.latestReview || null,
         revalidation: revalidation || null,
+        threads: threadEvaluation?.threads || reviewThreads || [],
+        threadCounts: threadEvaluation?.counts || null,
+        threadResolution: threadResolution || null,
         lensesExecuted: executedLenses,
         subagentPlan: plan,
         errors: subagentErrors,
@@ -1203,6 +1297,9 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       canIncremental: commitRel?.canIncremental ?? false,
       priorReview: priorData?.latestReview || null,
       revalidation: revalidation || null,
+      threads: threadEvaluation?.threads || reviewThreads || [],
+      threadCounts: threadEvaluation?.counts || null,
+      threadResolution: threadResolution || null,
       lensesExecuted: executedLenses,
       subagentPlan: plan,
       errors: subagentErrors,

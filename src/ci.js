@@ -8,6 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { resolveBlockingSeverities } from './self-review.js';
+import { getPrDiff } from './diff.js';
+import {
+  fetchReviewThreads,
+  evaluateReviewThreads,
+  resolveVerifiedThreads,
+} from './prior.js';
 
 const SEVERITY_LEVELS = ['P0', 'P1', 'P2', 'P3', 'nit'];
 
@@ -511,6 +517,8 @@ export function parseCommentCommand(commentBody) {
 
     if (token === '--help' || token === '-h' || token.toLowerCase() === 'help') {
       help = true;
+    } else if (token === 'resolve' || token === '--resolve') {
+      action = 'resolve';
     } else if (token === '--quick' || token === '--balanced' || token === '--full' || token === '--deep') {
       mode = token.slice(2);
     } else if (token.startsWith('--mode=')) {
@@ -582,6 +590,7 @@ export function parseCommentCommand(commentBody) {
     verify,
     failOn,
     action,
+    resolve: action === 'resolve',
     select,
     help,
     rawArgs: tokens,
@@ -887,12 +896,14 @@ Trigger automated multi-lens AI code reviews directly from pull request comments
 - \`--verify\`: Run detached worktree test verification against PR head commit
 - \`--fail-on=<P0|P1|P2|P3|none>\`: Set CI quality gate failure threshold
 - \`--select=<filter>\`: Filter findings to publish (e.g. \`--select=p0,p1\`, \`--select="min:p2"\`)
+- \`--resolve\`, \`resolve\`: Automatically verify and resolve addressed review threads against latest PR head diff
 - \`--dry-run\`: Generate review summary without posting comments to the PR
 - \`--help\`, \`-h\`: Display this command usage guide
 
 #### Examples
 - \`/gem-review --quick\`
 - \`/gem-review --incremental\`
+- \`/gem-review resolve\`
 - \`/gem-review --role=a11y --role=perf\`
 - \`/gem-review --full --fail-on=P1\``;
 }
@@ -956,4 +967,103 @@ export function formatCompletionReply({
 > - **Findings**: ${findings} detected (${blocking} blocking)
 > - **Quality Gate (fail_on)**: \`${failOn}\`${verifyLine}`;
 }
+
+/**
+ * Formats a concise completion reply when /gem-review resolve finishes.
+ *
+ * @param {object} [params={}]
+ * @param {object} [params.counts={}]
+ * @param {Array<object>} [params.resolvedThreads=[]]
+ * @param {number} [params.totalThreads=0]
+ * @returns {string}
+ */
+export function formatResolveCompletionReply({
+  counts = {},
+  resolvedThreads = [],
+  totalThreads = 0,
+} = {}) {
+  const resolved = counts.resolved ?? resolvedThreads.length ?? 0;
+  const stillOpen = counts.stillOpen ?? 0;
+  const authorReplied = counts.authorReplied ?? 0;
+  const total = totalThreads || counts.total || (resolved + stillOpen + authorReplied);
+
+  const icon = resolved > 0 ? '✅' : 'ℹ️';
+
+  let reply = `> ${icon} **Gem PR Review — Thread Resolution Complete**
+>
+> - **Active Threads Evaluated**: ${total}
+> - **Resolved & Closed**: ${resolved}
+> - **Author Replied (Pending Action)**: ${authorReplied}
+> - **Still Open**: ${stillOpen}`;
+
+  if (resolvedThreads.length > 0) {
+    reply += '\n>\n> **Resolved Threads:**\n';
+    for (const t of resolvedThreads) {
+      const loc = `${t.path || t.filePath}:${t.line}`;
+      const title = t.finding?.title || t.rootComment?.body?.slice(0, 60) || loc;
+      reply += `> - [x] \`${loc}\`: ${title} (Thread ${t.threadId})\n`;
+    }
+  } else {
+    reply += '\n>\n> No threads were verified as fixed in the current head diff.';
+  }
+
+  return reply.trim();
+}
+
+/**
+ * Executes review thread resolution workflow for a pull request.
+ *
+ * @param {object} params
+ * @param {number|string} params.prNumber
+ * @param {string} [params.repo=null]
+ * @param {Function} [params.execGhFn=null]
+ * @param {string} [params.cwd=process.cwd()]
+ * @returns {Promise<object>}
+ */
+export async function runResolveCommand({
+  prNumber,
+  repo = null,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  const num = Number(prNumber);
+  if (!num || num <= 0) {
+    throw new TypeError(`Invalid PR number: "${prNumber}"`);
+  }
+
+  // 1. Fetch diff
+  let diffText = '';
+  try {
+    diffText = await getPrDiff(num, { repo, cwd, execGhFn });
+  } catch {
+    diffText = '';
+  }
+
+  // 2. Fetch review threads
+  const threads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });
+
+  // 3. Evaluate threads against diff
+  const evaluation = evaluateReviewThreads({ threads, diffText });
+
+  // 4. Resolve verified threads
+  const resolution = await resolveVerifiedThreads({
+    threads: evaluation.threads,
+    prNumber: num,
+    repo,
+    reply: true,
+    execGhFn,
+    cwd,
+  });
+
+  return {
+    prNumber: num,
+    repo,
+    totalThreads: threads.length,
+    counts: evaluation.counts,
+    evaluation,
+    resolution,
+    resolvedThreads: resolution.resolvedThreads,
+  };
+}
+
 

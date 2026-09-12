@@ -746,6 +746,36 @@ npm run install-hook
 node scripts/self-review.mjs --uninstall-hook
 ```
 
+---
+
+## PR Review Thread Verification & Automated Resolution
+
+`gem-pr-review` provides automated tracking, conversational evaluation, and auto-resolution of inline GitHub PR review comment threads.
+
+### 1. Review Thread Discovery & Conversation State Tracking
+Inline PR review comments are discovered via GitHub GraphQL API (`reviewThreads` query) with seamless fallback to REST API (`/repos/{owner}/{repo}/pulls/{num}/comments`):
+- **Turn Tracking**: Differentiates original finding comments, subsequent reviewer comments, and author responses.
+- **Discussion State**: Classifies threads as `resolved`, `outdated`, `author_replied`, or `unresolved` (`still_open`).
+- **Context Extraction**: Extracts target file path, line numbers, diff hunk coordinates, root finding summary, and author response text.
+
+### 2. Multi-Turn Verification Against Unified Diff Hunks
+When authors push code fixes or respond to review comments:
+- **Code Fix Verification**: Compares the finding's file and line range against new diff hunks (with a +/- 3 line window). If modified hunks introduce expected fixes or if the file was deleted, the thread is marked `RESOLVED` or `OBSOLETE`.
+- **Author Reply Analysis**: Distinguishes between conversational author replies and verified code fixes. If the author replied explaining a fix or clarification, `gem-pr-review` drafts a contextual confirmation reply.
+- **Status Summary**: Emits a structured Markdown section (`Review Thread Verification & Automated Resolution`) listing verified threads and open threads requiring attention.
+
+### 3. Automated Resolution & Confirmation Replies
+- **CLI Flag `--resolve`**: When passed to `scripts/dogfood-review.mjs` or `scripts/dogfood-pr.mjs`, verified threads are automatically resolved via GitHub GraphQL mutation `resolveReviewThread`.
+- **Conversational Replies**: Before resolving a thread, posts an automated verification confirmation reply via `addPullRequestReviewThreadReply` (or REST comment replies endpoint).
+- **PR Comment Command `/gem-review resolve`**: Maintains interactive review workflow in GitHub PR comments. Authorized commenters can post `/gem-review resolve` (or `/gem-review --resolve`) to trigger automated verification and thread resolution directly in CI.
+
+### 4. MCP Tools: `gem_pr_review_threads` & `pr_review_threads`
+Inspect and resolve review threads programmatically through MCP:
+- `gem_pr_review_threads` (and alias `pr_review_threads`):
+  - Parameters: `prNumber` (required), `repo` (optional), `resolve` (optional boolean, default false), `autoReply` (optional boolean, default true), `diffText` (optional).
+  - Returns: `threads`, `counts` (`total`, `resolved`, `resolvable`, `authorReplied`, `stillOpen`), `summary`, and `resolution` execution results.
+
+
 
 
 

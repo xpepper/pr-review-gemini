@@ -459,3 +459,660 @@ export async function getIncrementalDiff({
 
   return '';
 }
+
+/**
+ * Normalizes raw review thread nodes (GraphQL) or PR comments (REST) into unified ReviewThread objects.
+ *
+ * @param {Array<object>} rawThreadsOrComments
+ * @returns {Array<object>}
+ */
+export function normalizeReviewThreads(rawThreadsOrComments) {
+  if (!Array.isArray(rawThreadsOrComments) || rawThreadsOrComments.length === 0) {
+    return [];
+  }
+
+  // 1. Check if input is array of GraphQL thread nodes (contains comments.nodes or id starting with PRRT_)
+  const isGraphql = rawThreadsOrComments.some(
+    (item) => item?.comments?.nodes || (typeof item?.id === 'string' && item.id.startsWith('PRRT_'))
+  );
+
+  if (isGraphql) {
+    return rawThreadsOrComments.map((node) => {
+      const threadId = String(node.id || '');
+      const path = node.path || '';
+      const line = Number(node.line || node.originalLine || 1);
+      const side = node.diffSide || 'RIGHT';
+      const isResolved = Boolean(node.isResolved);
+      const isOutdated = Boolean(node.isOutdated);
+
+      const rawComments = Array.isArray(node.comments?.nodes) ? node.comments.nodes : [];
+      const comments = rawComments.map((c) => ({
+        id: String(c.id || c.databaseId || ''),
+        databaseId: c.databaseId || null,
+        author: c.author?.login || c.user?.login || 'unknown',
+        body: c.body || '',
+        createdAt: c.createdAt || c.created_at || '',
+      }));
+
+      const rootComment = comments[0] || null;
+      const replies = comments.slice(1);
+      const turnCount = comments.length;
+      const replyCount = Math.max(0, turnCount - 1);
+      const lastComment = comments[turnCount - 1] || null;
+      const lastAuthor = lastComment?.author || null;
+      const rootAuthor = rootComment?.author || null;
+      const authorReplies = replies.filter((c) => c.author !== rootAuthor);
+
+      let finding = null;
+      if (rootComment?.body) {
+        const parsed = parseMarkdownFindings(rootComment.body);
+        if (parsed.length > 0) {
+          finding = parsed[0];
+        } else {
+          const matchSev = rootComment.body.match(/\*\*\[(P0|P1|P2|P3|nit)\]\s*(.*?)\*\*/i);
+          if (matchSev) {
+            finding = {
+              severity: matchSev[1].toUpperCase(),
+              title: matchSev[2].trim(),
+              filePath: path,
+              line,
+              side,
+            };
+          }
+        }
+      }
+
+      let discussionState = 'unresolved';
+      if (isResolved) {
+        discussionState = 'resolved';
+      } else if (isOutdated) {
+        discussionState = 'outdated';
+      } else if (authorReplies.length > 0) {
+        discussionState = 'author_replied';
+      }
+
+      return {
+        threadId,
+        id: threadId,
+        path,
+        filePath: path,
+        line,
+        side,
+        isResolved,
+        isOutdated,
+        comments,
+        rootComment,
+        replies,
+        turnCount,
+        replyCount,
+        lastComment,
+        lastAuthor,
+        authorReplies,
+        finding,
+        discussionState,
+      };
+    });
+  }
+
+  // 2. Otherwise treat as REST comments array
+  const rootComments = [];
+  const repliesByParentId = new Map();
+
+  for (const item of rawThreadsOrComments) {
+    if (!item.in_reply_to_id) {
+      rootComments.push(item);
+    } else {
+      const parentId = String(item.in_reply_to_id);
+      if (!repliesByParentId.has(parentId)) {
+        repliesByParentId.set(parentId, []);
+      }
+      repliesByParentId.get(parentId).push(item);
+    }
+  }
+
+  return rootComments.map((root) => {
+    const threadId = String(root.id);
+    const path = root.path || '';
+    const line = Number(root.line || root.original_line || 1);
+    const side = root.side || 'RIGHT';
+
+    const normalizedRoot = {
+      id: String(root.id),
+      databaseId: root.id || null,
+      author: root.user?.login || 'unknown',
+      body: root.body || '',
+      createdAt: root.created_at || '',
+    };
+
+    const rawReplies = repliesByParentId.get(threadId) || [];
+    const normalizedReplies = rawReplies.map((r) => ({
+      id: String(r.id),
+      databaseId: r.id || null,
+      author: r.user?.login || 'unknown',
+      body: r.body || '',
+      createdAt: r.created_at || '',
+    }));
+
+    const comments = [normalizedRoot, ...normalizedReplies];
+    const turnCount = comments.length;
+    const replyCount = normalizedReplies.length;
+    const lastComment = comments[turnCount - 1] || null;
+    const lastAuthor = lastComment?.author || null;
+    const authorReplies = normalizedReplies.filter((c) => c.author !== normalizedRoot.author);
+
+    let finding = null;
+    if (root.body) {
+      const parsed = parseMarkdownFindings(root.body);
+      if (parsed.length > 0) {
+        finding = parsed[0];
+      } else {
+        const matchSev = root.body.match(/\*\*\[(P0|P1|P2|P3|nit)\]\s*(.*?)\*\*/i);
+        if (matchSev) {
+          finding = {
+            severity: matchSev[1].toUpperCase(),
+            title: matchSev[2].trim(),
+            filePath: path,
+            line,
+            side,
+          };
+        }
+      }
+    }
+
+    let discussionState = 'unresolved';
+    if (authorReplies.length > 0) {
+      discussionState = 'author_replied';
+    }
+
+    return {
+      threadId,
+      id: threadId,
+      path,
+      filePath: path,
+      line,
+      side,
+      isResolved: false,
+      isOutdated: false,
+      comments,
+      rootComment: normalizedRoot,
+      replies: normalizedReplies,
+      turnCount,
+      replyCount,
+      lastComment,
+      lastAuthor,
+      authorReplies,
+      finding,
+      discussionState,
+    };
+  });
+}
+
+/**
+ * Fetches review comment threads for a pull request from GitHub via GraphQL with REST fallback.
+ *
+ * @param {object} params
+ * @param {number} params.prNumber
+ * @param {string} [params.repo]
+ * @param {Function} [params.execGhFn]
+ * @param {string} [params.cwd=process.cwd()]
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchReviewThreads({
+  prNumber,
+  repo = null,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  const num = Number(prNumber);
+  if (!Number.isInteger(num) || num <= 0) {
+    return [];
+  }
+
+  // 1. Attempt GraphQL query
+  try {
+    let owner = null;
+    let name = null;
+
+    if (repo && typeof repo === 'string' && repo.includes('/')) {
+      const parts = repo.split('/');
+      owner = parts[0].trim();
+      name = parts[1].trim();
+    } else {
+      try {
+        const repoOut = await runGh(['repo', 'view', '--json', 'owner,name'], { execGhFn, cwd });
+        const parsedRepo = JSON.parse(repoOut);
+        if (parsedRepo && typeof parsedRepo === 'object' && !Array.isArray(parsedRepo)) {
+          owner = parsedRepo.owner?.login || parsedRepo.owner || null;
+          name = parsedRepo.name || null;
+        }
+      } catch {
+        // Continue to fallback if repo view fails
+      }
+    }
+
+    if (owner && name) {
+      const query = `query($owner: String!, $name: String!, $prNumber: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $prNumber) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          originalLine
+          diffSide
+          comments(first: 50) {
+            nodes {
+              id
+              databaseId
+              body
+              author {
+                login
+              }
+              createdAt
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+      const raw = await runGh(
+        [
+          'api',
+          'graphql',
+          '-f',
+          `query=${query}`,
+          '-F',
+          `owner=${owner}`,
+          '-F',
+          `name=${name}`,
+          '-F',
+          `prNumber=${num}`,
+        ],
+        { execGhFn, cwd }
+      );
+
+      const parsed = JSON.parse(raw);
+      const nodes = parsed?.data?.repository?.pullRequest?.reviewThreads?.nodes;
+      if (Array.isArray(nodes)) {
+        return normalizeReviewThreads(nodes);
+      }
+    }
+  } catch {
+    // Fall back to REST on GraphQL failure
+  }
+
+  // 2. Fall back to REST comments endpoint
+  try {
+    const commentsEndpoint = repo
+      ? `repos/${repo}/pulls/${num}/comments`
+      : `repos/:owner/:repo/pulls/${num}/comments`;
+
+    const rawComments = await runGh(['api', commentsEndpoint], { execGhFn, cwd });
+    const comments = JSON.parse(rawComments);
+    if (Array.isArray(comments)) {
+      return normalizeReviewThreads(comments);
+    }
+  } catch {
+    // REST failed
+  }
+
+  return [];
+}
+
+/**
+ * Evaluates a single review thread against the diff to determine if the finding was addressed.
+ *
+ * @param {object} params
+ * @param {object} params.thread
+ * @param {string} [params.diffText='']
+ * @param {string} [params.incrementalDiffText='']
+ * @returns {object}
+ */
+export function evaluateReviewThread({ thread, diffText = '', incrementalDiffText = '' } = {}) {
+  const diff = incrementalDiffText || diffText || '';
+  const parsedDiffs = parseUnifiedDiff(diff);
+  const diffByPath = new Map();
+
+  for (const d of parsedDiffs) {
+    if (d.filePath) diffByPath.set(d.filePath, d);
+    if (d.newPath) diffByPath.set(d.newPath, d);
+    if (d.oldPath) diffByPath.set(d.oldPath, d);
+  }
+
+  const filePath = thread.path || thread.filePath || '';
+  const line = Number(thread.line || 1);
+  const fileDiff = diffByPath.get(filePath);
+
+  let verdict = 'STILL_OPEN';
+  let status = 'still_open';
+  let canResolve = false;
+  let suggestedReply = '';
+  let reason = '';
+
+  if (thread.isResolved) {
+    verdict = 'RESOLVED';
+    status = 'resolved';
+    canResolve = false;
+    reason = 'Thread is already resolved on GitHub.';
+  } else if (!fileDiff) {
+    if (thread.authorReplies && thread.authorReplies.length > 0) {
+      verdict = 'STILL_OPEN';
+      status = 'author_replied';
+      canResolve = false;
+      reason = `Author reply received, but file '${filePath}' was not touched in diff.`;
+      suggestedReply = `> ℹ️ Author reply received, but code at \`${filePath}:${line}\` is unchanged. Please review or push fix.`;
+    } else {
+      verdict = 'STILL_OPEN';
+      status = 'still_open';
+      canResolve = false;
+      reason = `File '${filePath}' unchanged in diff.`;
+    }
+  } else if (fileDiff.status === 'deleted' || fileDiff.isDeleted) {
+    verdict = 'OBSOLETE';
+    status = 'obsolete';
+    canResolve = true;
+    reason = `File '${filePath}' was deleted in commits.`;
+    suggestedReply = `> ✅ **Obsolete**: Target file \`${filePath}\` was deleted. Resolving thread.`;
+  } else {
+    // Check if any hunk touches the line window (+/- 3 lines)
+    let touchedByHunk = false;
+    for (const hunk of fileDiff.hunks) {
+      const oldStart = hunk.oldStart;
+      const oldEnd = oldStart + Math.max(hunk.oldLines, 1) - 1;
+      const newStart = hunk.newStart;
+      const newEnd = newStart + Math.max(hunk.newLines, 1) - 1;
+
+      if (
+        (line >= oldStart - 3 && line <= oldEnd + 3) ||
+        (line >= newStart - 3 && line <= newEnd + 3)
+      ) {
+        touchedByHunk = true;
+        break;
+      }
+    }
+
+    if (touchedByHunk) {
+      verdict = 'RESOLVED';
+      status = 'resolved';
+      canResolve = true;
+      reason = `Code at ${filePath}:${line} was modified in diff.`;
+      suggestedReply = `> ✅ **Resolved**: Verified code fix at \`${filePath}:${line}\` in latest commits. Resolving review thread.`;
+    } else if (thread.authorReplies && thread.authorReplies.length > 0) {
+      verdict = 'STILL_OPEN';
+      status = 'author_replied';
+      canResolve = false;
+      reason = `Author replied, but code at ${filePath}:${line} remains unchanged in diff.`;
+      suggestedReply = `> ℹ️ Author reply received, but code at \`${filePath}:${line}\` is unchanged. Please review or push fix.`;
+    } else {
+      verdict = 'STILL_OPEN';
+      status = 'still_open';
+      canResolve = false;
+      reason = `Code at ${filePath}:${line} unchanged in diff.`;
+    }
+  }
+
+  return {
+    ...thread,
+    verdict,
+    status,
+    canResolve,
+    suggestedReply,
+    reason,
+  };
+}
+
+/**
+ * Evaluates multiple review threads and tallies resolution counts.
+ *
+ * @param {object} params
+ * @param {Array<object>} params.threads
+ * @param {string} [params.diffText='']
+ * @param {string} [params.incrementalDiffText='']
+ * @returns {{ threads: Array<object>, counts: { total: number, resolved: number, obsolete: number, stillOpen: number, authorReplied: number, resolvable: number } }}
+ */
+export function evaluateReviewThreads({ threads = [], diffText = '', incrementalDiffText = '' } = {}) {
+  const evaluated = threads.map((thread) =>
+    evaluateReviewThread({ thread, diffText, incrementalDiffText })
+  );
+
+  const counts = {
+    total: evaluated.length,
+    resolved: evaluated.filter((t) => t.verdict === 'RESOLVED').length,
+    obsolete: evaluated.filter((t) => t.verdict === 'OBSOLETE').length,
+    stillOpen: evaluated.filter((t) => t.status === 'still_open').length,
+    authorReplied: evaluated.filter((t) => t.status === 'author_replied').length,
+    resolvable: evaluated.filter((t) => t.canResolve && !t.isResolved).length,
+  };
+
+  return { threads: evaluated, counts };
+}
+
+/**
+ * Formats review thread evaluation into a clean Markdown summary.
+ *
+ * @param {object} evaluation - Result of evaluateReviewThreads
+ * @returns {string}
+ */
+export function formatThreadResolutionSummary({ threads = [], counts = {} } = {}) {
+  const lines = [
+    '### Review Thread Verification & Automated Resolution',
+    `- **Total Active Threads**: ${counts.total || threads.length}`,
+    `- **Verified Resolved**: ${counts.resolved || 0}${counts.resolvable ? ` (${counts.resolvable} auto-resolved)` : ''}`,
+    `- **Author Replied (Pending Action)**: ${counts.authorReplied || 0}`,
+    `- **Still Open**: ${counts.stillOpen || 0}`,
+    '',
+  ];
+
+  const resolved = threads.filter((t) => t.verdict === 'RESOLVED' || t.verdict === 'OBSOLETE');
+  if (resolved.length > 0) {
+    lines.push('#### Verified Resolved');
+    for (const t of resolved) {
+      const loc = `${t.path}:${t.line}`;
+      const title = t.finding?.title || t.rootComment?.body?.slice(0, 60) || loc;
+      lines.push(`- [x] \`${loc}\`: ${title} (Thread ${t.threadId})`);
+    }
+    lines.push('');
+  }
+
+  const pending = threads.filter((t) => t.status === 'author_replied' || t.status === 'still_open');
+  if (pending.length > 0) {
+    lines.push('#### Pending Review / Unresolved');
+    for (const t of pending) {
+      const loc = `${t.path}:${t.line}`;
+      const title = t.finding?.title || t.rootComment?.body?.slice(0, 60) || loc;
+      lines.push(`- [ ] \`${loc}\`: ${title} (Thread ${t.threadId})`);
+      if (t.lastAuthor && t.authorReplies?.length > 0) {
+        lines.push(`  * Last reply by @${t.lastAuthor}: "${t.lastComment?.body?.slice(0, 80) || ''}"`);
+      }
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * Resolves a single review thread via GitHub GraphQL API.
+ *
+ * @param {object} params
+ * @param {string} params.threadId
+ * @param {Function} [params.execGhFn]
+ * @param {string} [params.cwd=process.cwd()]
+ * @returns {Promise<{ success: boolean, isResolved: boolean, threadId: string, error?: string }>}
+ */
+export async function resolveReviewThread({
+  threadId,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  if (!threadId) {
+    return { success: false, isResolved: false, threadId, error: 'Missing threadId' };
+  }
+
+  const mutation = `mutation($threadId: ID!) {
+  resolveReviewThread(input: { threadId: $threadId }) {
+    thread {
+      id
+      isResolved
+    }
+  }
+}`;
+
+  try {
+    const raw = await runGh(
+      ['api', 'graphql', '-f', `query=${mutation}`, '-F', `threadId=${threadId}`],
+      { execGhFn, cwd }
+    );
+    const parsed = JSON.parse(raw);
+    const isResolved = parsed?.data?.resolveReviewThread?.thread?.isResolved ?? true;
+    return { success: true, isResolved, threadId };
+  } catch (err) {
+    return { success: false, isResolved: false, threadId, error: err.message };
+  }
+}
+
+/**
+ * Posts a reply to an inline PR review comment thread via GraphQL or REST.
+ *
+ * @param {object} params
+ * @param {string} params.threadId
+ * @param {number|string} [params.commentId]
+ * @param {number|string} [params.prNumber]
+ * @param {string} [params.repo]
+ * @param {string} params.body
+ * @param {Function} [params.execGhFn]
+ * @param {string} [params.cwd=process.cwd()]
+ * @returns {Promise<{ success: boolean, id?: string|number, error?: string }>}
+ */
+export async function replyToReviewThread({
+  threadId,
+  commentId = null,
+  prNumber = null,
+  repo = null,
+  body,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  if (!body) {
+    return { success: false, error: 'Missing reply body' };
+  }
+
+  // 1. Try GraphQL mutation if threadId looks like a GraphQL ID (PRRT_)
+  if (threadId && typeof threadId === 'string' && threadId.startsWith('PRRT_')) {
+    const mutation = `mutation($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) {
+    comment {
+      id
+      databaseId
+      body
+      createdAt
+    }
+  }
+}`;
+
+    try {
+      const raw = await runGh(
+        [
+          'api',
+          'graphql',
+          '-f',
+          `query=${mutation}`,
+          '-F',
+          `threadId=${threadId}`,
+          '-F',
+          `body=${body}`,
+        ],
+        { execGhFn, cwd }
+      );
+      const parsed = JSON.parse(raw);
+      const comment = parsed?.data?.addPullRequestReviewThreadReply?.comment;
+      return { success: true, id: comment?.id || comment?.databaseId };
+    } catch {
+      // Fall back to REST if GraphQL fails
+    }
+  }
+
+  // 2. REST fallback
+  const cId = commentId || threadId;
+  if (!cId) {
+    return { success: false, error: 'Missing commentId or threadId for reply' };
+  }
+
+  try {
+    const endpoint = repo && prNumber
+      ? `repos/${repo}/pulls/${prNumber}/comments/${cId}/replies`
+      : `repos/:owner/:repo/pulls/comments/${cId}/replies`;
+
+    const raw = await runGh(
+      ['api', '--method', 'POST', endpoint, '-f', `body=${body}`],
+      { execGhFn, cwd }
+    );
+    const parsed = JSON.parse(raw);
+    return { success: true, id: parsed.id };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Resolves all verified threads, optionally posting a confirmation reply first.
+ *
+ * @param {object} params
+ * @param {Array<object>} params.threads
+ * @param {number|string} params.prNumber
+ * @param {string} [params.repo]
+ * @param {boolean} [params.reply=true]
+ * @param {Function} [params.execGhFn]
+ * @param {string} [params.cwd=process.cwd()]
+ * @returns {Promise<{ resolvedCount: number, resolvedThreads: Array<object>, failedThreads: Array<object> }>}
+ */
+export async function resolveVerifiedThreads({
+  threads = [],
+  prNumber,
+  repo = null,
+  reply = true,
+  execGhFn = null,
+  cwd = process.cwd(),
+} = {}) {
+  const resolvable = threads.filter((t) => t.canResolve && !t.isResolved);
+  const resolvedThreads = [];
+  const failedThreads = [];
+
+  for (const t of resolvable) {
+    if (reply && t.suggestedReply) {
+      await replyToReviewThread({
+        threadId: t.threadId,
+        commentId: t.rootComment?.id || t.id,
+        prNumber,
+        repo,
+        body: t.suggestedReply,
+        execGhFn,
+        cwd,
+      });
+    }
+
+    const res = await resolveReviewThread({
+      threadId: t.threadId,
+      execGhFn,
+      cwd,
+    });
+
+    if (res.success) {
+      resolvedThreads.push(t);
+    } else {
+      failedThreads.push({ ...t, error: res.error });
+    }
+  }
+
+  return {
+    resolvedCount: resolvedThreads.length,
+    resolvedThreads,
+    failedThreads,
+  };
+}
+

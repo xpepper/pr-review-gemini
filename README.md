@@ -108,6 +108,7 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--deep` | Focused deep dive with high reasoning effort on Correctness & Concurrency |
 | `--mode <mode>` | Select a review mode by name: `quick`, `balanced`, `full`, or `deep` |
 | `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
+| `--resolve` | Automatically resolve verified review threads and post conversational replies |
 | `--self` | Review local worktree changes instead of a remote pull request |
 | `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
 | `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
@@ -243,6 +244,12 @@ Trigger AI-assisted code reviews directly from pull request comments using `/gem
 - **Host-Gated Security**: Gating based on `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowed users prevents unauthorized runner minutes or model quota consumption.
 - **Visual Reaction Lifecycle**: Immediate feedback directly on invoking comments: 👀 (`eyes`) acknowledgment, 🚀 (`rocket`) execution, 👍 (`+1`) completion with a markdown reply summary, and 😕 (`confused`) denial/error notices.
 
+### 13. Review Thread Verification & Automated Resolution
+Automated tracking, conversational evaluation, and auto-resolution of inline GitHub PR review comment threads:
+- **Thread Discovery & Turn Tracking**: Queries GraphQL `reviewThreads` (with REST fallback) to track conversational turns, author replies, and discussion states (`resolved`, `outdated`, `author_replied`, `unresolved`).
+- **Diff Hunk Verification**: Verifies whether author code updates or replies addressed the finding against actual unified diff hunks (with a +/- 3 line window).
+- **Automated Resolution**: Pass `--resolve` or run `/gem-review resolve` to post confirmation verification replies and close resolved threads via GitHub GraphQL mutation `resolveReviewThread`.
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -267,6 +274,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 - **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
 - **`gem_pr_review_publish_cached`**: Publishes previously cached review findings without rerunning model inference, after verifying PR head freshness.
 - **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
+- **`gem_pr_review_threads`** *(alias `pr_review_threads`)*: Discovers review comment threads, tracks author replies, verifies fixes against diff hunks, and optionally auto-resolves verified threads.
 - **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
 - **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
 

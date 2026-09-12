@@ -88,9 +88,16 @@ describe('Model Context Protocol (MCP) Server', () => {
       assert.ok(toolNames.includes('gem_pr_review_publish'));
       assert.ok(toolNames.includes('gem_pr_review_publish_cached'));
       assert.ok(toolNames.includes('gem_pr_review_prior'));
+      assert.ok(toolNames.includes('gem_pr_review_threads'));
+      assert.ok(toolNames.includes('pr_review_threads'));
       assert.ok(toolNames.includes('gem_pr_review_verify'));
       assert.ok(toolNames.includes('gem_self_review'));
       assert.ok(toolNames.includes('gem_pr_review_self'));
+
+      const threadsTool = response.result.tools.find((t) => t.name === 'gem_pr_review_threads');
+      assert.ok(threadsTool.description);
+      assert.ok(threadsTool.inputSchema.properties.prNumber);
+      assert.ok(threadsTool.inputSchema.properties.resolve);
 
       const selfTool = response.result.tools.find((t) => t.name === 'gem_self_review');
       assert.ok(selfTool.description);
@@ -858,6 +865,204 @@ index 1111111..2222222 100644
       assert.equal(response.id, 991);
       assert.equal(response.result?.isError, true);
       assert.match(response.result.content[0].text, /Invalid verification command/i);
+    });
+
+    it('handles tools/call for gem_pr_review_threads discovering and evaluating threads', async () => {
+      const mockThreads = [
+        {
+          id: 'PRRT_1',
+          threadId: 'PRRT_1',
+          path: 'src/app.js',
+          line: 10,
+          isResolved: false,
+          status: 'author_replied',
+          comments: [
+            { id: 'c1', body: 'Potential null dereference here', author: { login: 'gem-reviewer' } },
+            { id: 'c2', body: 'Fixed in latest commit with optional chaining', author: { login: 'alice' } },
+          ],
+        },
+      ];
+
+      let fetchCalledWith = null;
+      let evalCalledWith = null;
+
+      const handler = createMcpHandler({
+        fetchReviewThreadsFn: async (params) => {
+          fetchCalledWith = params;
+          return mockThreads;
+        },
+        evaluateReviewThreadsFn: (params) => {
+          evalCalledWith = params;
+          return {
+            threads: [
+              {
+                ...mockThreads[0],
+                verdict: 'RESOLVED',
+                status: 'resolved',
+                canResolve: true,
+                suggestedReply: 'Fix verified against latest diff.',
+              },
+            ],
+            counts: {
+              total: 1,
+              resolved: 1,
+              obsolete: 0,
+              stillOpen: 0,
+              authorReplied: 0,
+              resolvable: 1,
+            },
+          };
+        },
+        getPrDiffFn: async () => 'diff --git a/src/app.js b/src/app.js\n+const val = obj?.prop;',
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 992,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {
+            prNumber: 42,
+            repo: 'owner/repo',
+          },
+        },
+      });
+
+      assert.equal(response.id, 992);
+      assert.ok(!response.result?.isError);
+      assert.equal(fetchCalledWith?.prNumber, 42);
+      assert.equal(fetchCalledWith?.repo, 'owner/repo');
+      assert.equal(evalCalledWith?.threads, mockThreads);
+
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.equal(parsed.prNumber, 42);
+      assert.equal(parsed.counts.total, 1);
+      assert.equal(parsed.counts.resolved, 1);
+      assert.equal(parsed.counts.resolvable, 1);
+      assert.equal(parsed.resolution, null); // resolve flag was false
+      assert.match(parsed.summary, /Review Thread Verification/);
+    });
+
+    it('gem_pr_review_threads resolves verified threads when resolve is true', async () => {
+      const mockThreads = [
+        {
+          id: 'PRRT_2',
+          threadId: 'PRRT_2',
+          path: 'src/util.js',
+          line: 25,
+          isResolved: false,
+          status: 'unresolved',
+          comments: [{ id: 'c10', body: 'Missing guard', author: { login: 'gem-reviewer' } }],
+        },
+      ];
+
+      let resolveCalledWith = null;
+
+      const handler = createMcpHandler({
+        fetchReviewThreadsFn: async () => mockThreads,
+        evaluateReviewThreadsFn: () => ({
+          threads: [
+            {
+              ...mockThreads[0],
+              verdict: 'RESOLVED',
+              status: 'resolved',
+              canResolve: true,
+              suggestedReply: 'Fix verified: guard added.',
+            },
+          ],
+          counts: {
+            total: 1,
+            resolved: 1,
+            obsolete: 0,
+            stillOpen: 0,
+            authorReplied: 0,
+            resolvable: 1,
+          },
+        }),
+        resolveVerifiedThreadsFn: async (params) => {
+          resolveCalledWith = params;
+          return {
+            resolvedCount: 1,
+            resolvedThreads: [{ threadId: 'PRRT_2' }],
+            failedThreads: [],
+          };
+        },
+        getPrDiffFn: async () => 'diff --git a/src/util.js b/src/util.js\n+if (!x) return;',
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 993,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {
+            prNumber: 55,
+            resolve: true,
+            autoReply: true,
+          },
+        },
+      });
+
+      assert.equal(response.id, 993);
+      assert.ok(!response.result?.isError);
+      assert.ok(resolveCalledWith);
+      assert.equal(resolveCalledWith.prNumber, 55);
+      assert.equal(resolveCalledWith.reply, true);
+
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.equal(parsed.resolution?.resolvedCount, 1);
+      assert.equal(parsed.resolution?.resolvedThreads[0]?.threadId, 'PRRT_2');
+    });
+
+    it('pr_review_threads alias functions identically to gem_pr_review_threads', async () => {
+      let fetchedPr = null;
+      const handler = createMcpHandler({
+        fetchReviewThreadsFn: async ({ prNumber }) => {
+          fetchedPr = prNumber;
+          return [];
+        },
+        evaluateReviewThreadsFn: () => ({
+          threads: [],
+          counts: { total: 0, resolved: 0, obsolete: 0, stillOpen: 0, authorReplied: 0, resolvable: 0 },
+        }),
+        getPrDiffFn: async () => '',
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 994,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_threads',
+          arguments: { prNumber: 88 },
+        },
+      });
+
+      assert.equal(response.id, 994);
+      assert.ok(!response.result?.isError);
+      assert.equal(fetchedPr, 88);
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.equal(parsed.prNumber, 88);
+      assert.equal(parsed.counts.total, 0);
+    });
+
+    it('gem_pr_review_threads returns error when prNumber is missing or invalid', async () => {
+      const handler = createMcpHandler();
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 995,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {},
+        },
+      });
+
+      assert.equal(response.id, 995);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /prNumber is required/i);
     });
   });
 

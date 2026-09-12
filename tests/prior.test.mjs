@@ -7,6 +7,14 @@ import {
   revalidatePriorFindings,
   formatRevalidationSummary,
   getIncrementalDiff,
+  normalizeReviewThreads,
+  fetchReviewThreads,
+  evaluateReviewThread,
+  evaluateReviewThreads,
+  formatThreadResolutionSummary,
+  resolveReviewThread,
+  replyToReviewThread,
+  resolveVerifiedThreads,
 } from '../src/prior.js';
 
 describe('Incremental Re-reviews & Prior Finding Discovery', () => {
@@ -291,4 +299,420 @@ index 3333333..0000000
       assert.ok(diff.includes('diff --git a/src/diff.js b/src/diff.js'));
     });
   });
+
+  describe('Review Threads & Automated Resolution (Increment 20)', () => {
+    const sampleGraphqlThreads = [
+      {
+        id: 'PRRT_kw1',
+        isResolved: false,
+        isOutdated: false,
+        path: 'src/auth.js',
+        line: 42,
+        originalLine: 40,
+        diffSide: 'RIGHT',
+        comments: {
+          nodes: [
+            {
+              id: 'PRRC_1',
+              databaseId: 1001,
+              body: '**[P1] Missing null check**\n\n`user.id` can throw if user is undefined.',
+              author: { login: 'gem-pr-reviewer' },
+              createdAt: '2026-09-10T10:00:00Z',
+            },
+            {
+              id: 'PRRC_2',
+              databaseId: 1002,
+              body: 'Good catch, added optional chaining in next commit!',
+              author: { login: 'contributor' },
+              createdAt: '2026-09-10T11:00:00Z',
+            },
+          ],
+        },
+      },
+      {
+        id: 'PRRT_kw2',
+        isResolved: true,
+        isOutdated: false,
+        path: 'src/config.js',
+        line: 15,
+        originalLine: 15,
+        diffSide: 'RIGHT',
+        comments: {
+          nodes: [
+            {
+              id: 'PRRC_3',
+              databaseId: 1003,
+              body: '**[P2] Unused variable**\n\nRemove unused variable `temp`.',
+              author: { login: 'gem-pr-reviewer' },
+              createdAt: '2026-09-10T09:00:00Z',
+            },
+          ],
+        },
+      },
+    ];
+
+    describe('normalizeReviewThreads', () => {
+      it('normalizes GraphQL thread nodes and tracks discussion states', () => {
+        const threads = normalizeReviewThreads(sampleGraphqlThreads);
+        assert.equal(threads.length, 2);
+
+        const t1 = threads[0];
+        assert.equal(t1.threadId, 'PRRT_kw1');
+        assert.equal(t1.path, 'src/auth.js');
+        assert.equal(t1.line, 42);
+        assert.equal(t1.side, 'RIGHT');
+        assert.equal(t1.isResolved, false);
+        assert.equal(t1.turnCount, 2);
+        assert.equal(t1.replyCount, 1);
+        assert.equal(t1.discussionState, 'author_replied');
+        assert.equal(t1.authorReplies.length, 1);
+        assert.equal(t1.authorReplies[0].author, 'contributor');
+        assert.equal(t1.lastAuthor, 'contributor');
+        assert.equal(t1.finding?.severity, 'P1');
+        assert.equal(t1.finding?.title, 'Missing null check');
+
+        const t2 = threads[1];
+        assert.equal(t2.threadId, 'PRRT_kw2');
+        assert.equal(t2.isResolved, true);
+        assert.equal(t2.discussionState, 'resolved');
+        assert.equal(t2.turnCount, 1);
+        assert.equal(t2.replyCount, 0);
+        assert.equal(t2.authorReplies.length, 0);
+      });
+
+      it('normalizes REST PR comments array into grouped threads', () => {
+        const restComments = [
+          {
+            id: 2001,
+            path: 'src/api.js',
+            line: 88,
+            side: 'RIGHT',
+            body: '**[P0] SQL Injection**\n\nSanitize input query.',
+            user: { login: 'gem-pr-reviewer' },
+            created_at: '2026-09-11T12:00:00Z',
+          },
+          {
+            id: 2002,
+            in_reply_to_id: 2001,
+            path: 'src/api.js',
+            line: 88,
+            side: 'RIGHT',
+            body: 'Used parameterized query now.',
+            user: { login: 'dev' },
+            created_at: '2026-09-11T13:00:00Z',
+          },
+          {
+            id: 2003,
+            path: 'src/utils.js',
+            line: 12,
+            side: 'RIGHT',
+            body: '**[P3] Typo in docstring**',
+            user: { login: 'gem-pr-reviewer' },
+            created_at: '2026-09-11T14:00:00Z',
+          },
+        ];
+
+        const threads = normalizeReviewThreads(restComments);
+        assert.equal(threads.length, 2);
+
+        const t1 = threads.find((t) => t.path === 'src/api.js');
+        assert.ok(t1);
+        assert.equal(t1.turnCount, 2);
+        assert.equal(t1.replyCount, 1);
+        assert.equal(t1.discussionState, 'author_replied');
+        assert.equal(t1.authorReplies[0].author, 'dev');
+        assert.equal(t1.rootComment.id, '2001');
+
+        const t2 = threads.find((t) => t.path === 'src/utils.js');
+        assert.ok(t2);
+        assert.equal(t2.turnCount, 1);
+        assert.equal(t2.replyCount, 0);
+        assert.equal(t2.discussionState, 'unresolved');
+      });
+    });
+
+    describe('fetchReviewThreads', () => {
+      it('fetches review threads via GraphQL when available', async () => {
+        const mockGh = async (args) => {
+          if (args[1] === 'graphql') {
+            return JSON.stringify({
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      nodes: sampleGraphqlThreads,
+                    },
+                  },
+                },
+              },
+            });
+          }
+          throw new Error('Unexpected command: ' + args.join(' '));
+        };
+
+        const threads = await fetchReviewThreads({
+          prNumber: 42,
+          repo: 'xpepper/pr-review-gemini',
+          execGhFn: mockGh,
+        });
+
+        assert.equal(threads.length, 2);
+        assert.equal(threads[0].threadId, 'PRRT_kw1');
+      });
+
+      it('gracefully falls back to REST comments if GraphQL query fails', async () => {
+        const mockGh = async (args) => {
+          if (args[1] === 'graphql') {
+            throw new Error('GraphQL forbidden or scope missing');
+          }
+          if (args[1]?.includes('/comments')) {
+            return JSON.stringify([
+              {
+                id: 3001,
+                path: 'src/token.js',
+                line: 5,
+                body: '**[P1] Hardcoded Secret**',
+                user: { login: 'reviewer' },
+              },
+            ]);
+          }
+          return '[]';
+        };
+
+        const threads = await fetchReviewThreads({
+          prNumber: 42,
+          repo: 'xpepper/pr-review-gemini',
+          execGhFn: mockGh,
+        });
+
+        assert.equal(threads.length, 1);
+        assert.equal(threads[0].path, 'src/token.js');
+        assert.equal(threads[0].discussionState, 'unresolved');
+      });
+    });
+
+    describe('evaluateReviewThread & evaluateReviewThreads', () => {
+      const diffWithFix = `diff --git a/src/auth.js b/src/auth.js
+index 1111111..2222222 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -40,5 +40,6 @@ function authenticate(user) {
+-  const id = user.id;
++  const id = user?.id ?? null;
+   return id;
+ }
+diff --git a/src/legacy.js b/src/legacy.js
+deleted file mode 100644
+--- a/src/legacy.js
++++ /dev/null
+@@ -1,5 +0,0 @@
+-const old = 1;
+`;
+
+      it('evaluates modified code as resolved with suggested resolution reply', () => {
+        const thread = {
+          threadId: 'PRRT_kw1',
+          path: 'src/auth.js',
+          line: 42,
+          isResolved: false,
+          authorReplies: [{ author: 'contributor', body: 'Fixed!' }],
+          rootComment: { id: '1001', body: '**[P1] Missing null check**' },
+        };
+
+        const evalResult = evaluateReviewThread({ thread, diffText: diffWithFix });
+        assert.equal(evalResult.verdict, 'RESOLVED');
+        assert.equal(evalResult.canResolve, true);
+        assert.equal(evalResult.status, 'resolved');
+        assert.ok(evalResult.suggestedReply.includes('Resolved'));
+      });
+
+      it('evaluates deleted file as obsolete with suggested resolution reply', () => {
+        const thread = {
+          threadId: 'PRRT_kw2',
+          path: 'src/legacy.js',
+          line: 2,
+          isResolved: false,
+          authorReplies: [],
+          rootComment: { id: '1002', body: '**[P2] Dead code**' },
+        };
+
+        const evalResult = evaluateReviewThread({ thread, diffText: diffWithFix });
+        assert.equal(evalResult.verdict, 'OBSOLETE');
+        assert.equal(evalResult.canResolve, true);
+        assert.equal(evalResult.status, 'obsolete');
+        assert.ok(evalResult.suggestedReply.includes('Obsolete') || evalResult.suggestedReply.includes('deleted'));
+      });
+
+      it('evaluates unchanged code with author reply as author_replied / pending action', () => {
+        const thread = {
+          threadId: 'PRRT_kw3',
+          path: 'src/other.js',
+          line: 10,
+          isResolved: false,
+          authorReplies: [{ author: 'contributor', body: 'Why is this needed?' }],
+          rootComment: { id: '1003', body: '**[P2] Missing validation**' },
+        };
+
+        const evalResult = evaluateReviewThread({ thread, diffText: diffWithFix });
+        assert.equal(evalResult.verdict, 'STILL_OPEN');
+        assert.equal(evalResult.canResolve, false);
+        assert.equal(evalResult.status, 'author_replied');
+      });
+
+      it('evaluates unchanged code without reply as still_open', () => {
+        const thread = {
+          threadId: 'PRRT_kw4',
+          path: 'src/other.js',
+          line: 10,
+          isResolved: false,
+          authorReplies: [],
+          rootComment: { id: '1004', body: '**[P2] Missing validation**' },
+        };
+
+        const evalResult = evaluateReviewThread({ thread, diffText: diffWithFix });
+        assert.equal(evalResult.verdict, 'STILL_OPEN');
+        assert.equal(evalResult.canResolve, false);
+        assert.equal(evalResult.status, 'still_open');
+      });
+
+      it('evaluateReviewThreads aggregates results across multiple threads', () => {
+        const threads = [
+          {
+            threadId: 'T1',
+            path: 'src/auth.js',
+            line: 42,
+            isResolved: false,
+            authorReplies: [],
+            rootComment: { id: '1', body: 'Issue 1' },
+          },
+          {
+            threadId: 'T2',
+            path: 'src/other.js',
+            line: 5,
+            isResolved: false,
+            authorReplies: [{ author: 'dev', body: 'Need clarification' }],
+            rootComment: { id: '2', body: 'Issue 2' },
+          },
+          {
+            threadId: 'T3',
+            path: 'src/legacy.js',
+            line: 1,
+            isResolved: false,
+            authorReplies: [],
+            rootComment: { id: '3', body: 'Issue 3' },
+          },
+        ];
+
+        const res = evaluateReviewThreads({ threads, diffText: diffWithFix });
+        assert.equal(res.threads.length, 3);
+        assert.equal(res.counts.total, 3);
+        assert.equal(res.counts.resolved, 1);
+        assert.equal(res.counts.obsolete, 1);
+        assert.equal(res.counts.authorReplied, 1);
+        assert.equal(res.counts.resolvable, 2);
+
+        const summary = formatThreadResolutionSummary(res);
+        assert.ok(summary.includes('Review Thread Verification'));
+        assert.ok(summary.includes('Verified Resolved'));
+      });
+    });
+
+    describe('resolveReviewThread, replyToReviewThread, resolveVerifiedThreads', () => {
+      it('resolveReviewThread invokes GraphQL resolveReviewThread mutation', async () => {
+        let calledWith = null;
+        const mockGh = async (args) => {
+          calledWith = args;
+          return JSON.stringify({
+            data: {
+              resolveReviewThread: {
+                thread: { id: 'PRRT_123', isResolved: true },
+              },
+            },
+          });
+        };
+
+        const res = await resolveReviewThread({
+          threadId: 'PRRT_123',
+          execGhFn: mockGh,
+        });
+
+        assert.equal(res.success, true);
+        assert.equal(res.isResolved, true);
+        assert.ok(calledWith.join(' ').includes('mutation($threadId: ID!)'));
+        assert.ok(calledWith.join(' ').includes('threadId=PRRT_123'));
+      });
+
+      it('replyToReviewThread invokes GraphQL addPullRequestReviewThreadReply mutation', async () => {
+        let calledWith = null;
+        const mockGh = async (args) => {
+          calledWith = args;
+          return JSON.stringify({
+            data: {
+              addPullRequestReviewThreadReply: {
+                comment: { id: 'PRRC_new', body: 'Verified fix', createdAt: '2026-09-12T00:00:00Z' },
+              },
+            },
+          });
+        };
+
+        const res = await replyToReviewThread({
+          threadId: 'PRRT_123',
+          body: 'Verified fix',
+          execGhFn: mockGh,
+        });
+
+        assert.equal(res.success, true);
+        assert.ok(calledWith.join(' ').includes('addPullRequestReviewThreadReply'));
+        assert.ok(calledWith.join(' ').includes('threadId=PRRT_123'));
+      });
+
+      it('resolveVerifiedThreads replies and resolves all resolvable threads', async () => {
+        const calls = [];
+        const mockGh = async (args) => {
+          calls.push(args);
+          if (args.join(' ').includes('addPullRequestReviewThreadReply')) {
+            return JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'c1' } } } });
+          }
+          if (args.join(' ').includes('resolveReviewThread')) {
+            return JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'PRRT_1', isResolved: true } } } });
+          }
+          return '{}';
+        };
+
+        const evaluatedThreads = [
+          {
+            threadId: 'PRRT_1',
+            path: 'src/auth.js',
+            line: 42,
+            canResolve: true,
+            isResolved: false,
+            verdict: 'RESOLVED',
+            suggestedReply: '✅ Resolved: verified in diff.',
+          },
+          {
+            threadId: 'PRRT_2',
+            path: 'src/other.js',
+            line: 10,
+            canResolve: false,
+            isResolved: false,
+            verdict: 'STILL_OPEN',
+          },
+        ];
+
+        const res = await resolveVerifiedThreads({
+          threads: evaluatedThreads,
+          prNumber: 42,
+          repo: 'xpepper/pr-review-gemini',
+          reply: true,
+          execGhFn: mockGh,
+        });
+
+        assert.equal(res.resolvedCount, 1);
+        assert.equal(res.resolvedThreads.length, 1);
+        assert.equal(res.resolvedThreads[0].threadId, 'PRRT_1');
+        assert.equal(calls.length, 2); // 1 reply + 1 resolve
+      });
+    });
+  });
 });
+

@@ -29,6 +29,10 @@ import {
   getIncrementalDiff,
   revalidatePriorFindings,
   formatRevalidationSummary,
+  fetchReviewThreads,
+  evaluateReviewThreads,
+  formatThreadResolutionSummary,
+  resolveVerifiedThreads,
 } from '../src/prior.js';
 import {
   runVerification,
@@ -275,6 +279,72 @@ export const MCP_TOOLS = [
     },
   },
   {
+    name: 'gem_pr_review_threads',
+    description:
+      'Discovers inline PR review comment threads, tracks conversational discussion turns and author replies, verifies fixes against diff hunks, and optionally auto-resolves verified threads via GitHub API.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+        resolve: {
+          type: 'boolean',
+          description: 'If true, automatically resolves verified threads and posts replies',
+          default: false,
+        },
+        autoReply: {
+          type: 'boolean',
+          description: 'When resolving, whether to post verification replies before resolving',
+          default: true,
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional unified diff text (retrieved via gh if omitted)',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
+  {
+    name: 'pr_review_threads',
+    description:
+      'Alias for gem_pr_review_threads. Discovers review threads, tracks author replies, verifies fixes, and optionally auto-resolves threads.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'GitHub pull request number',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+        resolve: {
+          type: 'boolean',
+          description: 'If true, automatically resolves verified threads and posts replies',
+          default: false,
+        },
+        autoReply: {
+          type: 'boolean',
+          description: 'When resolving, whether to post verification replies before resolving',
+          default: true,
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional unified diff text (retrieved via gh if omitted)',
+        },
+      },
+      required: ['prNumber'],
+    },
+  },
+  {
     name: 'gem_pr_review_verify',
     description:
       'Executes verification commands (e.g. tests or build) against the exact PR head in an isolated detached git worktree.',
@@ -467,6 +537,10 @@ export function createMcpHandler(options = {}) {
     classifyCommitRelationshipFn = classifyCommitRelationship,
     getIncrementalDiffFn = getIncrementalDiff,
     revalidatePriorFindingsFn = revalidatePriorFindings,
+    fetchReviewThreadsFn = fetchReviewThreads,
+    evaluateReviewThreadsFn = evaluateReviewThreads,
+    formatThreadResolutionSummaryFn = formatThreadResolutionSummary,
+    resolveVerifiedThreadsFn = resolveVerifiedThreads,
     runVerificationFn = runVerification,
     listVerificationProfilesFn = listVerificationProfiles,
     createHostSupervisedDiffReaderFn = createHostSupervisedDiffReader,
@@ -785,6 +859,77 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(priorResult, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_pr_review_threads' ||
+              toolName === 'pr_review_threads'
+            ) {
+              const prNum = Number(args.prNumber);
+              if (!Number.isInteger(prNum) || prNum <= 0) {
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    isError: true,
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'prNumber is required for review thread discovery and resolution',
+                      },
+                    ],
+                  },
+                };
+              }
+
+              const repo = args.repo || null;
+              const shouldResolve = Boolean(args.resolve);
+              const autoReply = args.autoReply !== false;
+              let diffText = args.diffText;
+
+              if (typeof diffText !== 'string' && getPrDiffFn) {
+                try {
+                  diffText = await getPrDiffFn(prNum, { repo, cwd });
+                } catch {
+                  diffText = '';
+                }
+              }
+
+              const threads = await fetchReviewThreadsFn({ prNumber: prNum, repo, cwd });
+              const evaluation = evaluateReviewThreadsFn({ threads, diffText: diffText || '' });
+
+              let resolutionResult = null;
+              if (shouldResolve && evaluation.counts.resolvable > 0) {
+                resolutionResult = await resolveVerifiedThreadsFn({
+                  threads: evaluation.threads,
+                  prNumber: prNum,
+                  repo,
+                  reply: autoReply,
+                  cwd,
+                });
+              }
+
+              const resultPayload = {
+                prNumber: prNum,
+                repo,
+                counts: evaluation.counts,
+                threads: evaluation.threads,
+                summary: formatThreadResolutionSummaryFn(evaluation),
+                resolution: resolutionResult,
+              };
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(resultPayload, null, 2),
                     },
                   ],
                 },

@@ -2090,6 +2090,72 @@ index 1111111..2222222 100644
         /Cannot publish review: All \d+ specialist review subagent\(s\) failed/
       );
     });
+
+    it('evaluates active review threads and includes thread resolution in review summary (Increment 20)', async () => {
+      const diffText = `diff --git a/src/auth.js b/src/auth.js
+index 1111111..2222222 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -40,5 +40,6 @@ function authenticate(user) {
+-  const id = user.id;
++  const id = user?.id ?? null;
+   return id;
+ }
+`;
+      const mockGh = async (args) => {
+        if (args[1] === 'graphql') {
+          if (args.join(' ').includes('resolveReviewThread')) {
+            return JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'PRRT_thread1', isResolved: true } } } });
+          }
+          if (args.join(' ').includes('addPullRequestReviewThreadReply')) {
+            return JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'c1' } } } });
+          }
+          return JSON.stringify({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: [
+                      {
+                        id: 'PRRT_thread1',
+                        isResolved: false,
+                        isOutdated: false,
+                        path: 'src/auth.js',
+                        line: 42,
+                        comments: {
+                          nodes: [
+                            { id: 'c0', body: '**[P1] Missing null check**', author: { login: 'reviewer' } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          });
+        }
+        return '[]';
+      };
+
+      const result = await runReview({
+        prNumber: 315,
+        repo: 'xpepper/pr-review-gemini',
+        diffText,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        execGhFn: mockGh,
+        resolveThreads: true,
+        dryRun: true,
+      });
+
+      assert.ok(result.threads);
+      assert.equal(result.threads.length, 1);
+      assert.equal(result.threads[0].verdict, 'RESOLVED');
+      assert.equal(result.threadResolution?.resolvedCount, 1);
+      assert.ok(result.summary.includes('Review Thread Verification & Automated Resolution'));
+      assert.ok(result.summary.includes('Verified Resolved'));
+    });
   });
 });
 
