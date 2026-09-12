@@ -12,7 +12,7 @@ Evaluates pull requests across specialized lenses (correctness, contracts, secur
 - **Node.js**: `>= 20.0.0`
 - **GitHub CLI (`gh`)**: Authenticated (`gh auth status`)
 
-### 1. Run via Streamlined Dogfood Command
+### 1. Run via Streamlined Terminal Command
 Review any open pull request with automatic model resolution (`--model auto`):
 ```bash
 npm run dogfood:pr <PR_NUMBER>
@@ -42,6 +42,22 @@ copilot
 /gem-pr-review <PR_NUMBER>
 ```
 
+### Which Entry Point Should I Use?
+
+The plugin's user-facing name is **Gem PR Review**. The word "dogfood" appears
+only in the names of terminal runner scripts: it refers to using the reviewer
+to review this plugin's own pull requests, not to a separate model or review
+tool.
+
+| You run | What it does | When to use it |
+| :--- | :--- | :--- |
+| `/gem-pr-review <PR_NUMBER>` | Invokes the Gem PR Review Copilot skill. | Normal use from Copilot CLI. |
+| `npm run dogfood:pr <PR_NUMBER>` | Runs the streamlined terminal wrapper, which defaults to `--model auto`. | Simple terminal use. |
+| `node scripts/dogfood-review.mjs <PR_NUMBER>` | Runs the full underlying PR-review CLI. | Advanced flags or automation. |
+
+All three entry points run the same multi-lens PR reviewer. The Copilot skill
+may invoke `scripts/dogfood-pr.mjs` internally, which is why that name can
+appear in Copilot's command output.
 
 ### 4. Run via MCP Inspector (Web UI)
 Launch the interactive Model Context Protocol inspector to test all tools visually:
@@ -90,7 +106,9 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--balanced` | *(Default)* Standard multi-lens review running 5 specialist lenses |
 | `--full` | Exhaustive review running 6 lenses, including Test Quality & Coverage |
 | `--deep` | Focused deep dive with high reasoning effort on Correctness & Concurrency |
+| `--mode <mode>` | Select a review mode by name: `quick`, `balanced`, `full`, or `deep` |
 | `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
+| `--self` | Review local worktree changes instead of a remote pull request |
 | `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
 | `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
 | `--repo <owner/repo>` | Target repository (defaults to current git origin) |
