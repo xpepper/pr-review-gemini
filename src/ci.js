@@ -1032,12 +1032,7 @@ export async function runResolveCommand({
   }
 
   // 1. Fetch diff
-  let diffText = '';
-  try {
-    diffText = await getPrDiff(num, { repo, cwd, execGhFn });
-  } catch {
-    diffText = '';
-  }
+  const diffText = await getPrDiff(num, { repo, cwd, execGhFn });
 
   // 2. Fetch review threads
   const threads = await fetchReviewThreads({ prNumber: num, repo, execGhFn, cwd });

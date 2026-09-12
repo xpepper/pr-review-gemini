@@ -914,6 +914,20 @@ export function createMcpHandler(options = {}) {
                     }
                     diffText = '';
                   }
+                } else if (shouldResolve) {
+                  return {
+                    jsonrpc: '2.0',
+                    id,
+                    result: {
+                      isError: true,
+                      content: [
+                        {
+                          type: 'text',
+                          text: 'Cannot auto-resolve threads: failed to acquire verified PR diff from host (no diff provider available)',
+                        },
+                      ],
+                    },
+                  };
                 }
               }
 

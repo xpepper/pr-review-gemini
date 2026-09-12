@@ -2138,7 +2138,35 @@ index 1111111..2222222 100644
         return '[]';
       };
 
-      const result = await runReview({
+      // 1. When dryRun: true, threads are evaluated but no mutations are executed
+      let mutationCount = 0;
+      const mockGhCounting = async (args) => {
+        if (args.join(' ').includes('resolveReviewThread') || args.join(' ').includes('addPullRequestReviewThreadReply')) {
+          mutationCount++;
+        }
+        return mockGh(args);
+      };
+
+      const dryRunResult = await runReview({
+        prNumber: 315,
+        repo: 'xpepper/pr-review-gemini',
+        diffText,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        execGhFn: mockGhCounting,
+        resolveThreads: true,
+        dryRun: true,
+      });
+
+      assert.ok(dryRunResult.threads);
+      assert.equal(dryRunResult.threads.length, 1);
+      assert.equal(dryRunResult.threads[0].verdict, 'RESOLVED');
+      assert.equal(dryRunResult.threadResolution, null, 'Must not execute live resolution when dryRun is true');
+      assert.equal(mutationCount, 0, 'Zero mutations when dryRun is true');
+      assert.ok(dryRunResult.summary.includes('Review Thread Verification & Automated Resolution'));
+
+      // 2. When dryRun: false, resolution executes live mutations
+      const liveResult = await runReview({
         prNumber: 315,
         repo: 'xpepper/pr-review-gemini',
         diffText,
@@ -2146,15 +2174,11 @@ index 1111111..2222222 100644
         runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
         execGhFn: mockGh,
         resolveThreads: true,
-        dryRun: true,
+        dryRun: false,
       });
 
-      assert.ok(result.threads);
-      assert.equal(result.threads.length, 1);
-      assert.equal(result.threads[0].verdict, 'RESOLVED');
-      assert.equal(result.threadResolution?.resolvedCount, 1);
-      assert.ok(result.summary.includes('Review Thread Verification & Automated Resolution'));
-      assert.ok(result.summary.includes('Verified Resolved'));
+      assert.equal(liveResult.threadResolution?.resolvedCount, 1);
+      assert.ok(liveResult.summary.includes('Verified Resolved'));
     });
   });
 });

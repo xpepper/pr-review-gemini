@@ -1079,6 +1079,31 @@ index 1111111..2222222 100644
       assert.match(response.result.content[0].text, /Cannot auto-resolve threads/i);
     });
 
+    it('gem_pr_review_threads fails closed when resolve is true and getPrDiffFn is falsy', async () => {
+      const handler = createMcpHandler({
+        getPrDiffFn: null,
+        fetchReviewThreadsFn: async () => [],
+        evaluateReviewThreadsFn: () => ({ threads: [], counts: {} }),
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 9933,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_threads',
+          arguments: {
+            prNumber: 55,
+            resolve: true,
+          },
+        },
+      });
+
+      assert.equal(response.id, 9933);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /Cannot auto-resolve threads/i);
+    });
+
     it('pr_review_threads alias functions identically to gem_pr_review_threads', async () => {
       let fetchedPr = null;
       const handler = createMcpHandler({

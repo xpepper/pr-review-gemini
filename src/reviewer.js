@@ -657,6 +657,7 @@ async function processPrReviewThreads({
   incrementalDiffText = '',
   resolveThreads = false,
   autoReplyThreads = true,
+  dryRun = false,
   execGhFn = null,
   cwd = process.cwd(),
 } = {}) {
@@ -673,7 +674,7 @@ async function processPrReviewThreads({
         incrementalDiffText,
       });
 
-      if (resolveThreads) {
+      if (resolveThreads && !dryRun) {
         resolution = await resolveVerifiedThreads({
           threads: evaluation.threads,
           prNumber,
@@ -1009,6 +1010,7 @@ export async function runReview({
           incrementalDiffText: '',
           resolveThreads,
           autoReplyThreads,
+          dryRun,
           execGhFn,
           cwd,
         });
@@ -1104,6 +1106,7 @@ export async function runReview({
         incrementalDiffText: incDiff || '',
         resolveThreads,
         autoReplyThreads,
+        dryRun,
         execGhFn,
         cwd,
       });

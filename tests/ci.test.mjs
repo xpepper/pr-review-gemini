@@ -2194,6 +2194,53 @@ index 1111111..2222222 100644
           assert.ok(reactions.some((r) => r.includes('+1')));
           assert.ok(comments.some((c) => c.includes('Thread Resolution Complete') || c.includes('Resolved & Closed')));
         });
+
+        it('reacts with confused and posts error notice if resolve command fails', async () => {
+          const reactions = [];
+          const comments = [];
+
+          const mockGh = async (args) => {
+            const cmd = args.join(' ');
+            if (cmd.includes('reactions')) {
+              reactions.push(cmd);
+              return JSON.stringify({ id: 999 });
+            }
+            if (cmd.includes('issues/55/comments')) {
+              comments.push(cmd);
+              return JSON.stringify({ id: 888 });
+            }
+            if (cmd.includes('pr diff')) {
+              throw new Error('Network timeout fetching PR diff');
+            }
+            return '[]';
+          };
+
+          const options = {
+            eventPayload: {
+              action: 'created',
+              issue: { number: 55, pull_request: {} },
+              comment: {
+                id: 12345,
+                body: '/gem-review resolve',
+                author_association: 'MEMBER',
+                user: { login: 'trusted-dev' },
+              },
+              repository: { full_name: 'xpepper/pr-review-gemini' },
+            },
+            execGhFn: mockGh,
+            mock: true,
+          };
+
+          const env = {
+            GITHUB_EVENT_NAME: 'issue_comment',
+          };
+
+          const result = await runCiAction(options, env, silentIo);
+          assert.equal(result.exitCode, 1);
+          assert.equal(result.resolve, false);
+          assert.ok(reactions.some((r) => r.includes('confused')));
+          assert.ok(comments.some((c) => c.includes('Thread Resolution Error') || c.includes('Network timeout')));
+        });
       });
     });
   });
