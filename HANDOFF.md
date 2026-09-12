@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `feat/review-guidelines` (Increment 19 implementation complete)
-* **Active PR**: Ready to open against `main`
-* **Test Suite**: `npm test` runs and passes (643 tests across 124 suites, 0 failures)
+* **Current Branch**: `main` (Increment 19 merged, clean working tree)
+* **Active PR**: None (PR #33 merged to `main`)
+* **Test Suite**: `npm test` runs and passes (743 tests across 132 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.1.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -31,29 +31,38 @@
   - PR #28 (Issue #27 / Increment 16): `feat: reviewer sensitivity & quality calibration: benchmark and improve specialist lenses against Copilot reviewer` (Merged, commit `2c1b8c9`)
   - PR #30 (Issue #29 / Increment 17): `feat: centralize CLI entrypoint infrastructure and eliminate sibling boilerplate duplication` (Merged, commit `d92295c`)
   - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (Merged, commit `7f3af22`)
-  - Increment 19 (In Progress / PR Pending): `feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)`
+  - PR #33 (Increment 19): `feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)` (Merged)
 
 ---
 
-## Status: READY_FOR_PR_AND_DOGFOOD — Increment 19: Repository Review Guidelines
+## Status: READY_FOR_INCREMENT_20 — PR Review Thread Conversation Replies & Automated Resolution
 
-Increment 19 is fully implemented, documented, and verified:
-- `src/guidelines.js`: Guidelines discovery (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path), markdown section parser (global rules vs lens/role sections), prompt injector, 64 KB truncation safety, and zero machine path exposure.
+Increment 19 has been fully delivered, verified, dogfooded on GitHub PR #33, and merged into `main`:
+- `src/guidelines.js`: Guidelines discovery (`.github/gem-pr-review.md`, `.github/review-instructions.md`, custom path), markdown section parser (global rules vs lens/role sections), prompt injector, 64 KB truncation safety, tamper-protection against PR modifications, and zero machine path exposure.
 - `src/config.js`: Layered configuration for `guidelines: { enabled, path, max_bytes }` with aliases and sanitization.
 - `src/reviewer.js` & `src/subagents.js`: Prompt injection into parallel specialist subagents under `## Repository Review Guidelines & Invariants:`.
-- `src/self-review.js`: Automated discovery and inclusion in one-shot self-review summaries.
+- `src/self-review.js`: Automated discovery, head file validation, and inclusion in one-shot self-review summaries.
+- `src/cache.js`: Targeted `headSha` cache invalidation, separating commit-specific lookup misses from live PR head staleness to safeguard concurrent reviews.
+- `src/cli.js`: Centralized common review CLI option parsing (`parseCommonReviewOptions`) consumed by `dogfood-review.mjs` and `self-review.mjs`.
 - `src/ci.js`, `scripts/ci-action.mjs`, `action.yml`: `guidelines_path` CI input and runner parameter.
-- `scripts/dogfood-review.mjs` & `scripts/self-review.mjs`: `--guidelines <path>` CLI option.
-- `server/index.js`: `gem_pr_review_guidelines` and `pr_review_guidelines` MCP inspection tools.
-- `docs/roadmap.md`, `README.md`, `skills/gem-pr-review/SKILL.md`: Comprehensive documentation + GitHub Marketplace Action publication note.
-- Full test suite verified green (`npm test` 643 tests across 124 suites, 0 failures; `npm run version:check` clean).
+- `server/index.js`: `gem_pr_review_guidelines` and `pr_review_guidelines` MCP inspection tools, with guidelines authenticity preservation in `gem_pr_review_subagents` and safe path validation in `gem_self_review`.
+- `.github/gem-pr-review.md`: In-repo guidelines and project memory active across self-review and PR reviews.
+- Comprehensive test coverage: 743 passing tests across 132 test suites.
 
-### Next Steps:
-1. Commit all verified changes using conventional commits (`feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)`).
-2. Push branch `feat/review-guidelines` and create pull request on GitHub via `gh pr create`.
-3. Run automated dogfood review via `npm run dogfood:pr <PR_NUMBER>`.
-4. Address and triage findings, resolve threads, and merge to `main`.
-5. Hand off to Increment 20 (PR review thread conversation replies and automated thread resolution).
+### Next Steps for Increment 20:
+1. Create feature branch: `git checkout -b feat/review-threads`
+2. Implement review thread discovery and discussion state tracker in `src/prior.js` / `src/reviewer.js`:
+   - Fetch unresolved inline PR review comment threads (`gh api graphql` / REST pull request review threads).
+   - Track author replies and conversation turns on individual finding threads.
+3. Support conversational multi-turn replies to inline review findings:
+   - Evaluate author replies against the latest code diff to verify whether the concern was addressed, refuted, or remains unresolved.
+   - Post follow-up replies on existing threads rather than opening new duplicated comments.
+4. Automate thread resolution verification against head diff:
+   - Verify code fixes against original finding hunks.
+   - Resolve GitHub review threads via GraphQL mutation (`resolveReviewThread`) when verified.
+5. Support `/gem-review resolve` comment command trigger in `src/ci.js`.
+6. Add unit and integration tests across `tests/prior.test.mjs`, `tests/reviewer.test.mjs`, `tests/ci.test.mjs`.
+7. Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
 
 ---
 
