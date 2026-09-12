@@ -99,7 +99,6 @@ import {
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
   isSafeGuidelinesPath,
-  isGlobalHeading,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -171,12 +170,13 @@ export {
   parseGuidelines,
   resolveGuidelinesForLens,
   createGuidelinesSummary,
+  resolveActiveGuidelines,
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
   isSafeGuidelinesPath,
-  isGlobalHeading,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
+  MAX_PROMPT_GUIDELINES_BYTES,
   ABSOLUTE_MAX_GUIDELINES_BYTES,
 };
 
@@ -516,7 +516,7 @@ export async function runReview({
   const resolvedMode = resolveReviewMode(mode);
 
   // Discover and load repository review guidelines
-  const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+  let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
     repoGuidelines,
     guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
     config: resolvedConfig,
@@ -556,7 +556,7 @@ export async function runReview({
 
     if (execGhFn) {
       try {
-        const ghArgs = ['pr', 'view', String(num), '--json', 'headRefOid,author,title'];
+        const ghArgs = ['pr', 'view', String(num), '--json', 'headRefOid,baseRefName,author,title'];
         if (repo) ghArgs.push('--repo', repo);
         const rawMeta = await execGhFn(ghArgs, { cwd });
         if (rawMeta && rawMeta.trim()) {
@@ -567,10 +567,70 @@ export async function runReview({
             title: meta.title || `PR #${num}`,
             author: meta.author?.login || null,
             headSha: meta.headRefOid,
+            baseRefName: meta.baseRefName || null,
           };
         }
       } catch {
         // Fallback if metadata query fails
+      }
+    }
+
+    // Verify that guidelines are not modified within the untrusted PR diff.
+    // If the guidelines file was modified or introduced in this PR, reading it from
+    // the checked-out PR branch would allow an attacker PR to inject instructions into
+    // the reviewer prompt (e.g. attempting to suppress findings).
+    const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
+    if (relGuidelines && unifiedDiffText) {
+      const gitDiffA = `--- a/${relGuidelines}`;
+      const gitDiffB = `+++ b/${relGuidelines}`;
+      const gitDiffHeader = `diff --git a/${relGuidelines} b/${relGuidelines}`;
+      const isModifiedInPr =
+        unifiedDiffText.includes(gitDiffHeader) ||
+        unifiedDiffText.includes(gitDiffA) ||
+        unifiedDiffText.includes(gitDiffB);
+
+      if (isModifiedInPr) {
+        let loadedFromBase = false;
+        const baseRef = prMetadata?.baseRefName || 'HEAD~1';
+        if (execGitFn) {
+          try {
+            const baseContent = await execGitFn(['show', `${baseRef}:${relGuidelines}`], { cwd });
+            if (typeof baseContent === 'string' && baseContent.length > 0) {
+              const parsed = parseGuidelines(baseContent);
+              activeGuidelines = {
+                ...activeGuidelines,
+                rawContent: baseContent,
+                content: baseContent,
+                byteSize: Buffer.byteLength(baseContent, 'utf8'),
+                parsed,
+                formatForLens: (lensId, opts = {}) =>
+                  resolveGuidelinesForLens({ parsed, lensId, ...opts }),
+                source: 'base_ref',
+              };
+              if (guidelinesSummary) {
+                guidelinesSummary.source = 'base_ref';
+              }
+              loadedFromBase = true;
+            }
+          } catch {
+            // File does not exist on base ref (e.g. newly introduced in PR)
+          }
+        }
+
+        if (!loadedFromBase) {
+          // Exclude untrusted guidelines modified in PR from subagent prompts
+          activeGuidelines = {
+            ...activeGuidelines,
+            untrustedInPr: true,
+            content: '',
+            rawContent: '',
+            parsed: { global: '', lenses: {}, sections: [] },
+            formatForLens: () => '',
+          };
+          if (guidelinesSummary) {
+            guidelinesSummary.untrustedInPr = true;
+          }
+        }
       }
     }
 
@@ -704,8 +764,14 @@ export async function runReview({
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
     const gPath = activeGuidelines?.relativePath || activeGuidelines?.path;
+    let guidelinesSuffix = '';
+    if (activeGuidelines?.untrustedInPr) {
+      guidelinesSuffix = ' ⚠️ (modified in PR; excluded from prompt to prevent injection)';
+    } else if (activeGuidelines?.truncated) {
+      guidelinesSuffix = ' ⚠️ (truncated)';
+    }
     const guidelinesLine = activeGuidelines?.found && gPath
-      ? `- **Repository Guidelines**: \`${gPath}\`${activeGuidelines.truncated ? ' ⚠️ (truncated)' : ''}\n`
+      ? `- **Repository Guidelines**: \`${gPath}\`${guidelinesSuffix}\n`
       : '';
     let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 

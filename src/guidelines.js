@@ -45,7 +45,7 @@ const DISALLOWED_SENSITIVE_PATTERNS = [
   /(credential|secret|token|password)/i,
 ];
 
-const ALLOWED_GUIDELINES_EXTENSIONS = Object.freeze(['.md', '.markdown', '.txt', '']);
+const ALLOWED_GUIDELINES_EXTENSIONS = Object.freeze(['.md', '.markdown', '.txt']);
 
 /**
  * Validates that a candidate guidelines path does not target sensitive workspace files,
