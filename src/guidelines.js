@@ -895,7 +895,10 @@ export function resolveActiveGuidelines({
         guidelinesPath: guidelinesPath || config?.guidelines?.path,
       });
     } catch {
-      activeGuidelines = null;
+      activeGuidelines = createEmptyGuidelines({
+        enabled: config?.guidelines?.enabled !== false,
+        found: false,
+      });
     }
   }
   const guidelinesSummary = createGuidelinesSummary(activeGuidelines);

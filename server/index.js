@@ -36,7 +36,7 @@ import {
   formatVerificationSummary,
 } from '../src/verify.js';
 import { runSelfReview } from '../src/self-review.js';
-import { loadGuidelines, createGuidelinesSummary } from '../src/guidelines.js';
+import { loadGuidelines, createGuidelinesSummary, isSafeGuidelinesPath } from '../src/guidelines.js';
 import { PLUGIN_VERSION } from '../src/version.js';
 
 const GUIDELINES_PATH_PROPERTY = {
@@ -430,6 +430,7 @@ export const MCP_TOOLS = [
       type: 'object',
       properties: {
         path: GUIDELINES_TOOL_PATH_PROPERTY,
+        guidelinesPath: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -440,6 +441,7 @@ export const MCP_TOOLS = [
       type: 'object',
       properties: {
         path: GUIDELINES_TOOL_PATH_PROPERTY,
+        guidelinesPath: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -900,11 +902,27 @@ export function createMcpHandler(options = {}) {
               toolName === 'pr_review_guidelines'
             ) {
               const config = loadConfig(cwd);
+              const candidatePath = args?.path || args?.guidelinesPath || args?.guidelines_path;
 
-              if (args.path) {
-                const norm = path.normalize(String(args.path)).replace(/^[\\/]+/, '');
-                const configured =
-                  config?.guidelines?.path || config?.review_guidelines_path || config?.guidelines_path;
+              if (candidatePath) {
+                if (!isSafeGuidelinesPath(candidatePath, cwd)) {
+                  return {
+                    jsonrpc: '2.0',
+                    id,
+                    result: {
+                      isError: true,
+                      content: [
+                        {
+                          type: 'text',
+                          text: 'Error: Custom guidelines path must be a safe markdown file (.md or .markdown) within the workspace repository.',
+                        },
+                      ],
+                    },
+                  };
+                }
+
+                const norm = path.normalize(String(candidatePath)).replace(/^[\\/]+/, '');
+                const configured = config?.guidelines?.path;
                 const isConfigured =
                   configured && path.normalize(String(configured)).replace(/^[\\/]+/, '') === norm;
                 const isGithubDir = norm.startsWith('.github/') || norm.startsWith('.github\\');
@@ -929,7 +947,7 @@ export function createMcpHandler(options = {}) {
               const guidelines = loadGuidelinesFn({
                 cwd,
                 config,
-                guidelinesPath: args.path,
+                guidelinesPath: candidatePath || undefined,
               });
 
               const summary = createGuidelinesSummary(guidelines);

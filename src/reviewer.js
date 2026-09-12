@@ -749,13 +749,32 @@ export async function runReview({
 
     const isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
 
-    if (!isGuidelinesEnabled) {
-      activeGuidelines = createEmptyGuidelines({ enabled: false, found: false });
+    // Validate and sanitize custom guidelines path if provided to prevent arbitrary file disclosure
+    const rawCandidateGuidelinesPath = guidelinesPath || resolvedConfig?.guidelines?.path || null;
+    let safeCustomGuidelinesPath = null;
+    let isExplicitPathUnsafe = false;
+
+    if (typeof rawCandidateGuidelinesPath === 'string' && rawCandidateGuidelinesPath.trim().length > 0) {
+      const trimmed = rawCandidateGuidelinesPath.trim();
+      if (isSafeGuidelinesPath(trimmed, cwd)) {
+        const cleanRel = (path.isAbsolute(trimmed) ? path.relative(cwd, trimmed) : trimmed).replace(/\\/g, '/');
+        if (!cleanRel.startsWith('..') && !path.isAbsolute(cleanRel)) {
+          safeCustomGuidelinesPath = cleanRel;
+        } else {
+          isExplicitPathUnsafe = true;
+        }
+      } else {
+        isExplicitPathUnsafe = true;
+      }
+    }
+
+    if (!isGuidelinesEnabled || isExplicitPathUnsafe) {
+      activeGuidelines = createEmptyGuidelines({ enabled: isGuidelinesEnabled && !isExplicitPathUnsafe, found: false });
       guidelinesSummary = createGuidelinesSummary(activeGuidelines);
     } else if (repoGuidelines) {
       ({ activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
         repoGuidelines,
-        guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+        guidelinesPath: safeCustomGuidelinesPath,
         config: resolvedConfig,
         cwd,
       }));
@@ -763,14 +782,15 @@ export async function runReview({
       const isLocalRepo = await isLocalCwdMatchingRepo(repo, effectiveExecGit, cwd);
       if (isLocalRepo) {
         ({ activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
-          guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+          guidelinesPath: safeCustomGuidelinesPath,
           config: resolvedConfig,
           cwd,
         }));
       } else if (execGhFn && repo) {
-        const candidatePaths = (guidelinesPath || resolvedConfig?.guidelines?.path)
-          ? [guidelinesPath || resolvedConfig?.guidelines?.path]
-          : ['.github/gem-pr-review.md', '.github/review-instructions.md'];
+        const candidatePaths = (safeCustomGuidelinesPath
+          ? [safeCustomGuidelinesPath]
+          : DEFAULT_GUIDELINE_FILENAMES
+        ).filter((cand) => isSafeGuidelinesPath(cand, cwd));
 
         let remoteContent = null;
         let matchedPath = null;
@@ -809,16 +829,20 @@ export async function runReview({
     }
 
     const fetchBaseRefFile = async (filePath) => {
-      if (!confirmedBaseRef) return null;
+      if (!confirmedBaseRef || !filePath || typeof filePath !== 'string') return null;
+      const cleanPath = path.normalize(filePath).replace(/^[\\/]+/, '').replace(/\\/g, '/');
+      if (cleanPath.startsWith('..') || !isSafeGuidelinesPath(cleanPath, cwd)) {
+        return null;
+      }
       try {
-        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${filePath}`], { cwd });
+        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${cleanPath}`], { cwd });
         if (typeof out === 'string' && out.length > 0) return out;
       } catch {
         // continue
       }
       if (!confirmedBaseRef.startsWith('origin/')) {
         try {
-          const out = await effectiveExecGit(['show', `origin/${confirmedBaseRef}:${filePath}`], { cwd });
+          const out = await effectiveExecGit(['show', `origin/${confirmedBaseRef}:${cleanPath}`], { cwd });
           if (typeof out === 'string' && out.length > 0) return out;
         } catch {
           // continue
@@ -828,7 +852,7 @@ export async function runReview({
         try {
           const out = await fetchRemoteRepoGuidelines({
             repo,
-            relPath: filePath,
+            relPath: cleanPath,
             ref: confirmedBaseRef,
             execGhFn,
             cwd,
@@ -842,11 +866,17 @@ export async function runReview({
     };
 
     let relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
+    if (relGuidelines && (!isSafeGuidelinesPath(relGuidelines, cwd) || isExplicitPathUnsafe)) {
+      activeGuidelines = createEmptyGuidelines({ enabled: true, found: false });
+      guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+      relGuidelines = null;
+    }
 
-    if (!relGuidelines && confirmedBaseRef && isGuidelinesEnabled) {
-      const candidates = guidelinesPath
-        ? [guidelinesPath]
-        : (resolvedConfig?.guidelines?.path ? [resolvedConfig.guidelines.path] : DEFAULT_GUIDELINE_FILENAMES);
+    if (!relGuidelines && confirmedBaseRef && isGuidelinesEnabled && !isExplicitPathUnsafe) {
+      const candidates = (safeCustomGuidelinesPath
+        ? [safeCustomGuidelinesPath]
+        : DEFAULT_GUIDELINE_FILENAMES
+      ).filter((cand) => isSafeGuidelinesPath(cand, cwd));
 
       for (const cand of candidates) {
         try {

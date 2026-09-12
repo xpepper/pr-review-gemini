@@ -1604,6 +1604,47 @@ index 1111111..2222222 100644
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
     });
+
+    it('rejects unsafe guidelinesPath and never discloses sensitive repository files in prompt', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-safe-path-'));
+      try {
+        fs.writeFileSync(path.join(tmpRepo, '.env'), 'SECRET_API_KEY=supersecret123');
+
+        let gitShowCalledWithEnv = false;
+        const mockExecGit = async (args) => {
+          if (args[0] === 'show' && args[1]?.includes('.env')) {
+            gitShowCalledWithEnv = true;
+            return 'SECRET_API_KEY=supersecret123';
+          }
+          return '';
+        };
+
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const result = await runReview({
+          prNumber: 307,
+          diffText: sampleDiff,
+          baseRef: 'main',
+          cwd: tmpRepo,
+          guidelinesPath: '.env', // Unsafe sensitive file
+          execGitFn: mockExecGit,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, false);
+        assert.equal(gitShowCalledWithEnv, false, 'Must not attempt git show on unsafe guidelines path');
+        assert.ok(!dispatchedPrompt.includes('SECRET_API_KEY'));
+        assert.ok(!dispatchedPrompt.includes('supersecret123'));
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
   });
 });
 

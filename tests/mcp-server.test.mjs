@@ -607,6 +607,23 @@ index 1111111..2222222 100644
       assert.equal(response.id, 801);
       assert.equal(response.result?.isError, true);
       assert.match(response.result.content[0].text, /Custom guidelines path must reside in \.github\//);
+
+      // Rejects unsafe sensitive files
+      const envResponse = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 802,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_guidelines',
+          arguments: {
+            guidelinesPath: '.env',
+          },
+        },
+      });
+
+      assert.equal(envResponse.id, 802);
+      assert.equal(envResponse.result?.isError, true);
+      assert.match(envResponse.result.content[0].text, /Custom guidelines path must be a safe markdown file/);
     });
 
     it('passes guidelinesPath to runReviewFn and runSelfReviewFn in MCP handlers (Increment 19)', async () => {
