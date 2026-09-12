@@ -1343,7 +1343,9 @@ index 1111111..2222222 100644
         };
 
         const remoteContent = '# Remote Review Guidelines\n- Verify remote repository invariants.';
+        let capturedGhArgs = null;
         const mockExecGh = async (args) => {
+          capturedGhArgs = args;
           const cmd = args.join(' ');
           if (cmd.includes('repos/other-org/remote-repo/contents/.github/gem-pr-review.md')) {
             return JSON.stringify({
@@ -1373,6 +1375,12 @@ index 1111111..2222222 100644
         assert.match(dispatchedPrompt, /## Repository Review Guidelines & Invariants:/);
         assert.match(dispatchedPrompt, /Verify remote repository invariants\./);
         assert.ok(!dispatchedPrompt.includes('Local rules must not leak'));
+
+        // Verify gh api is called via GET query parameter rather than POST with --field
+        assert.ok(capturedGhArgs);
+        assert.ok(!capturedGhArgs.includes('--field'));
+        const apiPath = capturedGhArgs.find((a) => a.includes('repos/other-org/remote-repo/contents/'));
+        assert.ok(apiPath.includes('?ref=main'));
       } finally {
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
@@ -1425,6 +1433,74 @@ index 1111111..2222222 100644
         assert.equal(result.guidelines.found, false);
         assert.ok(!dispatchedPrompt.includes('Local rules must not leak'));
         assert.ok(!dispatchedPrompt.includes('## Repository Review Guidelines & Invariants:'));
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
+
+    it('does not fetch or inject guidelines when guidelines.enabled is false in config', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-disabled-'));
+      try {
+        let ghGuidelinesCalled = false;
+        const mockExecGh = async (args) => {
+          const cmd = args.join(' ');
+          if (cmd.includes('contents/')) {
+            ghGuidelinesCalled = true;
+          }
+          return '';
+        };
+
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const result = await runReview({
+          prNumber: 303,
+          repo: 'other-org/remote-repo',
+          baseRef: 'main',
+          diffText: sampleDiff,
+          cwd: tmpRepo,
+          config: { guidelines: { enabled: false } },
+          execGhFn: mockExecGh,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.enabled, false);
+        assert.equal(result.guidelines.found, false);
+        assert.equal(ghGuidelinesCalled, false);
+        assert.ok(!dispatchedPrompt.includes('## Repository Review Guidelines & Invariants:'));
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
+
+    it('never exposes local machine absolute paths in review summary', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-abs-path-'));
+      try {
+        const ghDir = path.join(tmpRepo, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        const absGuidelinesFile = path.join(ghDir, 'gem-pr-review.md');
+        fs.writeFileSync(absGuidelinesFile, '# Rules\n- Safe rule.');
+
+        const mockRunner = async () => '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+
+        const result = await runReview({
+          prNumber: 304,
+          diffText: sampleDiff,
+          cwd: tmpRepo,
+          guidelinesPath: absGuidelinesFile, // Passed as absolute path
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.ok(!result.summary.includes(tmpRepo));
+        assert.match(result.summary, /Repository Guidelines.*\.github\/gem-pr-review\.md/);
       } finally {
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }

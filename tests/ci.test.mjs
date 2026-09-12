@@ -304,6 +304,12 @@ describe('CI Event Payload & Environment Resolution', () => {
 
       const res2 = resolveCiEnvironment({ guidelinesPath: 'docs/guidelines.md' }, {});
       assert.equal(res2.guidelinesPath, 'docs/guidelines.md');
+
+      const res3 = resolveCiEnvironment({ guidelines_path: 'docs/from_snake_case.md' }, {});
+      assert.equal(res3.guidelinesPath, 'docs/from_snake_case.md');
+
+      const res4 = resolveCiEnvironment({ review_guidelines_path: 'docs/from_review_path.md' }, {});
+      assert.equal(res4.guidelinesPath, 'docs/from_review_path.md');
     });
 
     it('prefers explicit options over environment variables', () => {

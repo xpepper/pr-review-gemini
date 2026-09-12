@@ -496,6 +496,20 @@ async function defaultExecGit(args, options = {}) {
 
 function isFileTouchedInDiff(diffText, relPath) {
   if (!diffText || !relPath) return false;
+  const normRel = relPath.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+  try {
+    const parsedDiffs = parseUnifiedDiff(diffText);
+    for (const d of parsedDiffs) {
+      const f = (d.file || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      const oldF = (d.oldPath || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+      if (f === normRel || oldF === normRel) {
+        return true;
+      }
+    }
+  } catch {
+    // fallback to regex pattern below
+  }
+
   const escaped = relPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(
     `(?:diff --git [^\n]*"?\\b(?:a|b)/${escaped}"?(?=[\\s\r\n"]|$)|` +
@@ -573,9 +587,13 @@ async function isLocalCwdMatchingRepo(repo, execGitFn, cwd) {
  */
 async function fetchRemoteRepoGuidelines({ repo, relPath, ref, execGhFn, cwd }) {
   if (!execGhFn || !repo || !relPath) return null;
+  const cleanPath = String(relPath).replace(/^[\\/]+/, '');
+  if (cleanPath.startsWith('..') || !isSafeGuidelinesPath(cleanPath)) {
+    return null;
+  }
   try {
-    const ghArgs = ['api', `repos/${repo}/contents/${relPath}`];
-    if (ref) ghArgs.push('--field', `ref=${ref}`);
+    const query = ref ? `?ref=${encodeURIComponent(ref)}` : '';
+    const ghArgs = ['api', `repos/${repo}/contents/${cleanPath}${query}`];
     const raw = await execGhFn(ghArgs, { cwd });
     if (!raw || !raw.trim()) return null;
     const data = JSON.parse(raw);
@@ -727,7 +745,12 @@ export async function runReview({
         ? baseRef.trim()
         : prMetadata?.baseRefName || null;
 
-    if (repoGuidelines) {
+    const isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
+
+    if (!isGuidelinesEnabled) {
+      activeGuidelines = createEmptyGuidelines({ enabled: false, found: false });
+      guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+    } else if (repoGuidelines) {
       ({ activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
         repoGuidelines,
         guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
@@ -998,7 +1021,18 @@ export async function runReview({
       .join(' | ') || 'None';
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
-    const gPath = activeGuidelines?.relativePath || activeGuidelines?.path;
+    const rawGPath = activeGuidelines?.relativePath || activeGuidelines?.path;
+    let gPath = null;
+    if (rawGPath) {
+      if (!path.isAbsolute(rawGPath)) {
+        gPath = rawGPath;
+      } else if (cwd) {
+        const rel = path.relative(cwd, rawGPath);
+        gPath = !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.replace(/\\/g, '/') : path.basename(rawGPath);
+      } else {
+        gPath = path.basename(rawGPath);
+      }
+    }
     let guidelinesSuffix = '';
     if (activeGuidelines?.untrustedInPr) {
       guidelinesSuffix = ' ⚠️ (modified in PR; excluded from prompt to prevent injection)';

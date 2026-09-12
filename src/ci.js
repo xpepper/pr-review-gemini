@@ -258,6 +258,7 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
   // 11. Guidelines Path
   const guidelinesPath =
     options.guidelinesPath ||
+    options.guidelines_path ||
     options.review_guidelines_path ||
     env.INPUT_GUIDELINES_PATH ||
     env.INPUT_GUIDELINES ||
