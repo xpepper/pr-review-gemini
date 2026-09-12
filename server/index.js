@@ -39,6 +39,16 @@ import { runSelfReview } from '../src/self-review.js';
 import { loadGuidelines, createGuidelinesSummary } from '../src/guidelines.js';
 import { PLUGIN_VERSION } from '../src/version.js';
 
+const GUIDELINES_PATH_PROPERTY = {
+  type: 'string',
+  description: 'Optional custom path to repository review guidelines markdown file',
+};
+
+const GUIDELINES_TOOL_PATH_PROPERTY = {
+  type: 'string',
+  description: 'Optional custom relative path to guidelines file (defaults to .github/gem-pr-review.md)',
+};
+
 export const MCP_TOOLS = [
   {
     name: 'gem_pr_review_subagents',
@@ -93,10 +103,7 @@ export const MCP_TOOLS = [
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
-        guidelinesPath: {
-          type: 'string',
-          description: 'Optional custom path to repository review guidelines markdown file',
-        },
+        guidelinesPath: GUIDELINES_PATH_PROPERTY,
       },
       required: ['prNumber'],
     },
@@ -355,10 +362,7 @@ export const MCP_TOOLS = [
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
-        guidelinesPath: {
-          type: 'string',
-          description: 'Optional custom path to repository review guidelines markdown file',
-        },
+        guidelinesPath: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -414,10 +418,7 @@ export const MCP_TOOLS = [
           type: 'object',
           description: 'Optional dictionary of custom role definitions { [roleId]: { name, prompt, model, reasoningEffort } }',
         },
-        guidelinesPath: {
-          type: 'string',
-          description: 'Optional custom path to repository review guidelines markdown file',
-        },
+        guidelinesPath: GUIDELINES_PATH_PROPERTY,
       },
     },
   },
@@ -428,10 +429,7 @@ export const MCP_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: {
-          type: 'string',
-          description: 'Optional custom relative path to guidelines file (defaults to .github/gem-pr-review.md)',
-        },
+        path: GUIDELINES_TOOL_PATH_PROPERTY,
       },
     },
   },
@@ -441,10 +439,7 @@ export const MCP_TOOLS = [
     inputSchema: {
       type: 'object',
       properties: {
-        path: {
-          type: 'string',
-          description: 'Optional custom relative path to guidelines file (defaults to .github/gem-pr-review.md)',
-        },
+        path: GUIDELINES_TOOL_PATH_PROPERTY,
       },
     },
   },

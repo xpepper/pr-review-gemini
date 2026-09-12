@@ -275,6 +275,43 @@ export function formatTruncationWarning(byteSize, maxBytes) {
 }
 
 /**
+ * Resolves the effective maximum guidelines byte limit within safe bounds.
+ *
+ * @param {number|any} maxBytes - Candidate max bytes
+ * @returns {number} Bound max bytes between 1 and ABSOLUTE_MAX_GUIDELINES_BYTES
+ */
+export function resolveMaxGuidelinesBytes(maxBytes) {
+  if (typeof maxBytes === 'number' && Number.isFinite(maxBytes) && maxBytes > 0) {
+    return Math.min(maxBytes, ABSOLUTE_MAX_GUIDELINES_BYTES);
+  }
+  return MAX_GUIDELINES_BYTES;
+}
+
+/**
+ * Applies size limits to guidelines content string, safely truncating and formatting a warning banner if needed.
+ *
+ * @param {string} rawContent - Raw guidelines content
+ * @param {number} [maxBytes] - Optional byte limit
+ * @returns {{ content: string, rawContent: string, byteSize: number, truncated: boolean, truncationWarning: string|null }}
+ */
+export function applyGuidelinesContentLimit(rawContent, maxBytes) {
+  const effectiveMax = resolveMaxGuidelinesBytes(maxBytes);
+  const text = typeof rawContent === 'string' ? rawContent : '';
+  const totalBytes = Buffer.byteLength(text, 'utf8');
+  const isTruncated = totalBytes > effectiveMax;
+  const safeContent = isTruncated ? truncateUtf8Safe(text, effectiveMax) : text;
+  const truncationWarning = isTruncated ? formatTruncationWarning(totalBytes, effectiveMax) : null;
+  return {
+    rawContent: safeContent,
+    content: truncationWarning ? `${safeContent}\n\n${truncationWarning}` : safeContent,
+    byteSize: Buffer.byteLength(safeContent, 'utf8'),
+    originalByteSize: totalBytes,
+    truncated: isTruncated,
+    truncationWarning,
+  };
+}
+
+/**
  * Reads a guideline file with size bounding and relative path resolution.
  *
  * @param {string} filePath - Path to guideline file
@@ -314,11 +351,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
   }
 
   const relativePath = sanitizeRelativePath(realTarget, realCwd);
-
-  const effectiveMaxBytes = Math.min(
-    Math.max(1, Number(maxBytes) || MAX_GUIDELINES_BYTES),
-    ABSOLUTE_MAX_GUIDELINES_BYTES
-  );
+  const effectiveMaxBytes = resolveMaxGuidelinesBytes(maxBytes);
 
   let fd;
   try {
@@ -422,7 +455,7 @@ export function parseGuidelines(markdown) {
 
   const lines = markdown.split(/\r?\n/);
   const globalLines = [];
-  const lenses = {};
+  const lenses = new Map();
   const sections = [];
 
   let currentTargetLens = null;
@@ -462,10 +495,10 @@ export function parseGuidelines(markdown) {
         if (currentSection) {
           currentSection.lines.push(line);
         }
-        if (!lenses[currentTargetLens]) {
-          lenses[currentTargetLens] = [];
+        if (!lenses.has(currentTargetLens)) {
+          lenses.set(currentTargetLens, []);
         }
-        lenses[currentTargetLens].push(line);
+        lenses.get(currentTargetLens).push(line);
         continue;
       }
 
@@ -500,10 +533,10 @@ export function parseGuidelines(markdown) {
     }
 
     if (currentTargetLens) {
-      if (!lenses[currentTargetLens]) {
-        lenses[currentTargetLens] = [];
+      if (!lenses.has(currentTargetLens)) {
+        lenses.set(currentTargetLens, []);
       }
-      lenses[currentTargetLens].push(line);
+      lenses.get(currentTargetLens).push(line);
     } else {
       globalLines.push(line);
     }
@@ -515,8 +548,9 @@ export function parseGuidelines(markdown) {
     sections.push(currentSection);
   }
 
-  const normalizedLenses = {};
-  for (const [k, arr] of Object.entries(lenses)) {
+  const normalizedLenses = Object.create(null);
+  for (const [k, arr] of lenses.entries()) {
+    if (k === '__proto__') continue;
     const text = arr.join('\n').trim();
     if (text.length > 0) {
       normalizedLenses[k] = text;
@@ -557,9 +591,14 @@ export function resolveGuidelinesForLens({
   const primaryKey = (lensId || '').toLowerCase().trim();
   const fallbackKey = (roleId || '').toLowerCase().trim();
 
+  const lensesObj = parsedObj.lenses;
   const lensSpecific =
-    (primaryKey && parsedObj.lenses?.[primaryKey]) ||
-    (fallbackKey && parsedObj.lenses?.[fallbackKey]) ||
+    (primaryKey && lensesObj && Object.prototype.hasOwnProperty.call(lensesObj, primaryKey)
+      ? lensesObj[primaryKey]
+      : null) ||
+    (fallbackKey && lensesObj && Object.prototype.hasOwnProperty.call(lensesObj, fallbackKey)
+      ? lensesObj[fallbackKey]
+      : null) ||
     null;
 
   let result = '';

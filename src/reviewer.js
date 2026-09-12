@@ -106,6 +106,7 @@ import {
   createEmptyGuidelines,
   truncateUtf8Safe,
   formatTruncationWarning,
+  applyGuidelinesContentLimit,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -532,6 +533,48 @@ function markGuidelinesUntrusted(activeGuidelines, guidelinesSummary) {
 }
 
 /**
+ * Fetches PR metadata with fallback query fields when extended fields fail.
+ *
+ * @param {object} params
+ * @param {number|string} params.prNumber - PR number
+ * @param {string} [params.repo] - Optional repository name
+ * @param {Function} params.execGhFn - GitHub CLI execution function
+ * @param {string} [params.cwd] - Working directory
+ * @returns {Promise<object|null>} Metadata object or null
+ */
+async function fetchPrMetadataWithFallback({ prNumber, repo, execGhFn, cwd }) {
+  if (!execGhFn || !prNumber) return null;
+  const num = Number.parseInt(prNumber, 10);
+  if (!Number.isFinite(num)) return null;
+
+  const queryFieldSets = [
+    'headRefOid,baseRefName,author,title',
+    'headRefOid,author,title',
+  ];
+
+  for (const fields of queryFieldSets) {
+    try {
+      const ghArgs = ['pr', 'view', String(num), '--json', fields];
+      if (repo) ghArgs.push('--repo', repo);
+      const rawMeta = await execGhFn(ghArgs, { cwd });
+      if (rawMeta && rawMeta.trim()) {
+        const meta = JSON.parse(rawMeta);
+        return {
+          number: num,
+          title: meta.title || `PR #${num}`,
+          author: meta.author?.login || null,
+          headSha: meta.headRefOid || null,
+          baseRefName: meta.baseRefName || null,
+        };
+      }
+    } catch {
+      // Continue to next fieldset fallback
+    }
+  }
+  return null;
+}
+
+/**
  * Orchestrates an end-to-end multi-lens review for a pull request.
  */
 export async function runReview({
@@ -614,41 +657,10 @@ export async function runReview({
     let currentHeadSha = expectedHeadSha || null;
 
     if (execGhFn) {
-      try {
-        const ghArgs = ['pr', 'view', String(num), '--json', 'headRefOid,baseRefName,author,title'];
-        if (repo) ghArgs.push('--repo', repo);
-        const rawMeta = await execGhFn(ghArgs, { cwd });
-        if (rawMeta && rawMeta.trim()) {
-          const meta = JSON.parse(rawMeta);
-          currentHeadSha = meta.headRefOid || currentHeadSha;
-          prMetadata = {
-            number: num,
-            title: meta.title || `PR #${num}`,
-            author: meta.author?.login || null,
-            headSha: meta.headRefOid,
-            baseRefName: meta.baseRefName || null,
-          };
-        }
-      } catch {
-        // If query including baseRefName fails, attempt fallback with standard metadata fields
-        try {
-          const fallbackArgs = ['pr', 'view', String(num), '--json', 'headRefOid,author,title'];
-          if (repo) fallbackArgs.push('--repo', repo);
-          const rawMeta = await execGhFn(fallbackArgs, { cwd });
-          if (rawMeta && rawMeta.trim()) {
-            const meta = JSON.parse(rawMeta);
-            currentHeadSha = meta.headRefOid || currentHeadSha;
-            prMetadata = {
-              number: num,
-              title: meta.title || `PR #${num}`,
-              author: meta.author?.login || null,
-              headSha: meta.headRefOid,
-              baseRefName: null,
-            };
-          }
-        } catch {
-          // Fallback if metadata query fails completely
-        }
+      const fetchedMeta = await fetchPrMetadataWithFallback({ prNumber: num, repo, execGhFn, cwd });
+      if (fetchedMeta) {
+        currentHeadSha = fetchedMeta.headSha || currentHeadSha;
+        prMetadata = fetchedMeta;
       }
     }
 
@@ -671,37 +683,42 @@ export async function runReview({
 
       if ((isModifiedInPr || isCustomDiff) && confirmedBaseRef) {
         try {
-          const rawBaseContent = await effectiveExecGit(
-            ['show', `${confirmedBaseRef}:${relGuidelines}`],
-            { cwd }
-          );
+          let rawBaseContent = null;
+          try {
+            rawBaseContent = await effectiveExecGit(
+              ['show', `${confirmedBaseRef}:${relGuidelines}`],
+              { cwd }
+            );
+          } catch {
+            // If local ref lookup fails, try remote-tracking branch origin/<confirmedBaseRef>
+            if (!confirmedBaseRef.startsWith('origin/')) {
+              try {
+                rawBaseContent = await effectiveExecGit(
+                  ['show', `origin/${confirmedBaseRef}:${relGuidelines}`],
+                  { cwd }
+                );
+              } catch {
+                // Not found on remote ref either
+              }
+            }
+          }
+
           if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
-            const configuredMax = resolvedConfig?.guidelines?.max_bytes;
-            const maxBytes =
-              typeof configuredMax === 'number' && Number.isFinite(configuredMax) && configuredMax > 0
-                ? Math.min(configuredMax, ABSOLUTE_MAX_GUIDELINES_BYTES)
-                : MAX_GUIDELINES_BYTES;
+            const limited = applyGuidelinesContentLimit(
+              rawBaseContent,
+              resolvedConfig?.guidelines?.max_bytes
+            );
 
-            const baseContent = truncateUtf8Safe(rawBaseContent, maxBytes);
-            const isTruncated = Buffer.byteLength(rawBaseContent, 'utf8') > maxBytes;
-            const truncationWarning = isTruncated
-              ? formatTruncationWarning(Buffer.byteLength(rawBaseContent, 'utf8'), maxBytes)
-              : null;
-
-            if (activeGuidelines.rawContent !== baseContent || isTruncated) {
+            if (activeGuidelines.rawContent !== limited.rawContent || limited.truncated) {
               // Guidelines file differs from base branch version (modified in PR or locally) or was truncated.
               // Discard untrusted on-disk content and load verified base ref content.
-              const parsed = parseGuidelines(baseContent);
+              const parsed = parseGuidelines(limited.rawContent);
               activeGuidelines = {
                 ...activeGuidelines,
-                rawContent: baseContent,
-                content: truncationWarning ? `${baseContent}\n\n${truncationWarning}` : baseContent,
-                byteSize: Buffer.byteLength(baseContent, 'utf8'),
-                truncated: isTruncated,
-                truncationWarning,
+                ...limited,
                 parsed,
                 formatForLens: (lensId, opts = {}) =>
-                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning, ...opts }),
+                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
                 source: 'base_ref',
               };
               if (guidelinesSummary) {
@@ -717,9 +734,9 @@ export async function runReview({
           // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR)
           ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
         }
-      } else if (isModifiedInPr) {
-        // Guidelines were modified or introduced in PR diff, but no confirmed base ref is available
-        // to safely retrieve base branch content. Fail closed to prevent prompt injection.
+      } else if (isModifiedInPr || isCustomDiff) {
+        // Guidelines were modified in PR diff, or custom diffText was supplied without a confirmed base ref
+        // to verify authenticity against. Fail closed to prevent prompt injection.
         ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
       }
     }

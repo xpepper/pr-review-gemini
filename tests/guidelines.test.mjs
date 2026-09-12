@@ -21,6 +21,8 @@ import {
   truncateUtf8Safe,
   createEmptyGuidelines,
   formatTruncationWarning,
+  resolveMaxGuidelinesBytes,
+  applyGuidelinesContentLimit,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -656,5 +658,62 @@ Global rules apply everywhere.
       assert.match(banner, /65536 bytes/);
       assert.match(banner, /> ⚠️ \[Guidelines truncated:/);
     });
+
+    it('parseGuidelines does not throw or collide on Object.prototype property names', () => {
+      const protoPayload = `
+# Global Rules
+Global invariant.
+
+## Role: constructor
+Constructor instructions.
+
+## Lens: toString
+ToString instructions.
+
+## Role: __proto__
+Malicious proto instruction.
+
+## Role: valueOf
+ValueOf instructions.
+`;
+      const parsed = parseGuidelines(protoPayload);
+      assert.ok(parsed);
+      assert.equal(typeof parsed.lenses, 'object');
+      assert.equal(parsed.lenses.constructor, 'Constructor instructions.');
+      assert.equal(parsed.lenses.tostring, 'ToString instructions.');
+      assert.equal(parsed.lenses.valueof, 'ValueOf instructions.');
+      assert.equal(Object.prototype.toString.call(parsed.lenses), '[object Object]');
+
+      // resolveGuidelinesForLens handles Object.prototype keys without throwing
+      const res = resolveGuidelinesForLens({ parsed, lensId: 'constructor' });
+      assert.ok(res.includes('Constructor instructions.'));
+    });
+
+    it('resolveMaxGuidelinesBytes safely bounds configured limits', () => {
+      assert.equal(resolveMaxGuidelinesBytes(1024), 1024);
+      assert.equal(resolveMaxGuidelinesBytes(10 * 1024 * 1024), ABSOLUTE_MAX_GUIDELINES_BYTES);
+      assert.equal(resolveMaxGuidelinesBytes(-10), MAX_GUIDELINES_BYTES);
+      assert.equal(resolveMaxGuidelinesBytes(null), MAX_GUIDELINES_BYTES);
+      assert.equal(resolveMaxGuidelinesBytes('invalid'), MAX_GUIDELINES_BYTES);
+    });
+
+    it('applyGuidelinesContentLimit formats warning and truncates within limits', () => {
+      const shortText = 'Short guidelines within limit';
+      const shortRes = applyGuidelinesContentLimit(shortText, 1024);
+      assert.equal(shortRes.truncated, false);
+      assert.equal(shortRes.rawContent, shortText);
+      assert.equal(shortRes.content, shortText);
+      assert.equal(shortRes.truncationWarning, null);
+
+      const largeText = 'A'.repeat(2000);
+      const limitRes = applyGuidelinesContentLimit(largeText, 500);
+      assert.equal(limitRes.truncated, true);
+      assert.equal(limitRes.rawContent.length, 500);
+      assert.equal(limitRes.byteSize, 500);
+      assert.equal(limitRes.originalByteSize, 2000);
+      assert.ok(limitRes.truncationWarning);
+      assert.ok(limitRes.content.includes(limitRes.truncationWarning));
+    });
   });
 });
+
