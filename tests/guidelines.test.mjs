@@ -11,6 +11,7 @@ import {
   parseGuidelines,
   resolveGuidelinesForLens,
   loadGuidelines,
+  createGuidelinesSummary,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -74,9 +75,30 @@ describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
       const foundRel = discoverGuidelinesFile({ cwd: tmpDir, customPath: 'docs/arch-rules.md' });
       assert.equal(foundRel, customFile);
 
-      // Absolute path
+      // Absolute path inside cwd
       const foundAbs = discoverGuidelinesFile({ cwd: tmpDir, customPath: customFile });
       assert.equal(foundAbs, customFile);
+    });
+
+    it('rejects path traversal attempts escaping the workspace root', () => {
+      // Relative traversal
+      const foundEscapeRel = discoverGuidelinesFile({ cwd: tmpDir, customPath: '../outside.md' });
+      assert.equal(foundEscapeRel, null);
+
+      // Deep relative traversal
+      const foundDeepRel = discoverGuidelinesFile({ cwd: tmpDir, customPath: 'docs/../../outside.md' });
+      assert.equal(foundDeepRel, null);
+
+      // Absolute path outside cwd
+      const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-outside-'));
+      try {
+        const outsideFile = path.join(outsideDir, 'secret.md');
+        fs.writeFileSync(outsideFile, '# Secret');
+        const foundEscapeAbs = discoverGuidelinesFile({ cwd: tmpDir, customPath: outsideFile });
+        assert.equal(foundEscapeAbs, null);
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
     });
 
     it('returns null if guidelines file does not exist', () => {
@@ -208,6 +230,48 @@ General codebase rules:
       const guidance = resolveGuidelinesForLens({ parsed, lensId: 'security' });
       assert.ok(guidance.includes('Standard 1'));
     });
+
+    it('preserves subsection hierarchy under a lens without leaking to global', () => {
+      const hierarchicalMarkdown = `# Rules
+Global preamble.
+
+## Security
+Security preamble.
+
+### Auth Subsystem
+Token expiration rules.
+
+#### JWT Specifics
+Verify signature algorithm.
+
+## Performance
+Performance rules.
+`;
+      const parsed = parseGuidelines(hierarchicalMarkdown);
+      assert.ok(parsed.global.includes('Global preamble.'));
+      assert.ok(!parsed.global.includes('Token expiration rules'));
+      assert.ok(!parsed.global.includes('Verify signature algorithm'));
+
+      assert.ok(parsed.lenses.security.includes('Security preamble.'));
+      assert.ok(parsed.lenses.security.includes('### Auth Subsystem'));
+      assert.ok(parsed.lenses.security.includes('Token expiration rules.'));
+      assert.ok(parsed.lenses.security.includes('#### JWT Specifics'));
+      assert.ok(parsed.lenses.security.includes('Verify signature algorithm.'));
+
+      assert.ok(parsed.lenses.performance.includes('Performance rules.'));
+      assert.ok(!parsed.lenses.performance.includes('Token expiration rules'));
+    });
+
+    it('does not misroute hyphenated non-role headings as role definitions', () => {
+      const rbacMarkdown = `# Rules
+## Role-based access control
+Verify permissions on endpoints.
+`;
+      const parsed = parseGuidelines(rbacMarkdown);
+      assert.equal(parsed.lenses.based, undefined);
+      assert.ok(parsed.global.includes('Role-based access control'));
+      assert.ok(parsed.global.includes('Verify permissions on endpoints.'));
+    });
   });
 
   describe('loadGuidelines High-Level Loader', () => {
@@ -265,6 +329,34 @@ General codebase rules:
       assert.equal(loaded.relativePath, null);
       assert.equal(loaded.content, '');
       assert.equal(loaded.formatForLens('security'), '');
+    });
+  });
+
+  describe('createGuidelinesSummary', () => {
+    it('returns null when guidelines object is null or undefined', () => {
+      assert.equal(createGuidelinesSummary(null), null);
+      assert.equal(createGuidelinesSummary(undefined), null);
+    });
+
+    it('creates public summary object with relativePath as path and never exposes absolute path', () => {
+      const guidelines = {
+        enabled: true,
+        found: true,
+        relativePath: '.github/gem-pr-review.md',
+        path: '/mock/absolute/repo/.github/gem-pr-review.md',
+        byteSize: 1024,
+        truncated: false,
+      };
+
+      const summary = createGuidelinesSummary(guidelines);
+      assert.deepEqual(summary, {
+        enabled: true,
+        found: true,
+        path: '.github/gem-pr-review.md',
+        byteSize: 1024,
+        truncated: false,
+      });
+      assert.doesNotMatch(JSON.stringify(summary), /\/mock\/absolute/);
     });
   });
 });

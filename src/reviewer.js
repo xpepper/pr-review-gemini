@@ -94,6 +94,7 @@ import {
   readGuidelinesFile,
   parseGuidelines,
   resolveGuidelinesForLens,
+  createGuidelinesSummary,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
 } from './guidelines.js';
@@ -162,6 +163,7 @@ export {
   readGuidelinesFile,
   parseGuidelines,
   resolveGuidelinesForLens,
+  createGuidelinesSummary,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
 };
@@ -502,15 +504,7 @@ export async function runReview({
     }
   }
 
-  const guidelinesSummary = activeGuidelines
-    ? {
-        enabled: activeGuidelines.enabled !== false,
-        found: Boolean(activeGuidelines.found),
-        path: activeGuidelines.relativePath || null,
-        byteSize: activeGuidelines.byteSize || 0,
-        truncated: Boolean(activeGuidelines.truncated),
-      }
-    : null;
+  const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
 
   // 1. Retrieve diff if not provided directly
   let unifiedDiffText = diffText;

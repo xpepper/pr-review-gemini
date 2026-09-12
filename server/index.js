@@ -931,8 +931,8 @@ export function createMcpHandler(options = {}) {
                         {
                           enabled: guidelines.enabled,
                           found: guidelines.found,
-                          path: guidelines.path,
-                          relativePath: guidelines.relativePath,
+                          path: guidelines.relativePath || null,
+                          relativePath: guidelines.relativePath || null,
                           byteSize: guidelines.byteSize,
                           truncated: guidelines.truncated,
                           rawContent: guidelines.rawContent,

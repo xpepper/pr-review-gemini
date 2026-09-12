@@ -38,20 +38,32 @@ export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null 
   if (typeof customPath === 'string' && customPath.trim().length > 0) {
     const trimmed = customPath.trim();
     const candidate = path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
+    const rel = path.relative(cwd, candidate);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      return null;
+    }
+
     try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile()) return null;
+
+      // Verify realpath to guard against symlink path traversal escapes
+      const realCwd = fs.realpathSync(cwd);
+      const realCandidate = fs.realpathSync(candidate);
+      const realRel = path.relative(realCwd, realCandidate);
+      if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+        return null;
       }
+      return candidate;
     } catch {
       return null;
     }
-    return null;
   }
 
   for (const filename of DEFAULT_GUIDELINE_FILENAMES) {
     const candidate = path.resolve(cwd, filename);
     try {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      if (fs.statSync(candidate).isFile()) {
         return candidate;
       }
     } catch {
@@ -104,27 +116,30 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
+  const relativePath = sanitizeRelativePath(filePath, cwd);
+
   try {
-    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) {
       return {
         content: '',
         rawContent: '',
         byteSize: 0,
         truncated: false,
-        path: filePath,
-        relativePath: sanitizeRelativePath(filePath, cwd),
+        path: relativePath,
+        relativePath,
         found: false,
       };
     }
 
     const rawContent = fs.readFileSync(filePath, 'utf8');
     const byteSize = Buffer.byteLength(rawContent, 'utf8');
-    const relativePath = sanitizeRelativePath(filePath, cwd);
 
     if (byteSize > maxBytes) {
-      // Bounded slice
-      let truncatedSlice = rawContent.slice(0, maxBytes);
-      while (Buffer.byteLength(truncatedSlice, 'utf8') > maxBytes && truncatedSlice.length > 0) {
+      // O(N) bounded slice via buffer subarray
+      const buf = Buffer.from(rawContent, 'utf8');
+      let truncatedSlice = buf.subarray(0, maxBytes).toString('utf8');
+      if (truncatedSlice.endsWith('\uFFFD')) {
         truncatedSlice = truncatedSlice.slice(0, -1);
       }
       const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${byteSize} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`;
@@ -133,7 +148,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
         rawContent,
         byteSize,
         truncated: true,
-        path: filePath,
+        path: relativePath,
         relativePath,
         found: true,
       };
@@ -144,7 +159,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       rawContent,
       byteSize,
       truncated: false,
-      path: filePath,
+      path: relativePath,
       relativePath,
       found: true,
     };
@@ -154,8 +169,8 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       rawContent: '',
       byteSize: 0,
       truncated: false,
-      path: filePath,
-      relativePath: sanitizeRelativePath(filePath, cwd),
+      path: relativePath,
+      relativePath,
       found: false,
     };
   }
@@ -172,13 +187,14 @@ function extractTargetLensId(headingText) {
   const clean = headingText.trim();
 
   // Explicit prefix e.g. "Lens: Security", "Role: performance", "Lens - Contracts"
-  const prefixMatch = clean.match(/^(?:lens|role)\s*[:\-]\s*([a-zA-Z0-9_\-]+)/i);
+  // Require colon or space-separated hyphen so hyphenated titles like "Role-based" do not match
+  const prefixMatch = clean.match(/^(?:lens|role)\s*(?::|\s+-)\s*([a-zA-Z0-9_\-]+)/i);
   if (prefixMatch) {
     return prefixMatch[1].toLowerCase().trim();
   }
 
-  // Direct standard lens name e.g. "Security", "## Security & Trust", "Performance"
-  const directMatch = clean.match(/^([a-zA-Z0-9_\-]+)/);
+  // Direct standard lens name e.g. "Security", "Security & Trust", "Performance / Resources"
+  const directMatch = clean.match(/^([a-zA-Z0-9_\-]+)(?:\s*(?:&|\/|,)\s*.*)?$/);
   if (directMatch) {
     const candidate = directMatch[1].toLowerCase();
     if (STANDARD_LENS_IDS.includes(candidate)) {
@@ -211,22 +227,38 @@ export function parseGuidelines(markdown) {
   const sections = [];
 
   let currentTargetLens = null;
+  let currentLensLevel = 0;
   let currentSection = null;
 
   for (const line of lines) {
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
     if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingText = headingMatch[2].trim();
+
+      // If already inside a lens section and heading is a nested subsection (level > currentLensLevel),
+      // preserve it within the active lens section!
+      if (currentTargetLens && level > currentLensLevel) {
+        if (currentSection) {
+          currentSection.lines.push(line);
+        }
+        if (!lenses[currentTargetLens]) {
+          lenses[currentTargetLens] = [];
+        }
+        lenses[currentTargetLens].push(line);
+        continue;
+      }
+
+      // Close the previous section
       if (currentSection) {
         currentSection.content = currentSection.lines.join('\n').trim();
         delete currentSection.lines;
         sections.push(currentSection);
       }
 
-      const level = headingMatch[1].length;
-      const headingText = headingMatch[2].trim();
       const targetLens = extractTargetLensId(headingText);
-
       currentTargetLens = targetLens;
+      currentLensLevel = targetLens ? level : 0;
       currentSection = {
         heading: headingText,
         level,
@@ -377,3 +409,21 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
       resolveGuidelinesForLens({ parsed, lensId, ...opts }),
   };
 }
+
+/**
+ * Creates a sanitized, public-safe guidelines summary object without local machine paths.
+ *
+ * @param {object|null} guidelines - Guidelines object from loadGuidelines
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, byteSize: number, truncated: boolean }|null}
+ */
+export function createGuidelinesSummary(guidelines) {
+  if (!guidelines) return null;
+  return {
+    enabled: guidelines.enabled !== false,
+    found: Boolean(guidelines.found),
+    path: guidelines.relativePath || null,
+    byteSize: guidelines.byteSize || 0,
+    truncated: Boolean(guidelines.truncated),
+  };
+}
+

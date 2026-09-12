@@ -221,11 +221,7 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     enabled_roles: [...DEFAULT_CONFIG.enabled_roles],
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
-    guidelines: {
-      enabled: DEFAULT_CONFIG.guidelines.enabled,
-      path: DEFAULT_CONFIG.guidelines.path,
-      max_bytes: DEFAULT_CONFIG.guidelines.max_bytes,
-    },
+    guidelines: { ...DEFAULT_CONFIG.guidelines },
   };
 
   for (const src of sources) {
@@ -503,9 +499,5 @@ export function getCustomRoles(config) {
 export {
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
-  discoverGuidelinesFile,
-  readGuidelinesFile,
-  parseGuidelines,
-  resolveGuidelinesForLens,
   loadGuidelines,
 } from './guidelines.js';

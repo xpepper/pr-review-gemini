@@ -18,7 +18,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
-import { loadGuidelines } from './guidelines.js';
+import { loadGuidelines, createGuidelinesSummary } from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -257,15 +257,7 @@ export async function runSelfReview(options = {}) {
     }
   }
 
-  const guidelinesSummary = activeGuidelines
-    ? {
-        enabled: activeGuidelines.enabled !== false,
-        found: Boolean(activeGuidelines.found),
-        path: activeGuidelines.relativePath || null,
-        byteSize: activeGuidelines.byteSize || 0,
-        truncated: Boolean(activeGuidelines.truncated),
-      }
-    : null;
+  const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
 
   // 1. Acquire diff
   let diffText = options.diffText;
