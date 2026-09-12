@@ -519,8 +519,8 @@ By using the distinctive `/gem-pr-review` slash command, this plugin runs alongs
 
 To ensure continuous integrity across Copilot CLI and Agent Plugins 1.0 ecosystems, `pr-review-gemini` maintains strict manifest synchronization across four version-bearing manifests:
 1. `package.json` — Node.js package definition
-2. `package-lock.json` — Dependency lockfile
-3. `plugin.json` — Agent Plugins 1.0 manifest
+2. `plugin.json` — Agent Plugins 1.0 manifest
+3. `mcp.json` — Model Context Protocol server manifest
 4. `skills/gem-pr-review/SKILL.md` — Frontmatter version metadata
 
 ### Automated Version Verification & Atomic Bumping
@@ -529,8 +529,32 @@ To ensure continuous integrity across Copilot CLI and Agent Plugins 1.0 ecosyste
 - **Atomic Rollback Engine**: The bump utility (`scripts/bump-version.mjs`) updates all manifests synchronously with rollback safeguards if any write fails.
 - **Central Version Source**: `src/version.js` exposes the canonical `VERSION` constant used across CLI banners and MCP server info.
 
+### Creating a Release (Step-by-Step)
+
+To cut a new release from `main`:
+
+1. **Preview the next SemVer bump & release notes**:
+   ```bash
+   node scripts/bump-version.mjs auto --dry-run --changelog
+   ```
+
+2. **Execute the release**:
+   Atomically updates all 4 manifests, prepends new release notes to `CHANGELOG.md`, creates a `chore(release): vX.Y.Z` commit, and creates an annotated tag `vX.Y.Z`:
+   ```bash
+   npm run release
+   # Or specify an explicit target version:
+   node scripts/bump-version.mjs 0.2.0 --release
+   ```
+   > [!NOTE]
+   > To update manifests only without creating a git commit or tag, use `npm run bump` (or `node scripts/bump-version.mjs patch|minor|major`).
+
+3. **Push commit and tag to trigger the workflow**:
+   ```bash
+   git push origin main --tags
+   ```
+
 ### Automated Release Workflow
-Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) to verify manifests, run tests, generate categorized release notes, and publish an official GitHub Release.
+Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) on GitHub Actions. It runs the full test suite, validates manifest synchronization, ensures the git tag matches `package.json`, and publishes the official GitHub Release with release notes.
 
 ---
 
@@ -540,7 +564,7 @@ Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/w
 npm test
 ```
 
-All 597 unit tests across 116 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, and centralized CLI infrastructure.
+All 743 unit tests across 132 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, and centralized CLI infrastructure.
 
 ---
 
