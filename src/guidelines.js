@@ -27,6 +27,41 @@ export const STANDARD_LENS_IDS = Object.freeze([
 ]);
 
 /**
+ * Verifies that a target file path resides strictly within a root directory,
+ * resolving all symlinks to protect against traversal attacks and symlink escapes.
+ *
+ * @param {string} filePath - Path to file to check
+ * @param {string} rootDir - Allowed root directory
+ * @returns {boolean} True if filePath exists and is confined within rootDir
+ */
+export function isConfinedWithinRoot(filePath, rootDir) {
+  if (!filePath || !rootDir) return false;
+  try {
+    const realRoot = fs.realpathSync(rootDir);
+    const realFile = fs.realpathSync(filePath);
+    const rel = path.relative(realRoot, realFile);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Sanitizes guideline text to prevent prompt injection and delimiter breakouts
+ * when embedding repository-controlled guidelines into reviewer LLM prompts.
+ *
+ * @param {string} text - Raw guideline text
+ * @returns {string} Sanitized guideline text safe for prompt injection
+ */
+export function sanitizeGuidelinesForPrompt(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/<\/untrusted_repository_guidelines>/gi, '&lt;/untrusted_repository_guidelines&gt;')
+    .replace(/<<<\s*PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_PR_REVIEW_JSON]')
+    .replace(/<<<\s*END_PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_END_PR_REVIEW_JSON]');
+}
+
+/**
  * Discovers a review guidelines file in the given workspace.
  *
  * @param {object} [options]
@@ -46,12 +81,7 @@ export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null 
     try {
       const stat = fs.statSync(candidate);
       if (!stat.isFile()) return null;
-
-      // Verify realpath to guard against symlink path traversal escapes
-      const realCwd = fs.realpathSync(cwd);
-      const realCandidate = fs.realpathSync(candidate);
-      const realRel = path.relative(realCwd, realCandidate);
-      if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+      if (!isConfinedWithinRoot(candidate, cwd)) {
         return null;
       }
       return candidate;
@@ -65,12 +95,7 @@ export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null 
     try {
       const stat = fs.statSync(candidate);
       if (!stat.isFile()) continue;
-
-      // Ensure candidate does not escape cwd via symlinks
-      const realCwd = fs.realpathSync(cwd);
-      const realCandidate = fs.realpathSync(candidate);
-      const realRel = path.relative(realCwd, realCandidate);
-      if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+      if (!isConfinedWithinRoot(candidate, cwd)) {
         continue;
       }
       return candidate;
@@ -124,10 +149,24 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
-  const relativePath = sanitizeRelativePath(filePath, cwd);
+  const target = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
+
+  if (!isConfinedWithinRoot(target, cwd)) {
+    return {
+      content: '',
+      rawContent: '',
+      byteSize: 0,
+      truncated: false,
+      path: null,
+      relativePath: null,
+      found: false,
+    };
+  }
+
+  const relativePath = sanitizeRelativePath(target, cwd);
 
   try {
-    const stat = fs.statSync(filePath);
+    const stat = fs.statSync(target);
     if (!stat.isFile()) {
       return {
         content: '',
@@ -144,7 +183,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
 
     if (fileSize > maxBytes) {
       // Read ONLY up to maxBytes to avoid reading multi-MB files into memory
-      const fd = fs.openSync(filePath, 'r');
+      const fd = fs.openSync(target, 'r');
       const buf = Buffer.alloc(maxBytes);
       let slice = '';
       try {
@@ -168,7 +207,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       };
     }
 
-    const rawContent = fs.readFileSync(filePath, 'utf8');
+    const rawContent = fs.readFileSync(target, 'utf8');
     const byteSize = Buffer.byteLength(rawContent, 'utf8');
     return {
       content: rawContent,
@@ -340,11 +379,12 @@ export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName } = 
 
   const parsedObj = typeof parsed === 'string' ? parseGuidelines(parsed) : parsed;
   const globalText = parsedObj.global || '';
-  const lensKey = (lensId || roleId || '').toLowerCase().trim();
+  const primaryKey = (lensId || '').toLowerCase().trim();
+  const fallbackKey = (roleId || '').toLowerCase().trim();
 
   const lensSpecific =
-    (lensKey && parsedObj.lenses?.[lensKey]) ||
-    (roleId && parsedObj.lenses?.[roleId.toLowerCase().trim()]) ||
+    (primaryKey && parsedObj.lenses?.[primaryKey]) ||
+    (fallbackKey && parsedObj.lenses?.[fallbackKey]) ||
     null;
 
   if (lensSpecific) {
