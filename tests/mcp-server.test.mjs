@@ -747,6 +747,99 @@ index 1111111..2222222 100644
       assert.equal(passedSelfReviewArgs.guidelinesPath, 'self-guidelines.md');
     });
 
+    it('gem_pr_review_subagents forwards isCustomDiff and host execution functions', async () => {
+      let passedReviewArgs = null;
+      const mockGh = async () => '';
+      const mockGit = async () => '';
+      const mockFile = async () => '';
+
+      const handler = createMcpHandler({
+        getPrDiffFn: async () => 'diff --git a/index.js b/index.js\n+code',
+        execGhFn: mockGh,
+        execGitFn: mockGit,
+        execFileFn: mockFile,
+        runReviewFn: async (args) => {
+          passedReviewArgs = args;
+          return { prNumber: args.prNumber, findings: [] };
+        },
+      });
+
+      // Standard diff retrieval passes isCustomDiff: false
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 85,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_subagents',
+          arguments: { prNumber: 105 },
+        },
+      });
+
+      assert.ok(passedReviewArgs);
+      assert.equal(passedReviewArgs.isCustomDiff, false);
+      assert.equal(passedReviewArgs.execGhFn, mockGh);
+      assert.equal(passedReviewArgs.execGitFn, mockGit);
+      assert.equal(passedReviewArgs.execFileFn, mockFile);
+
+      // Explicit diffText passes isCustomDiff: true
+      await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 86,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_subagents',
+          arguments: {
+            prNumber: 106,
+            diffText: 'diff --git a/custom.js b/custom.js\n+custom',
+          },
+        },
+      });
+
+      assert.equal(passedReviewArgs.isCustomDiff, true);
+    });
+
+    it('gem_self_review rejects unsafe or non-markdown guidelines path before invoking review', async () => {
+      let selfReviewInvoked = false;
+      const handler = createMcpHandler({
+        runSelfReviewFn: async () => {
+          selfReviewInvoked = true;
+          return { status: 'passed', findings: [] };
+        },
+      });
+
+      const traversalRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 87,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            guidelinesPath: '../outside.md',
+          },
+        },
+      });
+
+      assert.equal(traversalRes.result?.isError, true);
+      assert.match(traversalRes.result.content[0].text, /Custom guidelines path must be a safe markdown file/i);
+      assert.equal(selfReviewInvoked, false);
+
+      const nonMdRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 88,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            guidelinesPath: 'evil.sh',
+          },
+        },
+      });
+
+      assert.equal(nonMdRes.result?.isError, true);
+      assert.match(nonMdRes.result.content[0].text, /Custom guidelines path must be a safe markdown file/i);
+      assert.equal(selfReviewInvoked, false);
+    });
+
     it('rejects unsafe verification command override in gem_pr_review_verify', async () => {
       const handler = createMcpHandler();
       const response = await handler.handleMessage({

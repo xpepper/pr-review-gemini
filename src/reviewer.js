@@ -25,7 +25,7 @@ import {
   normalizeFindingCandidate,
   isValidFindingCandidate,
 } from './publish.js';
-import { loadConfig, resolveConfig, DEFAULT_CONFIG, DEFAULT_GUIDELINES_CONFIG, getCustomRoles, formatDefaultRoleName, PROJECT_CONFIG_REL_PATHS } from './config.js';
+import { loadConfig, resolveConfig, getCustomRoles, formatDefaultRoleName, PROJECT_CONFIG_REL_PATHS } from './config.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -661,6 +661,7 @@ export async function runReview({
   customRoles,
   guidelinesPath,
   repoGuidelines,
+  isCustomDiff: explicitCustomDiff,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -902,6 +903,11 @@ export async function runReview({
       relGuidelines = null;
     }
 
+    const isCustomDiff =
+      explicitCustomDiff !== undefined && explicitCustomDiff !== null
+        ? Boolean(explicitCustomDiff)
+        : diffText !== undefined && diffText !== null;
+
     if (isGuidelinesEnabled && !isExplicitPathUnsafe) {
       ({ activeGuidelines, guidelinesSummary } = await verifyGuidelinesAuthenticity({
         activeGuidelines,
@@ -912,7 +918,8 @@ export async function runReview({
         config: resolvedConfig,
         safeCustomGuidelinesPath,
         isBaseRefConfirmed: Boolean(confirmedBaseRef),
-        isCustomDiff: diffText !== undefined && diffText !== null,
+        isCustomDiff,
+        requireModified: !isCustomDiff,
       }));
     }
 

@@ -30,6 +30,7 @@ import {
   readOptionValue,
   parseStringOption,
   parseOption,
+  parseCommonReviewOptions,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
@@ -1510,6 +1511,41 @@ echo "prior test"
       assert.equal(res.matched, true);
       assert.equal(res.value, 'quick');
       assert.equal(res.nextIndex, 0);
+    });
+
+    it('parseCommonReviewOptions correctly parses common review CLI flags', () => {
+      const standardRes = parseCommonReviewOptions(['--replace-standard-roles'], 0);
+      assert.equal(standardRes.matched, true);
+      assert.equal(standardRes.type, 'replaceStandardRoles');
+      assert.equal(standardRes.value, true);
+      assert.equal(standardRes.nextIndex, 0);
+
+      const roleInline = parseCommonReviewOptions(['--role=security,testing'], 0);
+      assert.equal(roleInline.matched, true);
+      assert.equal(roleInline.type, 'role');
+      assert.deepEqual(roleInline.value, ['security', 'testing']);
+      assert.equal(roleInline.nextIndex, 0);
+
+      const roleSplit = parseCommonReviewOptions(['--role', 'architecture, style '], 0);
+      assert.equal(roleSplit.matched, true);
+      assert.equal(roleSplit.type, 'role');
+      assert.deepEqual(roleSplit.value, ['architecture', 'style']);
+      assert.equal(roleSplit.nextIndex, 1);
+
+      const guidelinesInline = parseCommonReviewOptions(['--guidelines=custom.md'], 0);
+      assert.equal(guidelinesInline.matched, true);
+      assert.equal(guidelinesInline.type, 'guidelines');
+      assert.equal(guidelinesInline.value, 'custom.md');
+      assert.equal(guidelinesInline.nextIndex, 0);
+
+      const guidelinesSplit = parseCommonReviewOptions(['--guidelines', 'custom.md'], 0);
+      assert.equal(guidelinesSplit.matched, true);
+      assert.equal(guidelinesSplit.type, 'guidelines');
+      assert.equal(guidelinesSplit.value, 'custom.md');
+      assert.equal(guidelinesSplit.nextIndex, 1);
+
+      const unmatched = parseCommonReviewOptions(['--unknown', 'val'], 0);
+      assert.equal(unmatched.matched, false);
     });
   });
 

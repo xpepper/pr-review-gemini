@@ -639,6 +639,7 @@ export function createMcpHandler(options = {}) {
             }
 
             if (toolName === 'gem_pr_review_subagents' || toolName === 'pr_review_subagents') {
+              const hasExplicitDiff = Boolean(args.diffText);
               let diffText = args.diffText;
               if (!diffText) {
                 diffText = await getPrDiffFn({
@@ -652,6 +653,7 @@ export function createMcpHandler(options = {}) {
                 prNumber: args.prNumber,
                 mode: args.mode || 'balanced',
                 diffText,
+                isCustomDiff: hasExplicitDiff,
                 customInstructions: args.customInstructions,
                 dryRun: args.dryRun !== false,
                 publish: args.publish === true,
@@ -662,6 +664,9 @@ export function createMcpHandler(options = {}) {
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
                 guidelinesPath: args.guidelinesPath || args.guidelines_path,
+                execGhFn: options.execGhFn,
+                execGitFn: options.execGitFn,
+                execFileFn: options.execFileFn,
               });
 
               return {
@@ -889,6 +894,23 @@ export function createMcpHandler(options = {}) {
               toolName === 'gem_pr_review_self' ||
               toolName === 'pr_review_self'
             ) {
+              const candidateGuidelines = args.guidelinesPath || args.guidelines_path;
+              if (candidateGuidelines && !isSafeGuidelinesPath(candidateGuidelines, cwd)) {
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    isError: true,
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Error: Custom guidelines path must be a safe markdown file (.md or .markdown) within the workspace repository.',
+                      },
+                    ],
+                  },
+                };
+              }
+
               const runner = runnerFn || (await createSubagentRunner({ cwd }));
               const selfReviewResult = await runSelfReviewFn({
                 cwd,
@@ -902,7 +924,7 @@ export function createMcpHandler(options = {}) {
                 roles: args.roles || args.enabledRoles,
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
-                guidelinesPath: args.guidelinesPath || args.guidelines_path,
+                guidelinesPath: candidateGuidelines,
               });
 
               return {

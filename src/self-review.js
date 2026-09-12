@@ -27,6 +27,7 @@ import {
   formatGuidelinesSummaryLine,
   getTouchedFilesFromDiff,
   verifyGuidelinesAuthenticity,
+  isSafeGuidelinesPath,
 } from './guidelines.js';
 import {
   resolveLensPlan,
@@ -293,6 +294,9 @@ export async function runSelfReview(options = {}) {
   };
 
   const fetchHeadFile = async (relPath) => {
+    if (!relPath || typeof relPath !== 'string' || !isSafeGuidelinesPath(relPath, cwd)) {
+      return null;
+    }
     try {
       const out = await runGit(['show', `HEAD:${relPath}`]);
       return typeof out === 'string' && out.length > 0 ? out : null;
@@ -303,7 +307,12 @@ export async function runSelfReview(options = {}) {
 
   const isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
   if (isGuidelinesEnabled) {
-    const customPath = options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path;
+    const rawCandidatePath = options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path;
+    const safeCustomGuidelinesPath =
+      rawCandidatePath && isSafeGuidelinesPath(rawCandidatePath, cwd)
+        ? rawCandidatePath
+        : null;
+
     ({ activeGuidelines, guidelinesSummary } = await verifyGuidelinesAuthenticity({
       activeGuidelines,
       guidelinesSummary,
@@ -311,7 +320,7 @@ export async function runSelfReview(options = {}) {
       unifiedDiffText: diffText,
       touchedFiles,
       config: resolvedConfig,
-      safeCustomGuidelinesPath: customPath,
+      safeCustomGuidelinesPath,
       isBaseRefConfirmed: true,
       isCustomDiff: options.diffText !== undefined && options.diffText !== null,
       requireModified: true,

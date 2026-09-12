@@ -179,6 +179,84 @@ describe('Review Cache (Publish-Later & Freshness Invalidation)', () => {
       );
       assert.equal(lookup, null);
     });
+
+    it('selectively invalidates targeted headSha while preserving other head SHAs for the same PR', async () => {
+      await saveReviewCache(
+        {
+          prNumber: 20,
+          headSha: 'aaaa1111111',
+          findings: [sampleFindings[0]],
+        },
+        { cacheDir: tempCacheDir }
+      );
+      await saveReviewCache(
+        {
+          prNumber: 20,
+          headSha: 'bbbb2222222',
+          findings: [sampleFindings[1]],
+        },
+        { cacheDir: tempCacheDir }
+      );
+
+      // Invalidate only aaaa111
+      const deleted = await invalidateReviewCache(
+        { prNumber: 20, headSha: 'aaaa1111111' },
+        { cacheDir: tempCacheDir }
+      );
+      assert.equal(deleted, true);
+
+      // aaaa111 is gone
+      const lookupOld = await getReviewCache(
+        { prNumber: 20, headSha: 'aaaa1111111' },
+        { cacheDir: tempCacheDir }
+      );
+      assert.equal(lookupOld, null);
+
+      // bbbb222 is still present
+      const lookupNew = await getReviewCache(
+        { prNumber: 20, headSha: 'bbbb2222222' },
+        { cacheDir: tempCacheDir }
+      );
+      assert.ok(lookupNew);
+      assert.equal(lookupNew.headSha, 'bbbb2222222');
+      assert.equal(lookupNew.findings.length, 1);
+      assert.equal(lookupNew.findings[0].title, sampleFindings[1].title);
+    });
+
+    it('stale-head check in getReviewCache invalidates only the stale record without purging concurrent records', async () => {
+      // Save concurrent entry first
+      await saveReviewCache(
+        { prNumber: 25, headSha: 'concurrent-sha', findings: [sampleFindings[1]] },
+        { cacheDir: tempCacheDir }
+      );
+      // Save stale entry second so canonical pr_25 points to stale-sha
+      await saveReviewCache(
+        { prNumber: 25, headSha: 'stale-sha', findings: [sampleFindings[0]] },
+        { cacheDir: tempCacheDir }
+      );
+
+      // Check freshness against a new head
+      const result = await getReviewCache(
+        { prNumber: 25, currentHeadSha: 'brand-new-head' },
+        { cacheDir: tempCacheDir, throwOnStale: false }
+      );
+      assert.equal(result, null);
+
+      // Stale entry was purged
+      const staleLookup = await getReviewCache(
+        { prNumber: 25, headSha: 'stale-sha' },
+        { cacheDir: tempCacheDir }
+      );
+      assert.equal(staleLookup, null);
+
+      // Concurrent entry is still preserved
+      const concurrentLookup = await getReviewCache(
+        { prNumber: 25, headSha: 'concurrent-sha' },
+        { cacheDir: tempCacheDir }
+      );
+      assert.ok(concurrentLookup);
+      assert.equal(concurrentLookup.headSha, 'concurrent-sha');
+    });
   });
 
   describe('listReviewCaches', () => {

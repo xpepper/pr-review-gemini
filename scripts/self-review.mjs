@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, parseOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, parseOption, parseCommonReviewOptions } from '../src/cli.js';
 import {
   installPreCommitHook,
   uninstallPreCommitHook,
@@ -81,13 +81,24 @@ export function parseCliArgs(args) {
       scope = 'head';
     } else if (arg === '--no-untracked') {
       includeUntracked = false;
-    } else if (arg === '--replace-standard-roles') {
-      replaceStandardRoles = true;
     } else if (arg === '--json') {
       json = true;
     } else if (arg === '--mock') {
       mock = true;
     } else {
+      const commonOpt = parseCommonReviewOptions(args, i);
+      if (commonOpt.matched) {
+        if (commonOpt.type === 'replaceStandardRoles') {
+          replaceStandardRoles = true;
+        } else if (commonOpt.type === 'role') {
+          roles.push(...commonOpt.value);
+        } else if (commonOpt.type === 'guidelines') {
+          guidelinesPath = commonOpt.value;
+        }
+        i = commonOpt.nextIndex;
+        continue;
+      }
+
       let opt = parseOption(args, i, '--command');
       if (opt.matched) {
         const val = opt.value.trim();
@@ -95,12 +106,6 @@ export function parseCliArgs(args) {
           throw new Error('Option --command requires a non-empty command string');
         }
         command = val;
-        i = opt.nextIndex;
-        continue;
-      }
-      opt = parseOption(args, i, '--guidelines');
-      if (opt.matched) {
-        guidelinesPath = opt.value;
         i = opt.nextIndex;
         continue;
       }
@@ -113,12 +118,6 @@ export function parseCliArgs(args) {
       opt = parseOption(args, i, '--fail-on');
       if (opt.matched) {
         failOn = opt.value;
-        i = opt.nextIndex;
-        continue;
-      }
-      opt = parseOption(args, i, '--role');
-      if (opt.matched) {
-        roles.push(...opt.value.split(',').map((s) => s.trim()).filter(Boolean));
         i = opt.nextIndex;
         continue;
       }

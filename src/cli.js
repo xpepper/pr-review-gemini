@@ -233,6 +233,33 @@ export function parseStringOption(args, index, flag) {
 export const parseOption = parseStringOption;
 
 /**
+ * Parses common role and guideline options shared across review CLI entrypoints:
+ * - `--replace-standard-roles`
+ * - `--role <name>` or `--role=<name>` (supports comma-separated list)
+ * - `--guidelines <path>` or `--guidelines=<path>`
+ *
+ * @param {string[]} args - Argument list
+ * @param {number} index - Current argument index
+ * @returns {{ matched: boolean, type?: 'replaceStandardRoles'|'role'|'guidelines', value?: any, nextIndex?: number }}
+ */
+export function parseCommonReviewOptions(args, index) {
+  const arg = args[index];
+  if (arg === '--replace-standard-roles') {
+    return { matched: true, type: 'replaceStandardRoles', value: true, nextIndex: index };
+  }
+  let opt = parseOption(args, index, '--role');
+  if (opt.matched) {
+    const roles = opt.value.split(',').map((s) => s.trim()).filter(Boolean);
+    return { matched: true, type: 'role', value: roles, nextIndex: opt.nextIndex };
+  }
+  opt = parseOption(args, index, '--guidelines');
+  if (opt.matched) {
+    return { matched: true, type: 'guidelines', value: opt.value, nextIndex: opt.nextIndex };
+  }
+  return { matched: false };
+}
+
+/**
  * Standardized direct execution runner. If invoked directly, executes mainFn,
  * traps unhandled rejections, prints formatted error, and terminates with code 1.
  *

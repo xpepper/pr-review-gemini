@@ -153,7 +153,9 @@ export async function getReviewCache(query, options = {}) {
   if (!prNumber || prNumber <= 0) return null;
 
   const cacheDir = resolveCacheDir(options);
-  const expectedHead = query.currentHeadSha || query.headSha || null;
+  const currentHead = query.currentHeadSha || null;
+  const requestedHead = query.headSha || null;
+  const expectedHead = currentHead || requestedHead;
   const shaKey = expectedHead ? getCacheKey(prNumber, expectedHead, query.repo) : null;
   const prKey = getCacheKey(prNumber, null, query.repo);
 
@@ -181,14 +183,20 @@ export async function getReviewCache(query, options = {}) {
 
   if (!record) return null;
 
-  // 3. Freshness check
-  if (expectedHead && record.headSha !== expectedHead) {
-    // Invalidate stale cache
-    await invalidateReviewCache({ prNumber, repo: query.repo }, options);
+  // If a specific headSha was requested and does not match the record found (e.g. from canonical key),
+  // it is simply a cache miss for that specific commit (do not invalidate the newer/unrelated entry).
+  if (requestedHead && record.headSha !== requestedHead) {
+    return null;
+  }
+
+  // 3. Freshness check against current PR head
+  if (currentHead && record.headSha !== currentHead) {
+    // Invalidate only the specific stale record's entries, preserving newer concurrent entries
+    await invalidateReviewCache({ prNumber, headSha: record.headSha, repo: query.repo }, options);
 
     if (options.throwOnStale) {
       throw new Error(
-        `Cached review for PR #${prNumber} is stale: cached commit ${record.headSha.slice(0, 7)} does not match current PR head ${expectedHead.slice(0, 7)}.`
+        `Cached review for PR #${prNumber} is stale: cached commit ${record.headSha.slice(0, 7)} does not match current PR head ${currentHead.slice(0, 7)}.`
       );
     }
     return null;
@@ -202,6 +210,7 @@ export async function getReviewCache(query, options = {}) {
  *
  * @param {Object} query
  * @param {number} query.prNumber
+ * @param {string} [query.headSha]
  * @param {string} [query.repo]
  * @param {Object} [options]
  * @returns {Promise<boolean>} True if cache entry was deleted
@@ -213,12 +222,28 @@ export async function invalidateReviewCache(query, options = {}) {
   const cacheDir = resolveCacheDir(options);
   const repoPrefix = query.repo ? `${query.repo.replace(/[/\\:]/g, '__')}__` : '';
   const prefix = `${repoPrefix}pr_${prNumber}`;
+  const targetSha = query.headSha && typeof query.headSha === 'string' && query.headSha.trim().length > 0
+    ? query.headSha.trim().slice(0, 7)
+    : null;
 
   let inMemoryDeleted = false;
   for (const k of Array.from(memoryCache.keys())) {
-    if (k === prefix || k.startsWith(`${prefix}_`)) {
-      memoryCache.delete(k);
-      inMemoryDeleted = true;
+    if (targetSha) {
+      if (k === `${prefix}_${targetSha}`) {
+        memoryCache.delete(k);
+        inMemoryDeleted = true;
+      } else if (k === prefix) {
+        const rec = memoryCache.get(k);
+        if (!rec?.headSha || rec.headSha.startsWith(targetSha)) {
+          memoryCache.delete(k);
+          inMemoryDeleted = true;
+        }
+      }
+    } else {
+      if (k === prefix || k.startsWith(`${prefix}_`)) {
+        memoryCache.delete(k);
+        inMemoryDeleted = true;
+      }
     }
   }
 
@@ -227,12 +252,33 @@ export async function invalidateReviewCache(query, options = {}) {
     if (fs.existsSync(cacheDir)) {
       const files = fs.readdirSync(cacheDir);
       for (const file of files) {
-        if (file === `${prefix}.json` || file.startsWith(`${prefix}_`)) {
-          try {
-            fs.rmSync(path.join(cacheDir, file), { force: true });
-            fileDeleted = true;
-          } catch {
-            // Ignore file removal errors
+        if (targetSha) {
+          if (file === `${prefix}_${targetSha}.json`) {
+            try {
+              fs.rmSync(path.join(cacheDir, file), { force: true });
+              fileDeleted = true;
+            } catch {
+              // Ignore file removal errors
+            }
+          } else if (file === `${prefix}.json`) {
+            try {
+              const rec = readJsonSafely(path.join(cacheDir, file));
+              if (!rec?.headSha || rec.headSha.startsWith(targetSha)) {
+                fs.rmSync(path.join(cacheDir, file), { force: true });
+                fileDeleted = true;
+              }
+            } catch {
+              // Ignore file removal errors
+            }
+          }
+        } else {
+          if (file === `${prefix}.json` || file.startsWith(`${prefix}_`)) {
+            try {
+              fs.rmSync(path.join(cacheDir, file), { force: true });
+              fileDeleted = true;
+            } catch {
+              // Ignore file removal errors
+            }
           }
         }
       }
@@ -383,7 +429,7 @@ export async function publishCachedReview(options = {}) {
   const cached = await getReviewCache(
     {
       prNumber,
-      headSha: currentHeadSha,
+      headSha,
       currentHeadSha,
       repo,
     },

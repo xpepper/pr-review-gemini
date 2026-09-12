@@ -20,7 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, parseOption } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, parseOption, parseCommonReviewOptions } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -102,13 +102,24 @@ export function parseCliArgs(args) {
       all = true;
     } else if (arg === '--interactive') {
       interactive = true;
-    } else if (arg === '--replace-standard-roles') {
-      replaceStandardRoles = true;
     } else if (arg === '--mock') {
       mock = true;
     } else if (arg === '--mock-gh') {
       mockGh = true;
     } else {
+      const commonOpt = parseCommonReviewOptions(args, i);
+      if (commonOpt.matched) {
+        if (commonOpt.type === 'replaceStandardRoles') {
+          replaceStandardRoles = true;
+        } else if (commonOpt.type === 'role') {
+          roles.push(...commonOpt.value);
+        } else if (commonOpt.type === 'guidelines') {
+          guidelinesPath = commonOpt.value;
+        }
+        i = commonOpt.nextIndex;
+        continue;
+      }
+
       let opt = parseOption(args, i, '--mode');
       if (opt.matched) {
         mode = opt.value;
@@ -121,12 +132,6 @@ export function parseCliArgs(args) {
         i = opt.nextIndex;
         continue;
       }
-      opt = parseOption(args, i, '--role');
-      if (opt.matched) {
-        roles.push(...opt.value.split(',').map((s) => s.trim()).filter(Boolean));
-        i = opt.nextIndex;
-        continue;
-      }
       opt = parseOption(args, i, '--cache-dir');
       if (opt.matched) {
         cacheDir = opt.value;
@@ -136,12 +141,6 @@ export function parseCliArgs(args) {
       opt = parseOption(args, i, '--repo');
       if (opt.matched) {
         repo = opt.value;
-        i = opt.nextIndex;
-        continue;
-      }
-      opt = parseOption(args, i, '--guidelines');
-      if (opt.matched) {
-        guidelinesPath = opt.value;
         i = opt.nextIndex;
         continue;
       }
