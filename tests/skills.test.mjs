@@ -248,6 +248,27 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
     assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
   });
+
+  it('documents review thread conversation replies and automated resolution in SKILL.md (Increment 20)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Review Thread Verification & Automated Resolution/i, 'Should document Review Thread Verification');
+    assert.match(content, /--resolve/i, 'Should document --resolve flag');
+    assert.match(content, /gem_pr_review_threads/i, 'Should document gem_pr_review_threads MCP tool');
+    assert.match(content, /\/gem-review resolve/i, 'Should document /gem-review resolve command');
+  });
+
+  it('documents review thread conversation replies and automated resolution in README.md (Increment 20)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Review Thread Verification & Automated Resolution/i, 'README should document Review Thread Verification');
+    assert.match(readmeContent, /--resolve/i, 'README should document --resolve flag');
+    assert.match(readmeContent, /gem_pr_review_threads/i, 'README should document gem_pr_review_threads MCP tool');
+    assert.match(readmeContent, /\/gem-review resolve/i, 'README should document /gem-review resolve command');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
 
 

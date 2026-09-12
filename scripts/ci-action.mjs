@@ -18,6 +18,8 @@ import {
   formatHelpReply,
   formatCompletionReply,
   isVerificationPassed,
+  formatResolveCompletionReply,
+  runResolveCommand,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
 import {
@@ -215,6 +217,34 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       await safePostComment(helpReply);
 
       return { exitCode: 0, help: true, ciEnv };
+    }
+
+    // 3b. Resolve command (/gem-review resolve or --resolve)
+    if (ciEnv.commandInfo?.action === 'resolve' || ciEnv.commandInfo?.resolve) {
+      io.log(`[CI] Running review thread resolution command for @${ciEnv.commentUser}.`);
+      await safeReact('rocket');
+
+      try {
+        const resolveOutcome = await runResolveCommand({
+          prNumber: ciEnv.prNumber,
+          repo: ciEnv.repo,
+          execGhFn,
+          cwd,
+        });
+
+        const completionReply = formatResolveCompletionReply(resolveOutcome);
+        await safePostComment(completionReply);
+        await safeReact('+1');
+
+        return { exitCode: 0, resolve: true, outcome: resolveOutcome, ciEnv };
+      } catch (err) {
+        io.error(`[CI] Thread resolution failed: ${err.message}`);
+        await safeReact('confused');
+        await safePostComment(
+          `> ❌ **Gem PR Review — Thread Resolution Error**\n>\n> Failed to resolve review threads: ${err.message}`
+        );
+        return { exitCode: 1, resolve: false, error: err.message, ciEnv };
+      }
     }
 
     // 4. In-progress status reaction (rocket 🚀)

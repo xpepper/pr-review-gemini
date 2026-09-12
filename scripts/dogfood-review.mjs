@@ -35,6 +35,7 @@ Options:
   --full            Exhaustive review (6 lenses including tests)
   --deep            Deep-focus review on correctness
   --incremental     Re-review PR incrementally against previous review (revalidates prior findings)
+  --resolve         Verify and resolve addressed review threads against latest PR head
   --dry-run         Run review analysis and output summary without publishing to GitHub
   --no-comment      Alias for --dry-run
   --comment         Publish the host-gated review to GitHub
@@ -72,6 +73,7 @@ export function parseCliArgs(args) {
   let mockGh = process.env.MOCK_GH === '1';
   let self = false;
   let incremental = false;
+  let resolveThreads = false;
   let showHelp = false;
   let showVersion = false;
   const roles = [];
@@ -92,6 +94,8 @@ export function parseCliArgs(args) {
       mode = arg.slice(2);
     } else if (arg === '--incremental') {
       incremental = true;
+    } else if (arg === '--resolve') {
+      resolveThreads = true;
     } else if (arg === '--dry-run' || arg === '--no-comment') {
       dryRun = true;
     } else if (arg === '--comment' || arg === '--publish') {
@@ -183,6 +187,7 @@ export function parseCliArgs(args) {
     mock,
     mockGh,
     incremental,
+    resolveThreads,
     showHelp,
     showVersion,
     roles: roles.length > 0 ? roles : undefined,
@@ -221,6 +226,7 @@ export async function main() {
     mock,
     mockGh,
     incremental,
+    resolveThreads,
     roles,
     replaceStandardRoles,
     guidelinesPath,
@@ -389,6 +395,7 @@ export async function main() {
       dryRun: isInteractiveTriage ? true : !shouldPublish,
       publish: isInteractiveTriage ? false : shouldPublish,
       incremental,
+      resolveThreads,
       cacheDir,
       roles,
       replaceStandardRoles,

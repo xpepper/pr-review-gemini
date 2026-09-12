@@ -20,6 +20,8 @@ import {
   formatCompletionReply,
   isVerificationPassed,
   resolvePrContext,
+  formatResolveCompletionReply,
+  runResolveCommand,
 } from '../src/ci.js';
 import { runCiAction } from '../scripts/ci-action.mjs';
 
@@ -1643,6 +1645,27 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(parseCommentCommand('/gem-pr-review --help').help, true);
       });
 
+      it('parses resolve subcommand and flag (/gem-review resolve, --resolve) (Increment 20)', () => {
+        const res1 = parseCommentCommand('/gem-review resolve');
+        assert.equal(res1.action, 'resolve');
+        assert.equal(res1.resolve, true);
+
+        const res2 = parseCommentCommand('/gem-review --resolve');
+        assert.equal(res2.action, 'resolve');
+        assert.equal(res2.resolve, true);
+
+        const res3 = parseCommentCommand('/gem-pr-review resolve');
+        assert.equal(res3.action, 'resolve');
+        assert.equal(res3.resolve, true);
+      });
+
+      it('does not treat bare word resolve in conversational comments as action resolve', () => {
+        const res = parseCommentCommand('/gem-review please resolve this');
+        assert.notEqual(res.action, 'resolve');
+        assert.notEqual(res.resolve, true);
+        assert.ok(res.unrecognizedArgs.includes('please'));
+      });
+
       it('extracts command from multiline comments and handles leading/trailing whitespace', () => {
         const comment = `
 Thanks for the updates! Could you rerun the review?
@@ -1976,4 +1999,249 @@ Hope that helps!
         assert.equal(isVerificationPassed({ status: 'skipped', profile: 'test' }), false);
       });
     });
+
+    describe('Thread Resolution Command (/gem-review resolve) (Increment 20)', () => {
+      describe('formatResolveCompletionReply', () => {
+        it('formats completion reply when threads were resolved', () => {
+          const reply = formatResolveCompletionReply({
+            totalThreads: 2,
+            counts: { total: 2, resolved: 1, stillOpen: 1, authorReplied: 0 },
+            resolvedThreads: [
+              {
+                threadId: 'PRRT_kw1',
+                path: 'src/auth.js',
+                line: 42,
+                finding: { title: 'Missing null check' },
+              },
+            ],
+          });
+
+          assert.ok(reply.includes('Thread Resolution Complete'));
+          assert.ok(reply.includes('- **Resolved & Closed**: 1'));
+          assert.ok(reply.includes('- **Still Open**: 1'));
+          assert.ok(reply.includes('`src/auth.js:42`: Missing null check'));
+        });
+
+        it('formats completion reply when no threads were resolved', () => {
+          const reply = formatResolveCompletionReply({
+            totalThreads: 1,
+            counts: { total: 1, resolved: 0, stillOpen: 1, authorReplied: 0 },
+            resolvedThreads: [],
+          });
+
+          assert.ok(reply.includes('Thread Resolution Complete'));
+          assert.ok(reply.includes('- **Resolved & Closed**: 0'));
+          assert.ok(reply.includes('No threads were verified as fixed'));
+        });
+
+        it('includes obsolete threads in resolved count', () => {
+          const reply = formatResolveCompletionReply({
+            totalThreads: 2,
+            counts: { total: 2, resolved: 1, obsolete: 1, stillOpen: 0, authorReplied: 0 },
+            resolvedThreads: [
+              { threadId: 't1', path: 'a.js', line: 1 },
+              { threadId: 't2', path: 'b.js', line: 2 },
+            ],
+          });
+
+          assert.ok(reply.includes('Thread Resolution Complete'));
+          assert.ok(reply.includes('- **Resolved & Closed**: 2'));
+        });
+      });
+
+      describe('runResolveCommand', () => {
+        it('fetches diff, threads, evaluates, and resolves verified threads', async () => {
+          const mockGh = async (args) => {
+            const cmd = args.join(' ');
+            if (cmd.includes('pr diff')) {
+              return `diff --git a/src/auth.js b/src/auth.js
+index 1111111..2222222 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -40,5 +40,6 @@ function authenticate(user) {
+-  const id = user.id;
++  const id = user?.id ?? null;
+   return id;
+ }`;
+            }
+            if (cmd.includes('graphql')) {
+              if (cmd.includes('resolveReviewThread')) {
+                return JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'PRRT_kw1', isResolved: true } } } });
+              }
+              if (cmd.includes('addPullRequestReviewThreadReply')) {
+                return JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'c1' } } } });
+              }
+              return JSON.stringify({
+                data: {
+                  repository: {
+                    pullRequest: {
+                      reviewThreads: {
+                        nodes: [
+                          {
+                            id: 'PRRT_kw1',
+                            isResolved: false,
+                            isOutdated: false,
+                            path: 'src/auth.js',
+                            line: 42,
+                            comments: { nodes: [{ id: 'c0', body: 'Missing null check' }] },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              });
+            }
+            return '[]';
+          };
+
+          const outcome = await runResolveCommand({
+            prNumber: 42,
+            repo: 'xpepper/pr-review-gemini',
+            execGhFn: mockGh,
+          });
+
+          assert.equal(outcome.prNumber, 42);
+          assert.equal(outcome.totalThreads, 1);
+          assert.equal(outcome.resolvedThreads.length, 1);
+          assert.equal(outcome.resolvedThreads[0].threadId, 'PRRT_kw1');
+          assert.equal(outcome.counts.resolved, 1);
+        });
+      });
+
+      describe('runCiAction with /gem-review resolve', () => {
+        it('executes resolve workflow, adds reactions, and posts completion reply', async () => {
+          const reactions = [];
+          const comments = [];
+
+          const mockGh = async (args) => {
+            const cmd = args.join(' ');
+            if (cmd.includes('reactions')) {
+              reactions.push(cmd);
+              return JSON.stringify({ id: 999 });
+            }
+            if (cmd.includes('issues/55/comments')) {
+              comments.push(cmd);
+              return JSON.stringify({ id: 888 });
+            }
+            if (cmd.includes('pr diff')) {
+              return `diff --git a/src/auth.js b/src/auth.js
+index 1111111..2222222 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -40,5 +40,6 @@ function authenticate(user) {
+-  const id = user.id;
++  const id = user?.id ?? null;
+   return id;
+ }`;
+            }
+            if (cmd.includes('graphql')) {
+              if (cmd.includes('resolveReviewThread')) {
+                return JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'PRRT_kw1', isResolved: true } } } });
+              }
+              if (cmd.includes('addPullRequestReviewThreadReply')) {
+                return JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'c1' } } } });
+              }
+              return JSON.stringify({
+                data: {
+                  repository: {
+                    pullRequest: {
+                      reviewThreads: {
+                        nodes: [
+                          {
+                            id: 'PRRT_kw1',
+                            isResolved: false,
+                            isOutdated: false,
+                            path: 'src/auth.js',
+                            line: 42,
+                            comments: { nodes: [{ id: 'c0', body: 'Missing null check' }] },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              });
+            }
+            return '[]';
+          };
+
+          const options = {
+            eventPayload: {
+              action: 'created',
+              issue: { number: 55, pull_request: {} },
+              comment: {
+                id: 12345,
+                body: '/gem-review resolve',
+                author_association: 'MEMBER',
+                user: { login: 'trusted-dev' },
+              },
+              repository: { full_name: 'xpepper/pr-review-gemini' },
+            },
+            execGhFn: mockGh,
+            mock: true,
+          };
+
+          const env = {
+            GITHUB_EVENT_NAME: 'issue_comment',
+          };
+
+          const result = await runCiAction(options, env, silentIo);
+          assert.equal(result.exitCode, 0);
+          assert.equal(result.resolve, true);
+          assert.ok(reactions.some((r) => r.includes('eyes')));
+          assert.ok(reactions.some((r) => r.includes('rocket')));
+          assert.ok(reactions.some((r) => r.includes('+1')));
+          assert.ok(comments.some((c) => c.includes('Thread Resolution Complete') || c.includes('Resolved & Closed')));
+        });
+
+        it('reacts with confused and posts error notice if resolve command fails', async () => {
+          const reactions = [];
+          const comments = [];
+
+          const mockGh = async (args) => {
+            const cmd = args.join(' ');
+            if (cmd.includes('reactions')) {
+              reactions.push(cmd);
+              return JSON.stringify({ id: 999 });
+            }
+            if (cmd.includes('issues/55/comments')) {
+              comments.push(cmd);
+              return JSON.stringify({ id: 888 });
+            }
+            if (cmd.includes('pr diff')) {
+              throw new Error('Network timeout fetching PR diff');
+            }
+            return '[]';
+          };
+
+          const options = {
+            eventPayload: {
+              action: 'created',
+              issue: { number: 55, pull_request: {} },
+              comment: {
+                id: 12345,
+                body: '/gem-review resolve',
+                author_association: 'MEMBER',
+                user: { login: 'trusted-dev' },
+              },
+              repository: { full_name: 'xpepper/pr-review-gemini' },
+            },
+            execGhFn: mockGh,
+            mock: true,
+          };
+
+          const env = {
+            GITHUB_EVENT_NAME: 'issue_comment',
+          };
+
+          const result = await runCiAction(options, env, silentIo);
+          assert.equal(result.exitCode, 1);
+          assert.equal(result.resolve, false);
+          assert.ok(reactions.some((r) => r.includes('confused')));
+          assert.ok(comments.some((c) => c.includes('Thread Resolution Error') || c.includes('Network timeout')));
+        });
+      });
+    });
   });
+

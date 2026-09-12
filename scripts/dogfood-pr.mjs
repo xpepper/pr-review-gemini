@@ -26,6 +26,7 @@ Options:
   --full            Exhaustive review (6 lenses including tests)
   --deep            Deep-focus review on correctness
   --incremental     Re-review PR incrementally against previous review
+  --resolve         Verify and resolve addressed review threads against latest PR head
   --dry-run         Run review analysis without publishing to GitHub (default)
   --publish         Publish host-gated review to GitHub
   --interactive     Prompt for interactive finding selection before publishing

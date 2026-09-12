@@ -2090,6 +2090,96 @@ index 1111111..2222222 100644
         /Cannot publish review: All \d+ specialist review subagent\(s\) failed/
       );
     });
+
+    it('evaluates active review threads and includes thread resolution in review summary (Increment 20)', async () => {
+      const diffText = `diff --git a/src/auth.js b/src/auth.js
+index 1111111..2222222 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -40,5 +40,6 @@ function authenticate(user) {
+-  const id = user.id;
++  const id = user?.id ?? null;
+   return id;
+ }
+`;
+      const mockGh = async (args) => {
+        if (args[1] === 'graphql') {
+          if (args.join(' ').includes('resolveReviewThread')) {
+            return JSON.stringify({ data: { resolveReviewThread: { thread: { id: 'PRRT_thread1', isResolved: true } } } });
+          }
+          if (args.join(' ').includes('addPullRequestReviewThreadReply')) {
+            return JSON.stringify({ data: { addPullRequestReviewThreadReply: { comment: { id: 'c1' } } } });
+          }
+          return JSON.stringify({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviewThreads: {
+                    nodes: [
+                      {
+                        id: 'PRRT_thread1',
+                        isResolved: false,
+                        isOutdated: false,
+                        path: 'src/auth.js',
+                        line: 42,
+                        comments: {
+                          nodes: [
+                            { id: 'c0', body: '**[P1] Missing null check**', author: { login: 'reviewer' } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          });
+        }
+        return '[]';
+      };
+
+      // 1. When dryRun: true, threads are evaluated but no mutations are executed
+      let mutationCount = 0;
+      const mockGhCounting = async (args) => {
+        if (args.join(' ').includes('resolveReviewThread') || args.join(' ').includes('addPullRequestReviewThreadReply')) {
+          mutationCount++;
+        }
+        return mockGh(args);
+      };
+
+      const dryRunResult = await runReview({
+        prNumber: 315,
+        repo: 'xpepper/pr-review-gemini',
+        diffText,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        execGhFn: mockGhCounting,
+        resolveThreads: true,
+        dryRun: true,
+      });
+
+      assert.ok(dryRunResult.threads);
+      assert.equal(dryRunResult.threads.length, 1);
+      assert.equal(dryRunResult.threads[0].verdict, 'RESOLVED');
+      assert.equal(dryRunResult.threadResolution, null, 'Must not execute live resolution when dryRun is true');
+      assert.equal(mutationCount, 0, 'Zero mutations when dryRun is true');
+      assert.ok(dryRunResult.summary.includes('Review Thread Verification & Automated Resolution'));
+
+      // 2. When dryRun: false, resolution executes live mutations
+      const liveResult = await runReview({
+        prNumber: 315,
+        repo: 'xpepper/pr-review-gemini',
+        diffText,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        execGhFn: mockGh,
+        resolveThreads: true,
+        dryRun: false,
+      });
+
+      assert.equal(liveResult.threadResolution?.resolvedCount, 1);
+      assert.ok(liveResult.summary.includes('Verified Resolved'));
+    });
   });
 });
 
