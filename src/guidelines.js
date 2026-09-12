@@ -36,6 +36,26 @@ export const STANDARD_LENS_IDS = Object.freeze([
   'tests',
 ]);
 
+/**
+ * Standard lens aliases and display name component keywords mapping to canonical lens IDs.
+ */
+export const STANDARD_LENS_ALIASES = Object.freeze(
+  Object.assign(Object.create(null), {
+    correctness: 'correctness',
+    concurrency: 'correctness',
+    contracts: 'contracts',
+    data: 'contracts',
+    security: 'security',
+    trust: 'security',
+    performance: 'performance',
+    resources: 'performance',
+    conventions: 'conventions',
+    maintainability: 'conventions',
+    tests: 'tests',
+    testability: 'tests',
+  })
+);
+
 const DISALLOWED_SENSITIVE_PATTERNS = [
   /^\.env/i,
   /\.git([\\/]|$)/i,
@@ -418,20 +438,29 @@ function extractTargetLensId(headingText) {
   if (!headingText) return null;
   const clean = headingText.trim();
 
-  // Explicit prefix e.g. "Lens: Security", "Role: performance", "Lens - Contracts"
-  // Require colon or space-separated hyphen so hyphenated titles like "Role-based" do not match
-  const prefixMatch = clean.match(/^(?:lens|role)\s*(?::|\s+-)\s*([a-zA-Z0-9_\-]+)/i);
-  if (prefixMatch) {
-    return prefixMatch[1].toLowerCase().trim();
-  }
+  // Strip optional "Lens:" or "Role:" prefix (e.g. "Lens: Security", "Role - Performance")
+  const prefixMatch = clean.match(/^(?:lens|role)\s*(?::|\s+-)\s*(.+)$/i);
+  const target = prefixMatch ? prefixMatch[1].trim() : clean;
 
-  // Direct standard lens name e.g. "Security", "Security & Trust", "Performance / Resources"
-  const directMatch = clean.match(/^([a-zA-Z0-9_\-]+)(?:\s*(?:&|\/|,)\s*.*)?$/);
-  if (directMatch) {
-    const candidate = directMatch[1].toLowerCase();
+  // Direct word match against standard lens IDs or display aliases (e.g. "Security & Trust", "Concurrency")
+  const firstWordMatch = target.match(/^([a-zA-Z0-9_\-]+)/);
+  if (firstWordMatch) {
+    const candidate = firstWordMatch[1].toLowerCase();
     if (STANDARD_LENS_IDS.includes(candidate)) {
       return candidate;
     }
+    if (Object.prototype.hasOwnProperty.call(STANDARD_LENS_ALIASES, candidate)) {
+      return STANDARD_LENS_ALIASES[candidate];
+    }
+  }
+
+  // If explicit prefix was used (e.g. "Role: custom-role" or "Role: Database Optimizer"),
+  // return normalized kebab-case identifier
+  if (prefixMatch) {
+    return target
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   }
 
   return null;
@@ -458,11 +487,39 @@ export function parseGuidelines(markdown) {
   const lenses = new Map();
   const sections = [];
 
+  let inCodeBlock = false;
+  let codeBlockFence = null;
   let currentTargetLens = null;
   let currentLensLevel = 0;
   let currentSection = null;
 
   for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      const fence = trimmed.slice(0, 3);
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeBlockFence = fence;
+      } else if (trimmed.startsWith(codeBlockFence)) {
+        inCodeBlock = false;
+        codeBlockFence = null;
+      }
+    }
+
+    if (inCodeBlock) {
+      if (currentSection) {
+        currentSection.lines.push(line);
+      }
+      if (currentTargetLens) {
+        if (!lenses.has(currentTargetLens)) {
+          lenses.set(currentTargetLens, []);
+        }
+        lenses.get(currentTargetLens).push(line);
+      } else {
+        globalLines.push(line);
+      }
+      continue;
+    }
     const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
     if (headingMatch) {
       const level = headingMatch[1].length;
@@ -621,6 +678,23 @@ export function resolveGuidelinesForLens({
   }
 
   return result;
+}
+
+/**
+ * Formats guidelines text for a specific lens from a guidelines object, raw string, or fallback.
+ *
+ * @param {object|string|null} repoGuidelines - Guidelines object or string
+ * @param {string} lensId - Target lens ID
+ * @param {object} [options] - Options passed to formatForLens (e.g. lensName)
+ * @returns {string} Formatted guidelines text
+ */
+export function formatGuidelinesForLens(repoGuidelines, lensId, options = {}) {
+  if (!repoGuidelines) return '';
+  if (typeof repoGuidelines === 'string') return repoGuidelines;
+  if (typeof repoGuidelines.formatForLens === 'function') {
+    return repoGuidelines.formatForLens(lensId, options);
+  }
+  return repoGuidelines.content || '';
 }
 
 /**

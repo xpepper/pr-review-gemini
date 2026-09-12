@@ -26,6 +26,7 @@ import {
 } from './config.js';
 import { parseMarkdownFindings } from './publish.js';
 import { isLargeDiff, createFileBackedDiff } from './diff.js';
+import { formatGuidelinesForLens } from './guidelines.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -530,12 +531,9 @@ export async function dispatchSubagentsParallel({
 
   try {
     const tasks = plan.map(async (item) => {
-      const lensGuidelines =
-        typeof repoGuidelines === 'string'
-          ? repoGuidelines
-          : typeof repoGuidelines?.formatForLens === 'function'
-            ? repoGuidelines.formatForLens(item.lensId, { lensName: item.lensDef?.name })
-            : repoGuidelines?.content || '';
+      const lensGuidelines = formatGuidelinesForLens(repoGuidelines, item.lensId, {
+        lensName: item.lensDef?.name,
+      });
 
       const prompt = buildReviewerPrompt({
         lens: item.lensDef,

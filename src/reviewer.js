@@ -502,7 +502,8 @@ function isFileTouchedInDiff(diffText, relPath) {
     `--- (?:a/)?${escaped}(?=[\\s\r\n]|$)|` +
     `\\+\\+\\+ (?:b/)?${escaped}(?=[\\s\r\n]|$)|` +
     `rename (?:from|to) ${escaped}(?=[\\s\r\n]|$)|` +
-    `copy (?:from|to) ${escaped}(?=[\\s\r\n]|$))`
+    `copy (?:from|to) ${escaped}(?=[\\s\r\n]|$))`,
+    'i'
   );
   return pattern.test(diffText);
 }

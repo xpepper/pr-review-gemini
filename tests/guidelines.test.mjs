@@ -23,6 +23,7 @@ import {
   formatTruncationWarning,
   resolveMaxGuidelinesBytes,
   applyGuidelinesContentLimit,
+  formatGuidelinesForLens,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -503,6 +504,62 @@ Global rules apply everywhere.
       assert.equal(isGlobalHeading('Frontend Design'), false);
       assert.equal(isGlobalHeading('GraphQL Mutations'), false);
       assert.equal(isGlobalHeading(null), false);
+    });
+
+    it('ignores headings inside fenced code blocks during section parsing', () => {
+      const codeBlockMarkdown = `# Repository Guidelines
+Global instructions.
+
+\`\`\`markdown
+## Lens: Security
+This is sample code inside a code block.
+\`\`\`
+
+## Security
+Real security rules.
+`;
+      const parsed = parseGuidelines(codeBlockMarkdown);
+      assert.ok(parsed.global.includes('This is sample code inside a code block.'));
+      assert.ok(parsed.lenses.security.includes('Real security rules.'));
+      assert.ok(!parsed.lenses.security.includes('This is sample code inside a code block.'));
+    });
+
+    it('recognizes multi-word and alias lens headings without leaking to global', () => {
+      const multiWordMarkdown = `# Guidelines
+## Security & Trust Boundaries
+Validate JWT signatures.
+
+## Security and Trust
+Use HTTPS everywhere.
+
+## Role: Performance & Resources
+Check connection pooling.
+
+## Concurrency
+Handle mutex locks carefully.
+`;
+      const parsed = parseGuidelines(multiWordMarkdown);
+      assert.ok(parsed.lenses.security);
+      assert.ok(parsed.lenses.security.includes('Validate JWT signatures.'));
+      assert.ok(parsed.lenses.security.includes('Use HTTPS everywhere.'));
+      assert.ok(parsed.lenses.performance.includes('Check connection pooling.'));
+      assert.ok(parsed.lenses.correctness.includes('Handle mutex locks carefully.'));
+      assert.ok(!parsed.global.includes('Validate JWT signatures.'));
+    });
+
+    it('formatGuidelinesForLens extracts guidance from strings, objects, and fallback content', () => {
+      assert.equal(formatGuidelinesForLens('raw text', 'security'), 'raw text');
+      assert.equal(formatGuidelinesForLens(null, 'security'), '');
+
+      const objWithMethod = {
+        formatForLens: (id) => `guidance for ${id}`,
+      };
+      assert.equal(formatGuidelinesForLens(objWithMethod, 'security'), 'guidance for security');
+
+      const objWithContent = {
+        content: 'plain content',
+      };
+      assert.equal(formatGuidelinesForLens(objWithContent, 'security'), 'plain content');
     });
   });
 
