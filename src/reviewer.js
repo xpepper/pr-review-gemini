@@ -98,6 +98,7 @@ import {
   readGuidelinesFile,
   parseGuidelines,
   resolveGuidelinesForLens,
+  formatGuidelinesSummaryLine,
   createGuidelinesSummary,
   resolveActiveGuidelines,
   sanitizeGuidelinesForPrompt,
@@ -821,7 +822,69 @@ export async function runReview({
       }
     }
 
-    const relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
+    let relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
+
+    if (!relGuidelines && confirmedBaseRef && isGuidelinesEnabled) {
+      const candidates = guidelinesPath
+        ? [guidelinesPath]
+        : (resolvedConfig?.guidelines?.path ? [resolvedConfig.guidelines.path] : DEFAULT_GUIDELINE_FILENAMES);
+
+      for (const cand of candidates) {
+        if (isFileTouchedInDiff(unifiedDiffText, cand)) {
+          try {
+            let rawBaseContent = null;
+            try {
+              rawBaseContent = await effectiveExecGit(
+                ['show', `${confirmedBaseRef}:${cand}`],
+                { cwd }
+              );
+            } catch {
+              if (!confirmedBaseRef.startsWith('origin/')) {
+                try {
+                  rawBaseContent = await effectiveExecGit(
+                    ['show', `origin/${confirmedBaseRef}:${cand}`],
+                    { cwd }
+                  );
+                } catch {
+                  // ignore
+                }
+              }
+            }
+
+            if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
+              const limited = applyGuidelinesContentLimit(
+                rawBaseContent,
+                resolvedConfig?.guidelines?.max_bytes
+              );
+              const parsed = parseGuidelines(limited.rawContent);
+              activeGuidelines = {
+                enabled: true,
+                found: true,
+                path: cand,
+                relativePath: cand,
+                byteSize: limited.byteSize,
+                truncated: limited.truncated,
+                truncationWarning: limited.truncationWarning,
+                rawContent: limited.rawContent,
+                content: limited.content,
+                parsed,
+                formatForLens: (lensId, opts = {}) =>
+                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
+                source: 'base_ref',
+              };
+              guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+              if (guidelinesSummary) {
+                guidelinesSummary.source = 'base_ref';
+              }
+              relGuidelines = cand;
+              break;
+            }
+          } catch {
+            // continue
+          }
+        }
+      }
+    }
 
     if (relGuidelines) {
       const isModifiedInPr = isFileTouchedInDiff(unifiedDiffText, relGuidelines);
@@ -1021,27 +1084,8 @@ export async function runReview({
       .join(' | ') || 'None';
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
-    const rawGPath = activeGuidelines?.relativePath || activeGuidelines?.path;
-    let gPath = null;
-    if (rawGPath) {
-      if (!path.isAbsolute(rawGPath)) {
-        gPath = rawGPath;
-      } else if (cwd) {
-        const rel = path.relative(cwd, rawGPath);
-        gPath = !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.replace(/\\/g, '/') : path.basename(rawGPath);
-      } else {
-        gPath = path.basename(rawGPath);
-      }
-    }
-    let guidelinesSuffix = '';
-    if (activeGuidelines?.untrustedInPr) {
-      guidelinesSuffix = ' ⚠️ (modified in PR; excluded from prompt to prevent injection)';
-    } else if (activeGuidelines?.truncated) {
-      guidelinesSuffix = ' ⚠️ (truncated)';
-    }
-    const guidelinesLine = activeGuidelines?.found && gPath
-      ? `- **Repository Guidelines**: \`${gPath}\`${guidelinesSuffix}\n`
-      : '';
+    const gLine = formatGuidelinesSummaryLine(activeGuidelines);
+    const guidelinesLine = gLine ? `${gLine}\n` : '';
     let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 
 - **Pull Request**: #${num}${prMetadata.title ? ` (${prMetadata.title})` : ''}

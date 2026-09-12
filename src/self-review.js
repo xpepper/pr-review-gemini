@@ -18,7 +18,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
-import { resolveActiveGuidelines } from './guidelines.js';
+import { resolveActiveGuidelines, formatGuidelinesSummaryLine } from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -158,11 +158,8 @@ Self-review failed closed due to execution errors during specialist subagent ana
 
   const countSummary = `${counts.P0} P0, ${counts.P1} P1, ${counts.P2} P2, ${counts.P3} P3, ${counts.nit} nit`;
   const blockingCount = blockingFindings.length;
-  let guidelinesLine = '';
-  const gPath = guidelines?.relativePath || guidelines?.path;
-  if (guidelines?.found && gPath) {
-    guidelinesLine = `\n- **Repository Guidelines**: \`${gPath}\`${guidelines.truncated ? ' ⚠️ (truncated)' : ''}`;
-  }
+  const guidelinesSummary = formatGuidelinesSummaryLine(guidelines);
+  const guidelinesLine = guidelinesSummary ? `\n${guidelinesSummary}` : '';
 
   if (isPass) {
     let findingsSection = '';

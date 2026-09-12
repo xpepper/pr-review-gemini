@@ -1505,6 +1505,52 @@ index 1111111..2222222 100644
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
     });
+
+    it('enforces trusted baseRef guidelines when PR diff deletes the guidelines file', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-deleted-'));
+      try {
+        // Disk has no guidelines file (it was deleted in the PR branch)
+        const deleteDiff = `diff --git a/.github/gem-pr-review.md b/.github/gem-pr-review.md
+deleted file mode 100644
+--- a/.github/gem-pr-review.md
++++ /dev/null
+@@ -1,2 +0,0 @@
+-# Authoritative Guidelines
+-- Must validate all parameters.
+`;
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const mockExecGit = async (args) => {
+          if (args[0] === 'show' && args[1] === 'main:.github/gem-pr-review.md') {
+            return '# Authoritative Guidelines\n- Must validate all parameters.';
+          }
+          return '';
+        };
+
+        const result = await runReview({
+          prNumber: 305,
+          diffText: deleteDiff,
+          baseRef: 'main',
+          cwd: tmpRepo,
+          execGitFn: mockExecGit,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.source, 'base_ref');
+        assert.equal(result.guidelines.path, '.github/gem-pr-review.md');
+        assert.match(dispatchedPrompt, /## Repository Review Guidelines & Invariants:/);
+        assert.match(dispatchedPrompt, /Must validate all parameters\./);
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
   });
 });
 

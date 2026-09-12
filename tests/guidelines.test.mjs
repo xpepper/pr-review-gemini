@@ -23,6 +23,7 @@ import {
   resolveMaxGuidelinesBytes,
   applyGuidelinesContentLimit,
   formatGuidelinesForLens,
+  formatGuidelinesSummaryLine,
 } from '../src/guidelines.js';
 
 describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
@@ -632,10 +633,68 @@ Handle mutex locks carefully.
         enabled: true,
         found: true,
         path: '.github/gem-pr-review.md',
+        relativePath: '.github/gem-pr-review.md',
         byteSize: 1024,
         truncated: false,
       });
       assert.doesNotMatch(JSON.stringify(summary), /\/mock\/absolute/);
+    });
+
+    it('strips absolute path even when relativePath itself is an absolute machine path', () => {
+      const guidelines = {
+        enabled: true,
+        found: true,
+        relativePath: '/mock/developer/repo/.github/gem-pr-review.md',
+        path: '/mock/developer/repo/.github/gem-pr-review.md',
+        byteSize: 500,
+        truncated: false,
+      };
+
+      const summary = createGuidelinesSummary(guidelines);
+      assert.equal(summary.path, 'gem-pr-review.md');
+      assert.equal(summary.relativePath, 'gem-pr-review.md');
+      assert.doesNotMatch(JSON.stringify(summary), /\/mock\/developer/);
+    });
+  });
+
+  describe('formatGuidelinesSummaryLine', () => {
+    it('returns empty string when guidelines is null or not found', () => {
+      assert.equal(formatGuidelinesSummaryLine(null), '');
+      assert.equal(formatGuidelinesSummaryLine({ found: false }), '');
+    });
+
+    it('formats sanitized guidelines line with relative path and warnings', () => {
+      const normal = formatGuidelinesSummaryLine({
+        found: true,
+        relativePath: '.github/gem-pr-review.md',
+      });
+      assert.equal(normal, '- **Repository Guidelines**: `.github/gem-pr-review.md`');
+
+      const truncated = formatGuidelinesSummaryLine({
+        found: true,
+        relativePath: '.github/gem-pr-review.md',
+        truncated: true,
+      });
+      assert.equal(truncated, '- **Repository Guidelines**: `.github/gem-pr-review.md` ⚠️ (truncated)');
+
+      const untrusted = formatGuidelinesSummaryLine({
+        found: true,
+        relativePath: '.github/gem-pr-review.md',
+        untrustedInPr: true,
+      });
+      assert.equal(
+        untrusted,
+        '- **Repository Guidelines**: `.github/gem-pr-review.md` ⚠️ (modified in PR; excluded from prompt to prevent injection)'
+      );
+    });
+
+    it('never includes absolute machine path in formatted summary line', () => {
+      const line = formatGuidelinesSummaryLine({
+        found: true,
+        path: '/mock/developer/workspace/.github/gem-pr-review.md',
+      });
+      assert.equal(line, '- **Repository Guidelines**: `gem-pr-review.md`');
+      assert.doesNotMatch(line, /\/mock\/developer/);
     });
   });
 

@@ -370,6 +370,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
         content: `${slice}\n\n${warning}`,
         rawContent: slice,
         byteSize: fileSize,
+        originalByteSize: fileSize,
         truncated: true,
         truncationWarning: warning,
         path: relativePath,
@@ -793,14 +794,44 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
  */
 export function createGuidelinesSummary(guidelines) {
   if (!guidelines) return null;
-  const rel = guidelines.relativePath || (guidelines.path && !path.isAbsolute(guidelines.path) ? guidelines.path : null);
+  let rel = null;
+  const rawRel = guidelines.relativePath || guidelines.path;
+  if (rawRel && typeof rawRel === 'string') {
+    if (!path.isAbsolute(rawRel)) {
+      rel = rawRel.replace(/\\/g, '/');
+    } else {
+      rel = path.basename(rawRel);
+    }
+  }
   return {
     enabled: guidelines.enabled !== false,
     found: Boolean(guidelines.found),
     path: rel,
+    relativePath: rel,
     byteSize: guidelines.byteSize || 0,
     truncated: Boolean(guidelines.truncated),
+    ...(guidelines.untrustedInPr ? { untrustedInPr: true } : {}),
   };
+}
+
+/**
+ * Formats a sanitized, standardized guidelines line for review summaries.
+ *
+ * @param {object|null} guidelines - Guidelines object or summary
+ * @returns {string} Formatted markdown line or empty string
+ */
+export function formatGuidelinesSummaryLine(guidelines) {
+  if (!guidelines || !guidelines.found) return '';
+  const rawPath = guidelines.relativePath || guidelines.path;
+  if (!rawPath || typeof rawPath !== 'string') return '';
+  const gPath = !path.isAbsolute(rawPath) ? rawPath.replace(/\\/g, '/') : path.basename(rawPath);
+  let suffix = '';
+  if (guidelines.untrustedInPr) {
+    suffix = ' ⚠️ (modified in PR; excluded from prompt to prevent injection)';
+  } else if (guidelines.truncated) {
+    suffix = ' ⚠️ (truncated)';
+  }
+  return `- **Repository Guidelines**: \`${gPath}\`${suffix}`;
 }
 
 /**
