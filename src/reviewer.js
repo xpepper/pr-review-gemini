@@ -108,6 +108,7 @@ import {
   truncateUtf8Safe,
   formatTruncationWarning,
   applyGuidelinesContentLimit,
+  buildBaseRefGuidelines,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
   MAX_PROMPT_GUIDELINES_BYTES,
@@ -788,26 +789,11 @@ export async function runReview({
         }
 
         if (remoteContent !== null) {
-          const limited = applyGuidelinesContentLimit(
+          activeGuidelines = buildBaseRefGuidelines(
             remoteContent,
+            matchedPath,
             resolvedConfig?.guidelines?.max_bytes
           );
-          const parsed = parseGuidelines(limited.rawContent);
-          activeGuidelines = {
-            enabled: true,
-            found: true,
-            path: matchedPath,
-            relativePath: matchedPath,
-            byteSize: limited.byteSize,
-            truncated: limited.truncated,
-            truncationWarning: limited.truncationWarning,
-            rawContent: limited.rawContent,
-            content: limited.content,
-            parsed,
-            formatForLens: (lensId, opts = {}) =>
-              resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
-            source: 'base_ref',
-          };
           guidelinesSummary = createGuidelinesSummary(activeGuidelines);
           if (guidelinesSummary) {
             guidelinesSummary.source = 'base_ref';
@@ -822,6 +808,39 @@ export async function runReview({
       }
     }
 
+    const fetchBaseRefFile = async (filePath) => {
+      if (!confirmedBaseRef) return null;
+      try {
+        const out = await effectiveExecGit(['show', `${confirmedBaseRef}:${filePath}`], { cwd });
+        if (typeof out === 'string' && out.length > 0) return out;
+      } catch {
+        // continue
+      }
+      if (!confirmedBaseRef.startsWith('origin/')) {
+        try {
+          const out = await effectiveExecGit(['show', `origin/${confirmedBaseRef}:${filePath}`], { cwd });
+          if (typeof out === 'string' && out.length > 0) return out;
+        } catch {
+          // continue
+        }
+      }
+      if (execGhFn && repo) {
+        try {
+          const out = await fetchRemoteRepoGuidelines({
+            repo,
+            relPath: filePath,
+            ref: confirmedBaseRef,
+            execGhFn,
+            cwd,
+          });
+          if (typeof out === 'string' && out.length > 0) return out;
+        } catch {
+          // continue
+        }
+      }
+      return null;
+    };
+
     let relGuidelines = activeGuidelines?.relativePath || activeGuidelines?.path;
 
     if (!relGuidelines && confirmedBaseRef && isGuidelinesEnabled) {
@@ -830,58 +849,23 @@ export async function runReview({
         : (resolvedConfig?.guidelines?.path ? [resolvedConfig.guidelines.path] : DEFAULT_GUIDELINE_FILENAMES);
 
       for (const cand of candidates) {
-        if (isFileTouchedInDiff(unifiedDiffText, cand)) {
-          try {
-            let rawBaseContent = null;
-            try {
-              rawBaseContent = await effectiveExecGit(
-                ['show', `${confirmedBaseRef}:${cand}`],
-                { cwd }
-              );
-            } catch {
-              if (!confirmedBaseRef.startsWith('origin/')) {
-                try {
-                  rawBaseContent = await effectiveExecGit(
-                    ['show', `origin/${confirmedBaseRef}:${cand}`],
-                    { cwd }
-                  );
-                } catch {
-                  // ignore
-                }
-              }
+        try {
+          const rawBaseContent = await fetchBaseRefFile(cand);
+          if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
+            activeGuidelines = buildBaseRefGuidelines(
+              rawBaseContent,
+              cand,
+              resolvedConfig?.guidelines?.max_bytes
+            );
+            guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+            if (guidelinesSummary) {
+              guidelinesSummary.source = 'base_ref';
             }
-
-            if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
-              const limited = applyGuidelinesContentLimit(
-                rawBaseContent,
-                resolvedConfig?.guidelines?.max_bytes
-              );
-              const parsed = parseGuidelines(limited.rawContent);
-              activeGuidelines = {
-                enabled: true,
-                found: true,
-                path: cand,
-                relativePath: cand,
-                byteSize: limited.byteSize,
-                truncated: limited.truncated,
-                truncationWarning: limited.truncationWarning,
-                rawContent: limited.rawContent,
-                content: limited.content,
-                parsed,
-                formatForLens: (lensId, opts = {}) =>
-                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
-                source: 'base_ref',
-              };
-              guidelinesSummary = createGuidelinesSummary(activeGuidelines);
-              if (guidelinesSummary) {
-                guidelinesSummary.source = 'base_ref';
-              }
-              relGuidelines = cand;
-              break;
-            }
-          } catch {
-            // continue
+            relGuidelines = cand;
+            break;
           }
+        } catch {
+          // continue
         }
       }
     }
@@ -895,62 +879,41 @@ export async function runReview({
         if (!confirmedBaseRef && (isModifiedInPr || isCustomDiff)) {
           ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
         }
-      } else if ((isModifiedInPr || isCustomDiff) && confirmedBaseRef) {
+      } else if (confirmedBaseRef) {
+        // When baseRef is confirmed, unconditionally verify against authoritative base branch ground truth.
+        // This avoids reliance on heuristic diff-detection patterns to decide whether to trust on-disk content.
         try {
-          let rawBaseContent = null;
-          try {
-            rawBaseContent = await effectiveExecGit(
-              ['show', `${confirmedBaseRef}:${relGuidelines}`],
-              { cwd }
-            );
-          } catch {
-            // If local ref lookup fails, try remote-tracking branch origin/<confirmedBaseRef>
-            if (!confirmedBaseRef.startsWith('origin/')) {
-              try {
-                rawBaseContent = await effectiveExecGit(
-                  ['show', `origin/${confirmedBaseRef}:${relGuidelines}`],
-                  { cwd }
-                );
-              } catch {
-                // Not found on remote ref either
-              }
-            }
-          }
-
+          const rawBaseContent = await fetchBaseRefFile(relGuidelines);
           if (typeof rawBaseContent === 'string' && rawBaseContent.length > 0) {
-            const limited = applyGuidelinesContentLimit(
+            const baseGuidelines = buildBaseRefGuidelines(
               rawBaseContent,
+              relGuidelines,
               resolvedConfig?.guidelines?.max_bytes
             );
 
-            if (activeGuidelines.rawContent !== limited.rawContent || limited.truncated) {
-              // Guidelines file differs from base branch version (modified in PR or locally) or was truncated.
-              // Discard untrusted on-disk content and load verified base ref content.
-              const parsed = parseGuidelines(limited.rawContent);
-              activeGuidelines = {
-                ...activeGuidelines,
-                ...limited,
-                parsed,
-                formatForLens: (lensId, opts = {}) =>
-                  resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
-                source: 'base_ref',
-              };
+            if (activeGuidelines.rawContent !== baseGuidelines.rawContent || baseGuidelines.truncated) {
+              // Local disk content was modified or truncated relative to base branch.
+              // Adopt authoritative base branch content.
+              activeGuidelines = baseGuidelines;
               if (guidelinesSummary) {
                 Object.assign(guidelinesSummary, createGuidelinesSummary(activeGuidelines));
                 guidelinesSummary.source = 'base_ref';
               }
+            } else {
+              activeGuidelines.source = 'base_ref';
+              if (guidelinesSummary) {
+                guidelinesSummary.source = 'base_ref';
+              }
             }
           } else {
-            // Empty base content or unreadable file
+            // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR) or is empty: fail closed
             ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
           }
         } catch {
-          // Guidelines file does not exist on confirmed baseRef (e.g. newly introduced in PR)
           ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
         }
       } else if (isModifiedInPr || isCustomDiff) {
-        // Guidelines were modified in PR diff, or custom diffText was supplied without a confirmed base ref
-        // to verify authenticity against. Fail closed to prevent prompt injection.
+        // No confirmed baseRef to verify authenticity against, and diff modifies guidelines or is custom: fail closed
         ({ activeGuidelines, guidelinesSummary } = markGuidelinesUntrusted(activeGuidelines, guidelinesSummary));
       }
     }

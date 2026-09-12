@@ -22,6 +22,7 @@ import {
   formatTruncationWarning,
   resolveMaxGuidelinesBytes,
   applyGuidelinesContentLimit,
+  buildBaseRefGuidelines,
   formatGuidelinesForLens,
   formatGuidelinesSummaryLine,
 } from '../src/guidelines.js';
@@ -164,7 +165,8 @@ describe('Repository Review Guidelines & Project Memory (Increment 19)', () => {
 
       const result = readGuidelinesFile(filePath, { maxBytes: 100, cwd: tmpDir });
       assert.equal(result.truncated, true);
-      assert.equal(result.byteSize, 500);
+      assert.equal(result.byteSize, 100);
+      assert.equal(result.originalByteSize, 500);
       assert.equal(result.rawContent.length, 100);
       assert.match(result.content, /^A{100}/);
       assert.match(result.content, /Guidelines truncated: file size \(500 bytes\) exceeded maximum allowed limit of 100 bytes/);
@@ -819,6 +821,22 @@ ValueOf instructions.
       assert.equal(limitRes.originalByteSize, 2000);
       assert.ok(limitRes.truncationWarning);
       assert.ok(limitRes.content.includes(limitRes.truncationWarning));
+    });
+
+    it('buildBaseRefGuidelines creates standardized descriptor from raw content', () => {
+      const raw = '# Base Guidelines\n- Base rule 1.\n\n## Lens: Security\n- Secure all endpoints.';
+      const desc = buildBaseRefGuidelines(raw, '.github/gem-pr-review.md', 1024);
+      assert.equal(desc.enabled, true);
+      assert.equal(desc.found, true);
+      assert.equal(desc.source, 'base_ref');
+      assert.equal(desc.path, '.github/gem-pr-review.md');
+      assert.equal(desc.relativePath, '.github/gem-pr-review.md');
+      assert.equal(desc.byteSize, Buffer.byteLength(raw, 'utf8'));
+      assert.equal(desc.originalByteSize, Buffer.byteLength(raw, 'utf8'));
+      assert.equal(desc.truncated, false);
+      assert.equal(desc.parsed.sections.length, 2);
+      assert.equal(typeof desc.formatForLens, 'function');
+      assert.match(desc.formatForLens('security'), /Secure all endpoints\./);
     });
   });
 });

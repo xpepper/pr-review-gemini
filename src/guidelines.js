@@ -229,6 +229,7 @@ function emptyGuidelinesResult(filePath = null, cwd = null) {
     content: '',
     rawContent: '',
     byteSize: 0,
+    originalByteSize: 0,
     truncated: false,
     truncationWarning: null,
     path: rel,
@@ -366,10 +367,11 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       const bytesRead = fs.readSync(fd, buf, 0, effectiveMaxBytes, 0);
       const slice = truncateUtf8Safe(buf.subarray(0, bytesRead), effectiveMaxBytes);
       const warning = formatTruncationWarning(fileSize, effectiveMaxBytes);
+      const truncatedByteSize = Buffer.byteLength(slice, 'utf8');
       return {
         content: `${slice}\n\n${warning}`,
         rawContent: slice,
-        byteSize: fileSize,
+        byteSize: truncatedByteSize,
         originalByteSize: fileSize,
         truncated: true,
         truncationWarning: warning,
@@ -386,6 +388,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       content: rawContent,
       rawContent,
       byteSize: fileSize,
+      originalByteSize: fileSize,
       truncated: false,
       truncationWarning: null,
       path: relativePath,
@@ -725,6 +728,7 @@ export function createEmptyGuidelines({
     path,
     relativePath,
     byteSize: 0,
+    originalByteSize: 0,
     truncated: false,
     truncationWarning: null,
     rawContent: '',
@@ -736,13 +740,42 @@ export function createEmptyGuidelines({
 }
 
 /**
+ * Builds an active guidelines descriptor from base ref raw content.
+ *
+ * @param {string} rawContent - Guidelines content from base ref
+ * @param {string} filePath - Candidate guideline file path
+ * @param {number} [maxBytes] - Optional byte limit
+ * @returns {object} Guidelines descriptor
+ */
+export function buildBaseRefGuidelines(rawContent, filePath, maxBytes) {
+  const limited = applyGuidelinesContentLimit(rawContent, maxBytes);
+  const parsed = parseGuidelines(limited.rawContent);
+  return {
+    enabled: true,
+    found: true,
+    path: filePath,
+    relativePath: filePath,
+    byteSize: limited.byteSize,
+    originalByteSize: limited.originalByteSize,
+    truncated: limited.truncated,
+    truncationWarning: limited.truncationWarning,
+    rawContent: limited.rawContent,
+    content: limited.content,
+    parsed,
+    formatForLens: (lensId, opts = {}) =>
+      resolveGuidelinesForLens({ parsed, lensId, truncationWarning: limited.truncationWarning, ...opts }),
+    source: 'base_ref',
+  };
+}
+
+/**
  * High-level loader discovering, reading, and parsing repository review guidelines.
  *
  * @param {object} [options]
  * @param {string} [options.cwd=process.cwd()] - Workspace root
  * @param {object} [options.config=null] - Resolved configuration object
  * @param {string} [options.guidelinesPath=null] - Explicit path override
- * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, truncated: boolean, truncationWarning: string|null, rawContent: string, content: string, parsed: object, formatForLens: (lensId: string, options?: object) => string }}
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, originalByteSize: number, truncated: boolean, truncationWarning: string|null, rawContent: string, content: string, parsed: object, formatForLens: (lensId: string, options?: object) => string }}
  */
 export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesPath = null } = {}) {
   const isEnabled = config?.guidelines?.enabled !== false;
@@ -776,6 +809,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
     path: fileResult.path,
     relativePath: fileResult.relativePath,
     byteSize: fileResult.byteSize,
+    originalByteSize: fileResult.originalByteSize,
     truncated: fileResult.truncated,
     truncationWarning: fileResult.truncationWarning,
     rawContent: fileResult.rawContent,
@@ -790,7 +824,7 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
  * Creates a sanitized, public-safe guidelines summary object without local machine paths.
  *
  * @param {object|null} guidelines - Guidelines object from loadGuidelines
- * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, truncated: boolean }|null}
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, originalByteSize: number, truncated: boolean }|null}
  */
 export function createGuidelinesSummary(guidelines) {
   if (!guidelines) return null;

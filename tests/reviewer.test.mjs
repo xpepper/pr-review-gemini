@@ -1551,6 +1551,59 @@ deleted file mode 100644
         fs.rmSync(tmpRepo, { recursive: true, force: true });
       }
     });
+
+    it('unconditionally verifies guidelines against confirmedBaseRef without relying on diff heuristics', async () => {
+      const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'reviewer-repo-unconditional-'));
+      try {
+        const ghDir = path.join(tmpRepo, '.github');
+        fs.mkdirSync(ghDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(ghDir, 'gem-pr-review.md'),
+          '# Local Disk Rules\n- Untrusted local addition.'
+        );
+
+        // Diff does NOT touch guidelines at all
+        const unrelatedDiff = `diff --git a/src/math.js b/src/math.js
+index 1111111..2222222 100644
+--- a/src/math.js
++++ b/src/math.js
+@@ -1,2 +1,2 @@
+-export const add = (a, b) => a + b;
++export const add = (a, b) => b + a;
+`;
+
+        let dispatchedPrompt = '';
+        const mockRunner = async ({ prompt }) => {
+          dispatchedPrompt = prompt;
+          return '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+        };
+
+        const mockExecGit = async (args) => {
+          if (args[0] === 'show' && args[1] === 'main:.github/gem-pr-review.md') {
+            return '# Authoritative Base Rules\n- Strictly enforce invariants.';
+          }
+          return '';
+        };
+
+        const result = await runReview({
+          prNumber: 306,
+          diffText: unrelatedDiff,
+          baseRef: 'main',
+          cwd: tmpRepo,
+          execGitFn: mockExecGit,
+          runnerFn: mockRunner,
+          dryRun: true,
+        });
+
+        assert.ok(result.guidelines);
+        assert.equal(result.guidelines.found, true);
+        assert.equal(result.guidelines.source, 'base_ref');
+        assert.match(dispatchedPrompt, /Strictly enforce invariants\./);
+        assert.ok(!dispatchedPrompt.includes('Untrusted local addition'));
+      } finally {
+        fs.rmSync(tmpRepo, { recursive: true, force: true });
+      }
+    });
   });
 });
 
