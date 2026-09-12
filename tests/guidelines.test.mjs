@@ -12,6 +12,7 @@ import {
   resolveGuidelinesForLens,
   loadGuidelines,
   createGuidelinesSummary,
+  resolveActiveGuidelines,
   isConfinedWithinRoot,
   sanitizeGuidelinesForPrompt,
   isSafeGuidelinesPath,
@@ -430,12 +431,11 @@ Verify permissions on endpoints.
       assert.equal(parsed.sections.length, 2);
       assert.equal(parsed.sections[1].heading, 'Role-based access control');
       assert.equal(parsed.sections[1].lensId, null);
-      assert.equal(parsed.sections[1].isGlobal, false);
-      // Unrecognized heading is preserved in sections but NOT broadcasted into global
-      assert.ok(!parsed.global.includes('Verify permissions on endpoints.'));
+      assert.equal(parsed.sections[1].isGlobal, true);
+      assert.ok(parsed.global.includes('Verify permissions on endpoints.'));
     });
 
-    it('does not broadcast unrecognized headings to global instructions', () => {
+    it('routes domain and non-lens headings to global repository instructions', () => {
       const markdown = `# Repository Guidelines
 Global preamble rule.
 
@@ -448,8 +448,38 @@ Global preamble rule.
       const parsed = parseGuidelines(markdown);
       assert.ok(parsed.global.includes('Global preamble rule.'));
       assert.ok(parsed.global.includes('All APIs must be documented.'));
-      assert.ok(!parsed.global.includes('compound indexes'));
-      assert.equal(parsed.sections.find((s) => s.heading === 'Database Optimization')?.isGlobal, false);
+      assert.ok(parsed.global.includes('compound indexes'));
+      assert.equal(parsed.sections.find((s) => s.heading === 'Database Optimization')?.isGlobal, true);
+    });
+
+    it('routes level-1 lens headings (# Security) to lens-specific instructions instead of leaking to global', () => {
+      const markdown = `# Document Preamble
+Global rules apply everywhere.
+
+# Security
+- Enforce parameterized SQL queries.
+
+# Performance
+- Batch N+1 query loops.
+`;
+      const parsed = parseGuidelines(markdown);
+      assert.ok(parsed.global.includes('Global rules apply everywhere.'));
+      assert.ok(!parsed.global.includes('parameterized SQL queries'));
+      assert.ok(!parsed.global.includes('Batch N+1 query loops'));
+
+      assert.ok(parsed.lenses.security.includes('parameterized SQL queries'));
+      assert.ok(!parsed.lenses.security.includes('Batch N+1 query loops'));
+
+      assert.ok(parsed.lenses.performance.includes('Batch N+1 query loops'));
+      assert.ok(!parsed.lenses.performance.includes('parameterized SQL queries'));
+    });
+
+    it('enforces prompt budget capping in resolveGuidelinesForLens', () => {
+      const hugeGlobal = 'X'.repeat(50000);
+      const parsed = { global: hugeGlobal, lenses: {}, sections: [], raw: hugeGlobal };
+      const result = resolveGuidelinesForLens({ parsed, lensId: 'security', maxPromptBytes: 1024 });
+      assert.ok(result.length <= 1024 + 100);
+      assert.match(result, /prompt budget \(1 KB\) exceeded/);
     });
 
     it('isGlobalHeading identifies global guidelines headings and rejects domain headings', () => {
@@ -551,6 +581,36 @@ Global preamble rule.
         truncated: false,
       });
       assert.doesNotMatch(JSON.stringify(summary), /\/mock\/absolute/);
+    });
+  });
+
+  describe('resolveActiveGuidelines', () => {
+    it('returns repoGuidelines directly when provided as override', () => {
+      const mock = { enabled: true, found: true, content: 'custom', relativePath: 'custom.md' };
+      const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({ repoGuidelines: mock });
+      assert.equal(activeGuidelines, mock);
+      assert.equal(guidelinesSummary.path, 'custom.md');
+    });
+
+    it('loads guidelines from cwd when repoGuidelines is not provided', () => {
+      const githubDir = path.join(tmpDir, '.github');
+      fs.mkdirSync(githubDir, { recursive: true });
+      fs.writeFileSync(path.join(githubDir, 'gem-pr-review.md'), '# Auto Loaded');
+
+      const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({ cwd: tmpDir });
+      assert.ok(activeGuidelines);
+      assert.equal(activeGuidelines.found, true);
+      assert.equal(guidelinesSummary.path, '.github/gem-pr-review.md');
+      assert.equal(guidelinesSummary.found, true);
+    });
+
+    it('handles loader errors gracefully and returns null guidelines', () => {
+      const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+        cwd: tmpDir,
+        guidelinesPath: '/non/existent/secret.txt',
+      });
+      assert.equal(activeGuidelines.found, false);
+      assert.equal(guidelinesSummary.found, false);
     });
   });
 });

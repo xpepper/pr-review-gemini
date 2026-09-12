@@ -8,7 +8,7 @@
 import path from 'node:path';
 import { runSelfReview } from '../src/self-review.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseStringOption } from '../src/cli.js';
 import {
   installPreCommitHook,
   uninstallPreCommitHook,
@@ -82,12 +82,10 @@ export function parseCliArgs(args) {
         throw new Error('Option --command requires a non-empty command string');
       }
       i = nextIndex;
-    } else if (arg.startsWith('--guidelines=')) {
-      guidelinesPath = arg.slice('--guidelines='.length);
-    } else if (arg === '--guidelines') {
-      const { value, nextIndex } = readOptionValue(args, i, '--guidelines');
-      guidelinesPath = value;
-      i = nextIndex;
+    } else if (arg.startsWith('--guidelines=') || arg === '--guidelines') {
+      const opt = parseStringOption(args, i, '--guidelines');
+      guidelinesPath = opt.value;
+      i = opt.nextIndex;
     } else if (arg === '--quick' || arg === '--balanced' || arg === '--full' || arg === '--deep') {
       mode = arg.slice(2);
     } else if (arg.startsWith('--mode=')) {

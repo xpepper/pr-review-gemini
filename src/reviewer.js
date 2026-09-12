@@ -95,12 +95,14 @@ import {
   parseGuidelines,
   resolveGuidelinesForLens,
   createGuidelinesSummary,
+  resolveActiveGuidelines,
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
   isSafeGuidelinesPath,
   isGlobalHeading,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
+  MAX_PROMPT_GUIDELINES_BYTES,
   ABSOLUTE_MAX_GUIDELINES_BYTES,
 } from './guidelines.js';
 
@@ -514,20 +516,12 @@ export async function runReview({
   const resolvedMode = resolveReviewMode(mode);
 
   // Discover and load repository review guidelines
-  let activeGuidelines = repoGuidelines || null;
-  if (!activeGuidelines) {
-    try {
-      activeGuidelines = loadGuidelines({
-        cwd,
-        config: resolvedConfig,
-        guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
-      });
-    } catch {
-      activeGuidelines = null;
-    }
-  }
-
-  const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+  const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+    repoGuidelines,
+    guidelinesPath: guidelinesPath || resolvedConfig.guidelines?.path,
+    config: resolvedConfig,
+    cwd,
+  });
 
   // 1. Retrieve diff if not provided directly
   let unifiedDiffText = diffText;
@@ -709,8 +703,9 @@ export async function runReview({
       .join(' | ') || 'None';
 
     const modeLabel = incremental ? `${resolvedMode.name} [Incremental]` : resolvedMode.name;
-    const guidelinesLine = activeGuidelines?.found
-      ? `- **Repository Guidelines**: \`${activeGuidelines.relativePath}\`${activeGuidelines.truncated ? ' ⚠️ (truncated)' : ''}\n`
+    const gPath = activeGuidelines?.relativePath || activeGuidelines?.path;
+    const guidelinesLine = activeGuidelines?.found && gPath
+      ? `- **Repository Guidelines**: \`${gPath}\`${activeGuidelines.truncated ? ' ⚠️ (truncated)' : ''}\n`
       : '';
     let summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
 

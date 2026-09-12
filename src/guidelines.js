@@ -20,6 +20,11 @@ export const MAX_GUIDELINES_BYTES = 64 * 1024;
 export const ABSOLUTE_MAX_GUIDELINES_BYTES = 512 * 1024;
 
 /**
+ * Maximum prompt budget for guidelines per specialist lens (24 KB) to avoid context blowout.
+ */
+export const MAX_PROMPT_GUIDELINES_BYTES = 24 * 1024;
+
+/**
  * Standard review lens IDs recognized directly in markdown section headings.
  */
 export const STANDARD_LENS_IDS = Object.freeze([
@@ -400,9 +405,10 @@ export function parseGuidelines(markdown) {
     if (headingMatch) {
       const level = headingMatch[1].length;
       const headingText = headingMatch[2].trim();
+      const targetLens = extractTargetLensId(headingText);
 
-      // Top-level document title (# ...) is part of document preamble / global
-      if (level === 1) {
+      // Top-level document title (# ...) is part of document preamble / global ONLY if not a lens section
+      if (level === 1 && !targetLens) {
         if (currentSection) {
           currentSection.content = currentSection.lines.join('\n').trim();
           delete currentSection.lines;
@@ -442,8 +448,7 @@ export function parseGuidelines(markdown) {
         sections.push(currentSection);
       }
 
-      const targetLens = extractTargetLensId(headingText);
-      const isGlobal = !targetLens && isGlobalHeading(headingText);
+      const isGlobal = !targetLens;
 
       currentTargetLens = targetLens;
       currentLensLevel = targetLens ? level : 0;
@@ -510,7 +515,14 @@ export function parseGuidelines(markdown) {
  * @param {string} [options.lensName] - Optional display name for the lens
  * @returns {string} Formatted guidelines block
  */
-export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName, truncationWarning = null } = {}) {
+export function resolveGuidelinesForLens({
+  parsed,
+  lensId,
+  roleId,
+  lensName,
+  truncationWarning = null,
+  maxPromptBytes = MAX_PROMPT_GUIDELINES_BYTES,
+} = {}) {
   if (!parsed) return '';
 
   const parsedObj = typeof parsed === 'string' ? parseGuidelines(parsed) : parsed;
@@ -533,6 +545,17 @@ export function resolveGuidelinesForLens({ parsed, lensId, roleId, lensName, tru
 
   if (truncationWarning && !result.includes(truncationWarning)) {
     result = result ? `${result}\n\n${truncationWarning}` : truncationWarning;
+  }
+
+  // Budget capping to avoid context blowout across parallel specialist calls
+  if (typeof maxPromptBytes === 'number' && maxPromptBytes > 0 && Buffer.byteLength(result, 'utf8') > maxPromptBytes) {
+    const budgetWarning = `\n\n> ⚠️ [Guidelines truncated: prompt budget (${Math.round(maxPromptBytes / 1024)} KB) exceeded]`;
+    const buf = Buffer.from(result, 'utf8');
+    let sliced = buf.subarray(0, maxPromptBytes).toString('utf8');
+    if (sliced.endsWith('\uFFFD')) {
+      sliced = sliced.slice(0, -1);
+    }
+    result = sliced + budgetWarning;
   }
 
   return result;
@@ -617,16 +640,51 @@ export function loadGuidelines({ cwd = process.cwd(), config = null, guidelinesP
  * Creates a sanitized, public-safe guidelines summary object without local machine paths.
  *
  * @param {object|null} guidelines - Guidelines object from loadGuidelines
- * @returns {{ enabled: boolean, found: boolean, path: string|null, byteSize: number, truncated: boolean }|null}
+ * @returns {{ enabled: boolean, found: boolean, path: string|null, relativePath: string|null, byteSize: number, truncated: boolean }|null}
  */
 export function createGuidelinesSummary(guidelines) {
   if (!guidelines) return null;
+  const rel = guidelines.relativePath || (guidelines.path && !path.isAbsolute(guidelines.path) ? guidelines.path : null);
   return {
     enabled: guidelines.enabled !== false,
     found: Boolean(guidelines.found),
-    path: guidelines.relativePath || null,
+    path: rel,
     byteSize: guidelines.byteSize || 0,
     truncated: Boolean(guidelines.truncated),
   };
+}
+
+/**
+ * Centrally resolves and loads active repository review guidelines.
+ * Used by runReview (PR review) and runSelfReview (local self-review)
+ * to maintain consistent precedence, error handling, and summary shapes.
+ *
+ * @param {object} [options]
+ * @param {object|string|null} [options.repoGuidelines=null] - Pre-supplied guidelines object/string
+ * @param {string|null} [options.guidelinesPath=null] - Explicit path override
+ * @param {object|null} [options.config=null] - Loaded configuration
+ * @param {string} [options.cwd=process.cwd()] - Current working directory
+ * @returns {{ activeGuidelines: object|null, guidelinesSummary: object|null }}
+ */
+export function resolveActiveGuidelines({
+  repoGuidelines = null,
+  guidelinesPath = null,
+  config = null,
+  cwd = process.cwd(),
+} = {}) {
+  let activeGuidelines = repoGuidelines || null;
+  if (!activeGuidelines) {
+    try {
+      activeGuidelines = loadGuidelines({
+        cwd,
+        config,
+        guidelinesPath: guidelinesPath || config?.guidelines?.path,
+      });
+    } catch {
+      activeGuidelines = null;
+    }
+  }
+  const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+  return { activeGuidelines, guidelinesSummary };
 }
 

@@ -207,6 +207,27 @@ export function readOptionValue(args, index, optionName) {
 }
 
 /**
+ * Parses a string CLI option supporting both `--flag=value` and `--flag value` forms.
+ *
+ * @param {string[]} args - Argument list
+ * @param {number} index - Current argument index
+ * @param {string} flag - Flag name (e.g. '--guidelines')
+ * @returns {{ matched: boolean, value?: string, nextIndex?: number }}
+ */
+export function parseStringOption(args, index, flag) {
+  const arg = args[index];
+  const prefix = `${flag}=`;
+  if (typeof arg === 'string' && arg.startsWith(prefix)) {
+    return { matched: true, value: arg.slice(prefix.length), nextIndex: index };
+  }
+  if (arg === flag) {
+    const { value, nextIndex } = readOptionValue(args, index, flag);
+    return { matched: true, value, nextIndex };
+  }
+  return { matched: false };
+}
+
+/**
  * Standardized direct execution runner. If invoked directly, executes mainFn,
  * traps unhandled rejections, prints formatted error, and terminates with code 1.
  *

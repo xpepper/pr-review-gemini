@@ -18,7 +18,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
-import { loadGuidelines, createGuidelinesSummary } from './guidelines.js';
+import { loadGuidelines, createGuidelinesSummary, resolveActiveGuidelines } from './guidelines.js';
 import {
   resolveLensPlan,
   dispatchSubagentsParallel,
@@ -159,8 +159,9 @@ Self-review failed closed due to execution errors during specialist subagent ana
   const countSummary = `${counts.P0} P0, ${counts.P1} P1, ${counts.P2} P2, ${counts.P3} P3, ${counts.nit} nit`;
   const blockingCount = blockingFindings.length;
   let guidelinesLine = '';
-  if (guidelines?.found) {
-    guidelinesLine = `\n- **Repository Guidelines**: \`${guidelines.relativePath}\`${guidelines.truncated ? ' ⚠️ (truncated)' : ''}`;
+  const gPath = guidelines?.relativePath || guidelines?.path;
+  if (guidelines?.found && gPath) {
+    guidelinesLine = `\n- **Repository Guidelines**: \`${gPath}\`${guidelines.truncated ? ' ⚠️ (truncated)' : ''}`;
   }
 
   if (isPass) {
@@ -244,20 +245,12 @@ export async function runSelfReview(options = {}) {
   const resolvedConfig = options.config || loadConfig({ cwd });
 
   // Load repository review guidelines
-  let activeGuidelines = options.repoGuidelines || null;
-  if (!activeGuidelines) {
-    try {
-      activeGuidelines = loadGuidelines({
-        cwd,
-        config: resolvedConfig,
-        guidelinesPath: options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path,
-      });
-    } catch {
-      activeGuidelines = null;
-    }
-  }
-
-  const guidelinesSummary = createGuidelinesSummary(activeGuidelines);
+  const { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
+    repoGuidelines: options.repoGuidelines,
+    guidelinesPath: options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path,
+    config: resolvedConfig,
+    cwd,
+  });
 
   // 1. Acquire diff
   let diffText = options.diffText;

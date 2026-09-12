@@ -28,6 +28,7 @@ import {
   atomicWriteFile,
   hasActiveFailClosedHookCommandInLines,
   readOptionValue,
+  parseStringOption,
   PRE_COMMIT_HOOK_MARKER,
   PRE_COMMIT_HOOK_END_MARKER,
   PRE_COMMIT_HOOK_MANAGED_FILE_MARKER,
@@ -1485,6 +1486,21 @@ echo "prior test"
 
       assert.throws(() => readOptionValue(['--mode'], 0, '--mode'), /Option --mode requires an argument value/);
       assert.throws(() => readOptionValue(['--mode', '--other'], 0, '--mode'), /Option --mode requires an argument value/);
+    });
+
+    it('parseStringOption parses both --flag=value and --flag value forms', () => {
+      const inlineRes = parseStringOption(['--guidelines=rules.md'], 0, '--guidelines');
+      assert.equal(inlineRes.matched, true);
+      assert.equal(inlineRes.value, 'rules.md');
+      assert.equal(inlineRes.nextIndex, 0);
+
+      const splitRes = parseStringOption(['--guidelines', 'rules.md'], 0, '--guidelines');
+      assert.equal(splitRes.matched, true);
+      assert.equal(splitRes.value, 'rules.md');
+      assert.equal(splitRes.nextIndex, 1);
+
+      const unmatched = parseStringOption(['--other', 'rules.md'], 0, '--guidelines');
+      assert.equal(unmatched.matched, false);
     });
   });
 

@@ -455,6 +455,27 @@ index aaaaaaa..bbbbbbb 100644
       assert.ok(summary.includes('- ✅ Database Migrations (`database_migrations`)'));
       assert.ok(summary.includes('- ✅ Api Backwards Compat (`api_backwards_compat`)'));
     });
+
+    it('renders repository guidelines correctly when passed public summary shape with path instead of relativePath', () => {
+      const summary = formatSelfReviewSummary({
+        verdict: 'PASS',
+        status: 'passed',
+        findings: [],
+        counts: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 },
+        mode: 'balanced',
+        lenses: ['correctness'],
+        guidelines: {
+          enabled: true,
+          found: true,
+          path: '.github/gem-pr-review.md',
+          byteSize: 1024,
+          truncated: false,
+        },
+      });
+
+      assert.ok(summary.includes('- **Repository Guidelines**: `.github/gem-pr-review.md`'));
+      assert.doesNotMatch(summary, /undefined/);
+    });
   });
 
 

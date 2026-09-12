@@ -20,7 +20,7 @@ import {
   runSelfReview,
 } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
-import { handleCommonFlags, runIfDirect, readOptionValue } from '../src/cli.js';
+import { handleCommonFlags, runIfDirect, readOptionValue, parseStringOption } from '../src/cli.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -132,12 +132,10 @@ export function parseCliArgs(args) {
       const { value, nextIndex } = readOptionValue(args, i, '--repo');
       repo = value;
       i = nextIndex;
-    } else if (arg.startsWith('--guidelines=')) {
-      guidelinesPath = arg.slice('--guidelines='.length);
-    } else if (arg === '--guidelines') {
-      const { value, nextIndex } = readOptionValue(args, i, '--guidelines');
-      guidelinesPath = value;
-      i = nextIndex;
+    } else if (arg.startsWith('--guidelines=') || arg === '--guidelines') {
+      const opt = parseStringOption(args, i, '--guidelines');
+      guidelinesPath = opt.value;
+      i = opt.nextIndex;
     } else if (arg.startsWith('--model=')) {
       model = arg.slice('--model='.length);
     } else if (arg === '--model') {
