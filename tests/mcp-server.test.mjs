@@ -585,6 +585,8 @@ index 1111111..2222222 100644
       assert.equal(parsed.found, true);
       assert.equal(parsed.relativePath, '.github/gem-pr-review.md');
       assert.equal(parsed.byteSize, 128);
+      assert.equal(parsed.untrusted, true);
+      assert.match(parsed.notice, /UNTRUSTED_REPOSITORY_CONTENT/);
     });
 
     it('passes guidelinesPath to runReviewFn and runSelfReviewFn in MCP handlers (Increment 19)', async () => {

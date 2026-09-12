@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { ABSOLUTE_MAX_GUIDELINES_BYTES } from './guidelines.js';
 
 /**
  * Valid model tier names.
@@ -277,7 +278,10 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
       }
       const rawMaxBytes = src.guidelines.max_bytes ?? src.guidelines.maxBytes;
       if (typeof rawMaxBytes === 'number' && Number.isFinite(rawMaxBytes) && rawMaxBytes > 0) {
-        resolved.guidelines.max_bytes = Math.floor(rawMaxBytes);
+        resolved.guidelines.max_bytes = Math.min(
+          Math.floor(rawMaxBytes),
+          ABSOLUTE_MAX_GUIDELINES_BYTES
+        );
       }
     }
 

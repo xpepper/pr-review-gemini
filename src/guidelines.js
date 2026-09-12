@@ -15,6 +15,11 @@ export const DEFAULT_GUIDELINE_FILENAMES = Object.freeze([
 export const MAX_GUIDELINES_BYTES = 64 * 1024;
 
 /**
+ * Hard ceiling on guidelines file size (512 KB) to prevent unbounded memory allocation.
+ */
+export const ABSOLUTE_MAX_GUIDELINES_BYTES = 512 * 1024;
+
+/**
  * Standard review lens IDs recognized directly in markdown section headings.
  */
 export const STANDARD_LENS_IDS = Object.freeze([
@@ -25,6 +30,42 @@ export const STANDARD_LENS_IDS = Object.freeze([
   'conventions',
   'tests',
 ]);
+
+const DISALLOWED_SENSITIVE_PATTERNS = [
+  /^\.env/i,
+  /\.git([\\/]|$)/i,
+  /(^|[\\/])\.(?!github([\\/]|$))[a-z0-9_-]+/i, // hidden folders/files except .github
+  /(id_rsa|id_ed25519|id_dsa|id_ecdsa)/i,
+  /\.(pem|key|p12|pfx|crt)$/i,
+  /(credential|secret|token|password)/i,
+];
+
+const ALLOWED_GUIDELINES_EXTENSIONS = Object.freeze(['.md', '.markdown', '.txt', '']);
+
+/**
+ * Validates that a candidate guidelines path does not target sensitive workspace files,
+ * hidden credential directories, or unauthorized file extensions.
+ *
+ * @param {string} filePath - Path to check
+ * @returns {boolean} True if path is safe to load as review guidelines
+ */
+export function isSafeGuidelinesPath(filePath) {
+  if (typeof filePath !== 'string' || filePath.trim().length === 0) return false;
+  const normalized = filePath.replace(/\\/g, '/').trim();
+
+  for (const pattern of DISALLOWED_SENSITIVE_PATTERNS) {
+    if (pattern.test(normalized)) {
+      return false;
+    }
+  }
+
+  const ext = path.extname(normalized).toLowerCase();
+  if (ext && !ALLOWED_GUIDELINES_EXTENSIONS.includes(ext)) {
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Verifies that a target file path resides strictly within a root directory,
@@ -56,7 +97,9 @@ export function isConfinedWithinRoot(filePath, rootDir) {
 export function sanitizeGuidelinesForPrompt(text) {
   if (typeof text !== 'string') return '';
   return text
-    .replace(/<\/untrusted_repository_guidelines>/gi, '&lt;/untrusted_repository_guidelines&gt;')
+    .replace(/<\s*\/?\s*untrusted_repository_guidelines[^>]*>/gi, (match) =>
+      match.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    )
     .replace(/<<<\s*PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_PR_REVIEW_JSON]')
     .replace(/<<<\s*END_PR_REVIEW_JSON\s*>>>/gi, '[ESCAPED_END_PR_REVIEW_JSON]');
 }
@@ -72,6 +115,9 @@ export function sanitizeGuidelinesForPrompt(text) {
 export function discoverGuidelinesFile({ cwd = process.cwd(), customPath = null } = {}) {
   if (typeof customPath === 'string' && customPath.trim().length > 0) {
     const trimmed = customPath.trim();
+    if (!isSafeGuidelinesPath(trimmed)) {
+      return null;
+    }
     const candidate = path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
     const rel = path.relative(cwd, candidate);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
@@ -149,9 +195,7 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
-  const target = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
-
-  if (!isConfinedWithinRoot(target, cwd)) {
+  if (typeof filePath === 'string' && !isSafeGuidelinesPath(filePath)) {
     return {
       content: '',
       rawContent: '',
@@ -163,10 +207,50 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
     };
   }
 
-  const relativePath = sanitizeRelativePath(target, cwd);
+  const target = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
 
+  let realCwd;
+  let realTarget;
   try {
-    const stat = fs.statSync(target);
+    realCwd = fs.realpathSync(cwd);
+    realTarget = fs.realpathSync(target);
+  } catch {
+    return {
+      content: '',
+      rawContent: '',
+      byteSize: 0,
+      truncated: false,
+      path: null,
+      relativePath: null,
+      found: false,
+    };
+  }
+
+  const realRel = path.relative(realCwd, realTarget);
+  if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
+    return {
+      content: '',
+      rawContent: '',
+      byteSize: 0,
+      truncated: false,
+      path: null,
+      relativePath: null,
+      found: false,
+    };
+  }
+
+  const relativePath = sanitizeRelativePath(realTarget, realCwd);
+
+  const effectiveMaxBytes = Math.min(
+    Math.max(1, Number(maxBytes) || MAX_GUIDELINES_BYTES),
+    ABSOLUTE_MAX_GUIDELINES_BYTES
+  );
+
+  let fd;
+  try {
+    // Open the fully resolved target directly, preventing symlink swap races
+    fd = fs.openSync(realTarget, 'r');
+    const stat = fs.fstatSync(fd);
     if (!stat.isFile()) {
       return {
         content: '',
@@ -181,21 +265,14 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
 
     const fileSize = stat.size;
 
-    if (fileSize > maxBytes) {
-      // Read ONLY up to maxBytes to avoid reading multi-MB files into memory
-      const fd = fs.openSync(target, 'r');
-      const buf = Buffer.alloc(maxBytes);
-      let slice = '';
-      try {
-        const bytesRead = fs.readSync(fd, buf, 0, maxBytes, 0);
-        slice = buf.subarray(0, bytesRead).toString('utf8');
-        if (slice.endsWith('\uFFFD')) {
-          slice = slice.slice(0, -1);
-        }
-      } finally {
-        fs.closeSync(fd);
+    if (fileSize > effectiveMaxBytes) {
+      const buf = Buffer.alloc(effectiveMaxBytes);
+      const bytesRead = fs.readSync(fd, buf, 0, effectiveMaxBytes, 0);
+      let slice = buf.subarray(0, bytesRead).toString('utf8');
+      if (slice.endsWith('\uFFFD')) {
+        slice = slice.slice(0, -1);
       }
-      const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${maxBytes} bytes]`;
+      const warning = `\n\n> ⚠️ [Guidelines truncated: file size (${fileSize} bytes) exceeded maximum allowed limit of ${effectiveMaxBytes} bytes]`;
       return {
         content: slice + warning,
         rawContent: slice,
@@ -207,12 +284,13 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       };
     }
 
-    const rawContent = fs.readFileSync(target, 'utf8');
-    const byteSize = Buffer.byteLength(rawContent, 'utf8');
+    const buf = Buffer.alloc(fileSize);
+    const bytesRead = fs.readSync(fd, buf, 0, fileSize, 0);
+    const rawContent = buf.subarray(0, bytesRead).toString('utf8');
     return {
       content: rawContent,
       rawContent,
-      byteSize,
+      byteSize: fileSize,
       truncated: false,
       path: relativePath,
       relativePath,
@@ -228,6 +306,14 @@ export function readGuidelinesFile(filePath, { maxBytes = MAX_GUIDELINES_BYTES, 
       relativePath,
       found: false,
     };
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // ignore close error
+      }
+    }
   }
 }
 

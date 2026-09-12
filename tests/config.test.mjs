@@ -945,7 +945,7 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(config.guidelines.max_bytes, 48 * 1024);
     });
 
-    it('sanitizes invalid or malicious values', () => {
+    it('sanitizes invalid or malicious values and caps max_bytes to ABSOLUTE_MAX_GUIDELINES_BYTES', () => {
       const config = resolveConfig({
         overrides: {
           guidelines: {
@@ -959,6 +959,15 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(config.guidelines.enabled, true);
       assert.equal(config.guidelines.path, null);
       assert.equal(config.guidelines.max_bytes, 64 * 1024);
+
+      const cappedConfig = resolveConfig({
+        overrides: {
+          guidelines: {
+            max_bytes: 10 * 1024 * 1024,
+          },
+        },
+      });
+      assert.equal(cappedConfig.guidelines.max_bytes, 512 * 1024);
     });
   });
 });

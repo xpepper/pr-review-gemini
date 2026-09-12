@@ -97,8 +97,10 @@ import {
   createGuidelinesSummary,
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
+  isSafeGuidelinesPath,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
+  ABSOLUTE_MAX_GUIDELINES_BYTES,
 } from './guidelines.js';
 
 export {
@@ -168,8 +170,10 @@ export {
   createGuidelinesSummary,
   sanitizeGuidelinesForPrompt,
   isConfinedWithinRoot,
+  isSafeGuidelinesPath,
   DEFAULT_GUIDELINE_FILENAMES,
   MAX_GUIDELINES_BYTES,
+  ABSOLUTE_MAX_GUIDELINES_BYTES,
 };
 
 export const REVIEW_MODES = {
