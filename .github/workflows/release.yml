@@ -14,8 +14,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: 'Verify & Publish GitHub Release'
+  verify:
+    name: 'Verify Release Tag'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -43,6 +43,23 @@ jobs:
       - name: Run Test Suite
         run: npm test
 
+  publish:
+    name: 'Publish GitHub Release'
+    needs: verify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Generate Release Notes
         id: notes
         run: |
@@ -52,7 +69,7 @@ jobs:
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+          TAG_NAME: ${{ github.event.inputs.tag }}
         run: |
           gh release create "$TAG_NAME" \
             --title "Release $TAG_NAME" \
