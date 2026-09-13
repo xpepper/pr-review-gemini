@@ -53,6 +53,9 @@ outputs:
   verification_status:
     description: 'Detached worktree verification status (passed, failed, or none)'
     value: ${{ steps.review.outputs.verification_status }}
+  documentation_consistency_status:
+    description: 'Documentation consistency status (passed, failed, skipped, or not_applicable)'
+    value: ${{ steps.review.outputs.documentation_consistency_status }}
   summary:
     description: 'Markdown review summary'
     value: ${{ steps.review.outputs.summary }}

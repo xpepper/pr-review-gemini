@@ -766,6 +766,7 @@ export async function runReview({
   architecture = null,
   verbose = false,
   diagnostics: injectedCollector = null,
+  summaryAddendum = '',
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -1112,6 +1113,9 @@ export async function runReview({
         if (threadResult.evaluation && threadResult.evaluation.threads.length > 0) {
           summary += '\n\n' + formatThreadResolutionSummary(threadResult.evaluation);
         }
+        if (summaryAddendum) {
+          summary += `\n${summaryAddendum}`;
+        }
 
         collector.recordSafetyDecisions({
           staleHeadPassed: Boolean(currentHeadSha),
@@ -1331,6 +1335,10 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
 
     if (threadEvaluation && threadEvaluation.threads.length > 0) {
       summary += '\n\n' + formatThreadResolutionSummary(threadEvaluation);
+    }
+
+    if (summaryAddendum) {
+      summary += `\n${summaryAddendum}`;
     }
 
     let architectureResult = null;

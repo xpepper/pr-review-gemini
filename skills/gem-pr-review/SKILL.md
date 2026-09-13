@@ -534,6 +534,7 @@ Specialist subagent review passes and local self-review passes format findings i
 | `verdict` | Overall review verdict based on quality gate (`PASS` or `FAIL`) | `PASS` |
 | `findings_count` | Total number of findings detected across all specialist review lenses | `3` |
 | `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
+| `documentation_consistency_status` | Documentation check status (`passed`, `failed`, `skipped`, or `not_applicable`) | `passed` |
 | `summary` | Complete markdown review summary | `## PR Review Summary...` |
 
 ### 2. Event Payload & Synchronize Auto-Detection
@@ -547,8 +548,16 @@ Teams can use `gem-pr-review` as an automated branch protection check:
 - Setting `fail_on: P0` blocks only on critical security flaws or severe data corruption issues.
 - Setting `fail_on: none` (default) allows reviews to publish findings as comments without failing the build.
 
+### Documentation Consistency Check
+When a PR changes `README.md`, `docs/`, or `.github/workflows/`, the Action
+selects the allowlisted `tests/skills.test.mjs` check. A failing selected check
+fails CI and is included in the review summary. The Action skips it, with an
+explicit status, for cross-repository PRs and when that test file is modified;
+it never executes untrusted fork code or a PR-modified selected test.
+
 ### 4. Reusable Starter Workflow
-A complete starter workflow template is provided at [`.github/workflows/gem-pr-review.yml`](.github/workflows/gem-pr-review.yml):
+A complete starter workflow template is provided at
+[`gem-pr-review.yml`](../../.github/workflows/gem-pr-review.yml):
 
 ```yaml
 name: 'Gem PR Review'
@@ -690,7 +699,9 @@ npm run release
 ```
 
 ### 4. Release Automation Workflow
-The GitHub Actions workflow at [`.github/workflows/release.yml`](.github/workflows/release.yml) triggers automatically on `v*` tag pushes:
+The GitHub Actions workflow at
+[`release.yml`](../../.github/workflows/release.yml) triggers automatically on
+`v*` tag pushes:
 1. Verifies manifest synchronization (`node scripts/bump-version.mjs --check`).
 2. Runs the full test suite (`npm test`).
 3. Generates release changelog notes from conventional commits.
@@ -852,8 +863,6 @@ Inspect and format review diagnostics programmatically via MCP:
     - `format` (optional string, `'markdown'` | `'json'`, default: `'markdown'`): Formatted report or JSON string.
     - `cacheDir` (optional string): Custom session cache directory.
   - Also, `gem_pr_review_subagents` and `gem_self_review` accept `verbose: true` to attach diagnostics to the result summary and payload.
-
-
 
 
 

@@ -218,9 +218,14 @@ is live in the Code quality and Continuous integration categories.
    evidence-based format in [`dogfooding-feedback.md`](dogfooding-feedback.md) for
    every real review. Treat model findings as hypotheses until checked against the
    diff and repository context.
-3. **Evidence-led reviewer polish — next.** Address only high-confidence,
-   reproducible quality, clarity, latency, cost, CI/authentication, or
-   documentation issues revealed by real reviews.
+3. **Evidence-led reviewer polish — now.** PR #46 established a reproducible
+   documentation-contract false negative: the balanced reviewer did not run the
+   unchanged test that still required moved README content. The targeted
+   documentation consistency check now selects that allowlisted test for
+   documentation-impact PRs, skips fork or PR-modified tests, and blocks on a
+   selected failure. Continue to address only high-confidence, reproducible
+   quality, clarity, latency, cost, CI/authentication, or documentation issues
+   revealed by real reviews.
 4. **Larger capabilities — later.** Keep SARIF 2.1.0 export deferred until
    feedback demonstrates a concrete need.
 

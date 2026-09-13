@@ -51,6 +51,44 @@ State the planned response, if any.
 
 ### PR / context
 
+- **PR:** [#46](https://github.com/xpepper/pr-review-gemini/pull/46), which
+  moved the README from an exhaustive reference to focused documentation pages.
+- **Review:** `gem-pr-review v0.3.3` in balanced mode published no findings.
+  Independent Claude and Codex reviews and a local `npm test` run were checked
+  against the branch; Codex identified stale README-specific test assertions.
+
+### What Gem PR Review did
+
+It completed multiple zero-finding reviews of the documentation diff. Its
+default balanced mode did not run the Test Quality lens or execute the test
+suite.
+
+### What was useful
+
+The host-gated review safely published no unsupported inline findings. The
+final review after documentation fixes also had zero findings.
+
+### What was incorrect, missing, noisy, or confusing
+
+The no-finding result missed a reproducible cross-artifact regression:
+unchanged `tests/skills.test.mjs` still required details intentionally moved out
+of the README, causing `npm test` to fail. The failure was validated locally and
+the test was updated to check the focused documentation pages.
+
+### Recommended follow-up
+
+Implemented a targeted documentation consistency check for documentation-impact
+PRs. It selects an allowlisted test, runs only for same-repository PRs when
+that test is unchanged, reports its decision, and fails CI when the selected
+test fails.
+
+**Priority:** now
+
+**Evidence:** [PR #46](https://github.com/xpepper/pr-review-gemini/pull/46) and
+the reproducible stale-test failure before its focused assertion update.
+
+### PR / context
+
 - **PR:** [#44](https://github.com/xpepper/pr-review-gemini/pull/44), which
   separated tag-push verification from explicit GitHub Release publication.
 - **Review:** published on [PR #44](https://github.com/xpepper/pr-review-gemini/pull/44)

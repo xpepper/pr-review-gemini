@@ -22,8 +22,14 @@ import {
   runResolveCommand,
 } from '../src/ci.js';
 import { runReview } from '../src/reviewer.js';
+import { getPrDiff } from '../src/diff.js';
+import {
+  selectDocumentationConsistencyCheck,
+  formatDocumentationConsistencySummary,
+} from '../src/documentation-consistency.js';
 import {
   runVerification,
+  executeSupervisedCommand,
   listVerificationProfiles,
   resolveVerificationProfile,
   validateCiVerificationCommand,
@@ -284,11 +290,63 @@ export async function runCiAction(options = {}, env = process.env, io = console)
   const isPublish = ciEnv.action === 'publish';
 
   try {
+    const diffText = options.diffText || (isMock
+      ? MOCK_DIFF
+      : await getPrDiff({ prNumber: ciEnv.prNumber, repo: ciEnv.repo, execGhFn, cwd }));
+    let documentationConsistency = selectDocumentationConsistencyCheck(diffText);
+
+    if (documentationConsistency.status === 'selected') {
+      try {
+        const metadata = JSON.parse(await execGhFn(
+          ['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'],
+          { cwd }
+        ));
+        if (metadata.isCrossRepository !== false) {
+          documentationConsistency = {
+            ...documentationConsistency,
+            status: 'skipped',
+            reason: metadata.isCrossRepository === true ? 'untrusted_fork' : 'origin_unverified',
+          };
+        }
+      } catch {
+        documentationConsistency = {
+          ...documentationConsistency,
+          status: 'skipped',
+          reason: 'origin_unverified',
+        };
+      }
+    }
+
+    if (documentationConsistency.status === 'selected') {
+      const executeDocumentationConsistency =
+        options.executeDocumentationConsistency ||
+        (() => executeSupervisedCommand({
+          command: process.execPath,
+          args: ['--test', documentationConsistency.testFile],
+          cwd,
+          timeoutMs: 60000,
+        }));
+      try {
+        const execution = await executeDocumentationConsistency(documentationConsistency);
+        documentationConsistency = {
+          ...documentationConsistency,
+          status: execution.status === 'passed' ? 'passed' : 'failed',
+        };
+      } catch {
+        documentationConsistency = {
+          ...documentationConsistency,
+          status: 'failed',
+        };
+      }
+    }
+
+    const documentationConsistencySummary =
+      formatDocumentationConsistencySummary(documentationConsistency);
     const reviewResult = await runReview({
       prNumber: ciEnv.prNumber,
       mode: ciEnv.mode,
       repo: ciEnv.repo,
-      diffText: options.diffText || (isMock ? MOCK_DIFF : undefined),
+      diffText,
       runnerFn,
       execGhFn,
       cwd,
@@ -300,6 +358,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       replaceStandardRoles: ciEnv.replaceStandardRoles,
       guidelinesPath: ciEnv.guidelinesPath,
       verbose: ciEnv.verbose,
+      summaryAddendum: documentationConsistencySummary,
     });
 
     let verificationResult = null;
@@ -449,7 +508,8 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     });
 
     const verificationPassed = isVerificationPassed(verificationResult);
-    const overallSuccess = qualityGate.passed && verificationPassed;
+    const documentationConsistencyPassed = documentationConsistency.status !== 'failed';
+    const overallSuccess = qualityGate.passed && verificationPassed && documentationConsistencyPassed;
 
     // Write GitHub Action Step outputs
     writeGitHubStepOutputs(
@@ -458,6 +518,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         findings_count: String(qualityGate.totalFindings),
         blocking_count: String(qualityGate.blockingCount),
         verification_status: verificationResult ? verificationResult.status : 'none',
+        documentation_consistency_status: documentationConsistency.status,
         summary: reviewResult.summary || '',
         diagnostics: JSON.stringify(reviewResult.diagnostics || {}),
       },
@@ -471,6 +532,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         qualityGateResult: qualityGate,
         ciEnv,
         verificationResult,
+        documentationConsistency,
       });
       try {
         fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${ciSummary}\n`, 'utf8');
@@ -512,11 +574,15 @@ export async function runCiAction(options = {}, env = process.env, io = console)
           `❌ Detached verification failed (${verificationResult?.profile || 'test'}): ${verificationResult?.error || verificationResult?.output || 'failed'}`
         );
       }
+      if (!documentationConsistencyPassed) {
+        io.error('❌ Documentation consistency check failed.');
+      }
       return {
         exitCode: 1,
         qualityGate,
         reviewResult,
         verificationResult,
+        documentationConsistency,
         ciEnv,
       };
     }
@@ -527,6 +593,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       qualityGate,
       reviewResult,
       verificationResult,
+      documentationConsistency,
       ciEnv,
     };
   } catch (err) {
@@ -542,6 +609,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         findings_count: '0',
         blocking_count: '1',
         verification_status: 'none',
+        documentation_consistency_status: 'not_run',
         summary: errorMsg,
       },
       { outputFile: env.GITHUB_OUTPUT }
@@ -559,4 +627,3 @@ export async function main() {
 }
 
 runIfDirect(import.meta.url, main);
-

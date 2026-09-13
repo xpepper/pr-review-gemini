@@ -83,8 +83,20 @@ unless the commenter is explicitly allowlisted.
 | `findings_count` | Total findings across all review lenses. |
 | `blocking_count` | Findings meeting or exceeding `fail_on`. |
 | `verification_status` | Detached-worktree verification status: `passed`, `failed`, or `none`. |
+| `documentation_consistency_status` | Documentation check status: `passed`, `failed`, `skipped`, or `not_applicable`. |
 | `summary` | Markdown review summary. |
 | `diagnostics` | Sanitized execution-telemetry JSON. |
+
+## Documentation consistency check
+
+When a PR changes `README.md`, `docs/`, or `.github/workflows/`, the Action
+selects the allowlisted `tests/skills.test.mjs` check. A failed selected check
+fails the Action and is reported in the review summary and
+`documentation_consistency_status` output.
+
+The Action runs this check only for same-repository PRs and only when the
+selected test file is unchanged. It reports a skip rather than executing
+untrusted fork code or a test modified by the PR.
 
 ## Incremental reviews and quality gates
 

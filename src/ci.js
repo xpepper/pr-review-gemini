@@ -399,14 +399,24 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @param {object} params.qualityGateResult
  * @param {object} params.ciEnv
  * @param {object} [params.verificationResult]
+ * @param {object} [params.documentationConsistency]
  * @returns {string}
  */
-export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verificationResult = null }) {
+export function formatCiSummary({
+  reviewResult,
+  qualityGateResult,
+  ciEnv,
+  verificationResult = null,
+  documentationConsistency = null,
+}) {
   const vPassed = isVerificationPassed(verificationResult);
-  const isPass = qualityGateResult.passed && vPassed;
+  const documentationConsistencyPassed = documentationConsistency?.status !== 'failed';
+  const isPass = qualityGateResult.passed && vPassed && documentationConsistencyPassed;
   let banner;
   if (isPass) {
     banner = '✅ AI Code Review Passed';
+  } else if (!documentationConsistencyPassed && qualityGateResult.passed && vPassed) {
+    banner = '❌ Documentation Consistency Check Failed';
   } else if (!qualityGateResult.passed && !vPassed) {
     banner = '❌ AI Code Review and Verification Failed';
   } else if (!vPassed) {
@@ -417,7 +427,7 @@ export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verifi
   const lines = [];
 
   lines.push(`## ${banner}\n`);
-  lines.push(`- **Verdict**: \`${qualityGateResult.verdict}\``);
+  lines.push(`- **Verdict**: \`${isPass ? qualityGateResult.verdict : 'FAIL'}\``);
   lines.push(`- **Mode**: \`${ciEnv.mode}\`${ciEnv.incremental ? ' *(incremental re-review)*' : ''}`);
   lines.push(`- **Findings Detected**: ${qualityGateResult.totalFindings}`);
   lines.push(`- **Blocking Defects**: ${qualityGateResult.blockingCount} *(Threshold: ${ciEnv.failOn})*`);
@@ -425,6 +435,9 @@ export function formatCiSummary({ reviewResult, qualityGateResult, ciEnv, verifi
   if (verificationResult) {
     const vStatus = verificationResult.status === 'passed' ? '`PASSED`' : '`FAILED`';
     lines.push(`- **Detached Verification (${verificationResult.profile || 'test'})**: ${vStatus}`);
+  }
+  if (documentationConsistency) {
+    lines.push(`- **Documentation Consistency Check**: \`${documentationConsistency.status.toUpperCase()}\``);
   }
   lines.push('');
 
@@ -1085,5 +1098,4 @@ export async function runResolveCommand({
     resolvedThreads: resolution.resolvedThreads,
   };
 }
-
 

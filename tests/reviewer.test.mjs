@@ -563,12 +563,14 @@ index 1111111..2222222 100644
         execGhFn: mockExecGh,
         execGitFn: mockGit,
         runnerFn: mockRunner,
+        summaryAddendum: '- **Documentation Consistency Check**: `PASSED` `tests/skills.test.mjs`',
       });
 
       assert.equal(result.relationship, 'incremental');
       assert.ok(result.revalidation);
       assert.equal(result.revalidation.counts.resolved, 1);
       assert.ok(result.summary.includes('Prior Findings Revalidation'));
+      assert.match(result.summary, /Documentation Consistency Check.*PASSED/i);
     });
 
     it('detects diff > 200 KB in runReview, activates file-backed transport and cleans up', async () => {
@@ -2388,5 +2390,4 @@ index 1111111..2222222 100644
     });
   });
 });
-
 
