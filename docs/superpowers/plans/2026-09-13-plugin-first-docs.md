@@ -2,19 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the README lead with the tool's Agent Plugins 1.0 plugin identity (with the GitHub Action as an equal, complementary shape), add a deep plugin reference, and ship a verified Copilot CLI marketplace entry.
+**Goal:** Make the README lead with the tool's Agent Plugins 1.0 plugin identity (with the GitHub Action as an equal, complementary shape), add a deep plugin reference, and publish a verified Copilot CLI marketplace entry in `xpepper/copilot-plugins`.
 
-**Architecture:** Docs-only restructure gated by the existing docs-consistency tests (`tests/skills.test.mjs`), plus one small code extension: `.github/plugin/marketplace.json` joins the version-synchronized manifest set (`src/version.js`, `src/semver.js`). Spec: `docs/superpowers/specs/2026-09-13-plugin-first-docs-design.md`.
+**Architecture:** Docs-only restructure in this repository, gated by the existing docs-consistency tests (`tests/skills.test.mjs`). The marketplace entry lives in its own repository (`xpepper/copilot-plugins`) and points back at this repo via the cross-repo source form used by GitHub's reference marketplace — no `src/` or `scripts/` changes here. Spec: `docs/superpowers/specs/2026-09-13-plugin-first-docs-design.md`.
 
-**Tech Stack:** Node.js >= 20 (ES Modules), `node --test`, Markdown docs, JSON manifests.
+**Tech Stack:** Node.js >= 20 (ES Modules), `node --test`, Markdown docs, JSON manifests, `copilot` CLI, `gh`.
 
 ## Global Constraints
 
 - Run tests with `npm test`; single file: `node --test tests/skills.test.mjs`.
-- Never include local machine paths (e.g. `/Users/...`) in documentation, test fixtures, or code. `~/.copilot/gem-pr-review.json` (tilde form) is allowed.
+- Never include local machine paths (e.g. `/Users/...`) in documentation, test fixtures, or code. `~/.copilot/gem-pr-review.json` (tilde form) is allowed. Scratch/experiment directories used only in the terminal are fine.
 - README must keep the literal link text `(docs/cli.md)` (asserted by `tests/skills.test.mjs:179`).
 - Current version is `0.3.3` everywhere; Action examples pin `xpepper/pr-review-gemini@v0.3.3`. Do not bump versions in this increment.
 - Conventional commits on branch `docs/plugin-first-docs` (already checked out).
+- The marketplace repository is `xpepper/copilot-plugins`; the marketplace's `name` field is `xpepper-copilot-plugins` (avoiding collision with GitHub's official `copilot-plugins` marketplace name). It does not exist yet and is created in Task 5.
+- No code changes in this repository (`src/`, `scripts/` untouched).
 - Portability wording (settled with owner): packaging is harness-agnostic per Agent Plugins 1.0; the engine's specialist lenses run on the Copilot CLI runtime; verified harness is GitHub Copilot CLI. Never claim "runs anywhere" unqualified.
 - The repo's pre-commit hook runs the self-review engine on every commit; expect review output in commit logs and read it before assuming success.
 
@@ -27,7 +29,7 @@
 
 **Interfaces:**
 - Consumes: existing `describe` block and `path.resolve` consts at `tests/skills.test.mjs:6-10`.
-- Produces: new const `pluginReferencePath` and three new `it(...)` blocks that Tasks 2-3 and 7 make pass.
+- Produces: new const `pluginReferencePath` and three new `it(...)` blocks that Tasks 2-3 and 6 make pass.
 
 - [ ] **Step 1: Add the const and test cases**
 
@@ -80,7 +82,7 @@ git commit -m "test: add docs-consistency checks for plugin-first structure"
 
 **Interfaces:**
 - Consumes: Task 1's assertions (they define the required strings).
-- Produces: the plugin deep-dive referenced by README (Task 3) and extended by Task 7.
+- Produces: the plugin deep-dive referenced by README (Task 3) and extended by Task 6.
 
 - [ ] **Step 1: Write the file with exactly this content**
 
@@ -413,28 +415,31 @@ git commit -m "docs: align install order with plugin-first structure"
 
 ---
 
-### Task 5: Marketplace entry — experiment and file
+### Task 5: Marketplace — root-path experiment, then create `xpepper/copilot-plugins`
 
 **Files:**
-- Create: `.github/plugin/marketplace.json`
+- Create (outside this repo): scratch experiment dir, then the `xpepper/copilot-plugins` repository
+- Nothing is committed to THIS repository in this task.
 
 **Interfaces:**
-- Consumes: nothing from earlier tasks.
-- Produces: `marketplace.json` whose `plugins[0].version` Task 6 syncs; verified install commands Task 7 documents.
+- Consumes: the published `main` of `xpepper/pr-review-gemini` (its root `plugin.json`, unchanged by this branch).
+- Produces: the live marketplace `xpepper/copilot-plugins` listing `gem-pr-review` via cross-repo source; verified commands that Task 6 documents.
 
-**Decision gate:** this task resolves the spec's open question (does `source` accept the repository root?). If the root source is rejected, STOP after Step 3, report findings, and do not proceed to Tasks 6-7 as written.
+**Decision gate:** resolves whether the object source's `path` accepts the repository root. If `"."`, `""`, and `"/"` are all rejected, STOP and report — restructuring this repo is out of scope and needs the owner's decision; Task 6 is then void.
 
-- [ ] **Step 1: Write the marketplace manifest**
+- [ ] **Step 1: Build the scratch marketplace and test root-path resolution**
+
+Create a scratch directory (terminal-only; never committed) containing `.github/plugin/marketplace.json`:
 
 ```json
 {
-  "name": "xpepper-pr-review-gemini",
+  "name": "xpepper-copilot-plugins-scratch",
   "owner": {
     "name": "Pietro Di Bello",
     "email": "pierodibello@gmail.com"
   },
   "metadata": {
-    "description": "Marketplace listing for the Gem PR Review Agent Plugins 1.0 plugin.",
+    "description": "Scratch verification of cross-repo root-path source resolution.",
     "version": "1.0.0"
   },
   "plugins": [
@@ -442,215 +447,77 @@ git commit -m "docs: align install order with plugin-first structure"
       "name": "gem-pr-review",
       "description": "Parallel, multi-lens AI code review for GitHub pull requests.",
       "version": "0.3.3",
-      "source": "."
+      "source": {
+        "source": "github",
+        "repo": "xpepper/pr-review-gemini",
+        "path": "."
+      }
     }
   ]
 }
 ```
 
-Note: `metadata.version` is the marketplace listing schema version (independent of plugin releases); `plugins[0].version` tracks the plugin and is the field Task 6 syncs.
-
-- [ ] **Step 2: Register the marketplace locally**
+Then:
 
 ```bash
-copilot plugin marketplace add "$(pwd)"
+copilot plugin marketplace add <scratch-dir>
 copilot plugin marketplace list
-```
-
-Expected: the marketplace `xpepper-pr-review-gemini` is listed. If `add` rejects a local path, retry with the repository's GitHub slug `xpepper/pr-review-gemini` (requires the branch to be pushed; if not pushed, STOP and report — the local-path failure needs a decision).
-
-- [ ] **Step 3: Install and verify the plugin resolves from the root source**
-
-```bash
 copilot plugin install gem-pr-review
 ```
 
-Then start `copilot` and confirm `/gem-pr-review` completes as a command. Expected: skill loads; the root `plugin.json` is found via `source: "."`.
+Start `copilot` and confirm `/gem-pr-review` completes as a command. Expected: the plugin resolves from the repository root.
 
-- If verification FAILS (root source rejected): run `copilot plugin marketplace remove xpepper-pr-review-gemini`, delete `.github/plugin/marketplace.json`, STOP, and report — restructuring the repo is out of scope and needs the owner's decision.
-- If verification PASSES: clean up the test install (`copilot plugin uninstall gem-pr-review` and `copilot plugin marketplace remove xpepper-pr-review-gemini`) so Task 7 documents a clean-slate flow.
+- If resolution FAILS with `path: "."`: retry the whole step with `path: ""`, then `path: "/"`.
+- If all three fail: `copilot plugin uninstall gem-pr-review` (if installed), `copilot plugin marketplace remove xpepper-copilot-plugins-scratch`, delete the scratch dir, STOP, and report.
+- On success, note which `path` value worked, uninstall, remove the scratch marketplace, and delete the scratch dir.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 2: Create the marketplace repository**
 
 ```bash
-git add .github/plugin/marketplace.json
-git commit -m "feat: add Copilot CLI plugin marketplace entry"
+gh repo create xpepper/copilot-plugins --public --description "Copilot CLI plugin marketplace for xpepper plugins" --clone
 ```
+
+In the cloned repo, create `.github/plugin/marketplace.json` (same content as the scratch file, with `name` changed to `xpepper-copilot-plugins` and the description `"Marketplace listing xpepper's Copilot CLI plugins."`, keeping the `path` value verified in Step 1), plus a minimal `README.md`:
+
+```markdown
+# xpepper/copilot-plugins
+
+Copilot CLI plugin marketplace. Register it and install plugins:
+
+    copilot plugin marketplace add xpepper/copilot-plugins
+    copilot plugin install gem-pr-review
+
+Plugin sources live in their own repositories; each entry's `source` field
+points at the plugin's repository and path.
+```
+
+Commit and push (in the marketplace clone, `main` branch):
+
+```bash
+git add README.md .github/plugin/marketplace.json
+git commit -m "feat: add gem-pr-review marketplace listing"
+git push -u origin main
+```
+
+- [ ] **Step 3: Verify end to end and leave it installed**
+
+```bash
+copilot plugin marketplace add xpepper/copilot-plugins
+copilot plugin install gem-pr-review
+```
+
+Start `copilot`, confirm `/gem-pr-review` completes. Leave the marketplace and plugin registered on this machine (the owner dogfoods this plugin daily). Record the verified `path` value in the task report for Task 6.
 
 ---
 
-### Task 6: Synchronize marketplace.json versions (TDD)
-
-**Files:**
-- Modify: `src/version.js:110-170` (`getManifestVersions`), `src/version.js:180-209` (`checkManifestSync`)
-- Modify: `src/semver.js:379-455` (`bumpManifestVersions`)
-- Test: `tests/version.test.mjs`, `tests/plugin-manifest.test.mjs`
-
-**Interfaces:**
-- Consumes: `.github/plugin/marketplace.json` from Task 5 (must exist; this task's code treats it as required).
-- Produces: `getManifestVersions` returns `{ packageJson, pluginJson, mcpJson, skillMd, marketplaceJson }`; `checkManifestSync` validates `marketplaceJson`; `bumpManifestVersions` rewrites `plugins[0].version`.
-
-- [ ] **Step 1: Write the failing tests**
-
-In `tests/plugin-manifest.test.mjs`, inside the existing `describe`, add:
-
-```js
-  it('loads and validates the Copilot marketplace entry', () => {
-    const raw = fs.readFileSync('.github/plugin/marketplace.json', 'utf8');
-    const marketplace = JSON.parse(raw);
-
-    const plugin = JSON.parse(fs.readFileSync('plugin.json', 'utf8'));
-    const entry = marketplace.plugins[0];
-
-    assert.equal(marketplace.name, 'xpepper-pr-review-gemini');
-    assert.equal(entry.name, plugin.name);
-    assert.equal(entry.version, plugin.version);
-    assert.equal(entry.source, '.');
-  });
-```
-
-In `tests/version.test.mjs`:
-
-1. In the live-sync test (the block asserting `syncResult.versions.skillMd, VERSION`), add after it:
-
-```js
-      assert.equal(syncResult.versions.marketplaceJson, VERSION);
-```
-
-2. In the drift mock test, add `marketplaceJson: '0.1.0',` to the `mockVersions` object (after `skillMd: '0.1.0',`).
-
-3. Add a new unit test in the same `describe` as the drift test, using the existing temp-dir helpers from the file's imports (`fs`, `os`, `path`):
-
-```js
-    it('reads the marketplace plugin entry version', () => {
-      const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-pr-market-'));
-      try {
-        fs.mkdirSync(path.join(tmpRoot, '.github', 'plugin'), { recursive: true });
-        fs.writeFileSync(
-          path.join(tmpRoot, '.github', 'plugin', 'marketplace.json'),
-          JSON.stringify({
-            name: 'm',
-            owner: { name: 'o', email: 'e@example.com' },
-            metadata: { description: 'd', version: '1.0.0' },
-            plugins: [{ name: 'gem-pr-review', description: 'd', version: '9.9.9', source: '.' }],
-          })
-        );
-        const versions = getManifestVersions(tmpRoot);
-        assert.equal(versions.marketplaceJson, '9.9.9');
-      } finally {
-        fs.rmSync(tmpRoot, { recursive: true, force: true });
-      }
-    });
-```
-
-4. The three `bumpManifestVersions` fixture tests (`tests/version.test.mjs:360` "synchronizes and updates all 4 manifest files atomically", `:403` "supports dry-run without writing files", `:439` "rolls back modified files...") each build a 4-file temp fixture; the new code makes `.github/plugin/marketplace.json` required, so each fixture gains (right after the SKILL.md write):
-
-```js
-        fs.mkdirSync(path.join(tempDir, '.github', 'plugin'), { recursive: true });
-        fs.writeFileSync(
-          path.join(tempDir, '.github', 'plugin', 'marketplace.json'),
-          JSON.stringify({
-            name: 'm',
-            owner: { name: 'o', email: 'e@example.com' },
-            metadata: { description: 'd', version: '1.0.0' },
-            plugins: [{ name: 'gem-pr-review', description: 'd', version: '0.1.0', source: '.' }],
-          })
-        );
-```
-
-And the first test additionally gains, after the `updatedMcp` assertions (line 390) and before the skill assertion:
-
-```js
-        const updatedMarketplace = JSON.parse(
-          fs.readFileSync(path.join(tempDir, '.github', 'plugin', 'marketplace.json'), 'utf8')
-        );
-        assert.equal(updatedMarketplace.plugins[0].version, '0.2.0');
-        assert.equal(updatedMarketplace.metadata.version, '1.0.0');
-        assert.ok(result.updatedFiles.some((f) => f.endsWith('marketplace.json')));
-```
-
-Note: the rollback test's `customFs` still throws on `mcp.json`; with the marketplace write staged after `skillMd`, it is never reached, so the rollback semantics are unchanged.
-
-- [ ] **Step 2: Run to verify failure**
-
-Run: `node --test tests/version.test.mjs tests/plugin-manifest.test.mjs`
-Expected: FAIL — `marketplaceJson` undefined in sync results; live-sync drift on the real repo.
-
-- [ ] **Step 3: Implement**
-
-In `src/version.js` `getManifestVersions`: add `marketplaceJson: null` to the result object, and after the skillMd block (after line 167):
-
-```js
-  // 5. .github/plugin/marketplace.json (plugin entry version)
-  try {
-    const marketplacePath = path.join(rootDir, '.github', 'plugin', 'marketplace.json');
-    if (fs.existsSync(marketplacePath)) {
-      const data = JSON.parse(fs.readFileSync(marketplacePath, 'utf8'));
-      const entry = Array.isArray(data.plugins) ? data.plugins[0] : null;
-      result.marketplaceJson = (entry && entry.version) || null;
-    }
-  } catch {
-    result.marketplaceJson = null;
-  }
-```
-
-In `src/version.js` `checkManifestSync` (line 182):
-
-```js
-  const manifestNames = ['packageJson', 'pluginJson', 'mcpJson', 'skillMd', 'marketplaceJson'];
-```
-
-In `src/semver.js` `bumpManifestVersions`: add to the `files` map (after `skillMd`):
-
-```js
-    marketplaceJson: path.join(rootDir, '.github', 'plugin', 'marketplace.json'),
-```
-
-Add a fifth read/rewrite block after the skillMd block (after line 434):
-
-```js
-  // 5. .github/plugin/marketplace.json (plugin entry version)
-  const marketplaceContent = fsImpl.readFileSync(files.marketplaceJson, 'utf8');
-  const marketplaceData = JSON.parse(marketplaceContent);
-  if (!Array.isArray(marketplaceData.plugins) || !marketplaceData.plugins[0]) {
-    throw new Error(
-      `Cannot bump version: plugins[0] entry not found in ${files.marketplaceJson}`
-    );
-  }
-  marketplaceData.plugins[0].version = newVersion;
-  const newMarketplaceContent = JSON.stringify(marketplaceData, null, 2) + '\n';
-```
-
-And add to `stagedWrites` (after the skillMd entry):
-
-```js
-      { path: files.marketplaceJson, content: newMarketplaceContent, original: marketplaceContent },
-```
-
-Also update both files' JSDoc comment blocks that enumerate "4 manifests" to include `.github/plugin/marketplace.json`, and the success log in `scripts/bump-version.mjs:156-160` to print the marketplace line.
-
-- [ ] **Step 4: Run tests and the sync check**
-
-Run: `node --test tests/version.test.mjs tests/plugin-manifest.test.mjs` — Expected: PASS.
-Run: `npm run version:check` — Expected: exit 0, all five manifests synchronized at 0.3.3.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/version.js src/semver.js scripts/bump-version.mjs tests/version.test.mjs tests/plugin-manifest.test.mjs
-git commit -m "feat: sync marketplace.json plugin version across manifests"
-```
-
----
-
-### Task 7: Document the marketplace install path
+### Task 6: Document the marketplace install path and release-time maintenance
 
 **Files:**
 - Modify: `docs/plugin.md` (Install section), `README.md` (plugin section)
 - Modify: `tests/skills.test.mjs`
 
 **Interfaces:**
-- Consumes: verified commands from Task 5.
+- Consumes: verified marketplace commands and `path` value from Task 5 (abort this task if Task 5 stopped at its decision gate).
 - Produces: final documented install flows.
 
 - [ ] **Step 1: Add the failing assertion**
@@ -658,7 +525,7 @@ git commit -m "feat: sync marketplace.json plugin version across manifests"
 In `tests/skills.test.mjs`, inside `it('documents the plugin shape in the focused plugin reference', ...)`, add:
 
 ```js
-    assert.match(content, /marketplace add/, 'Plugin reference should document marketplace install');
+    assert.match(content, /marketplace add xpepper\/copilot-plugins/, 'Plugin reference should document marketplace install');
 ```
 
 Run: `node --test tests/skills.test.mjs` — Expected: FAIL on this assertion.
@@ -668,13 +535,20 @@ Run: `node --test tests/skills.test.mjs` — Expected: FAIL on this assertion.
 In the `## Install` section of `docs/plugin.md`, after the GitHub install command block and before "Verify the skill is available", insert:
 
 ```markdown
-Or register this repository as a Copilot plugin marketplace and install from
-it:
+Or register xpepper's Copilot plugin marketplace and install from it:
 
 ```bash
-copilot plugin marketplace add xpepper/pr-review-gemini
+copilot plugin marketplace add xpepper/copilot-plugins
 copilot plugin install gem-pr-review
 ```
+```
+
+And at the end of the `## How the shapes relate` section, add the maintenance note:
+
+```markdown
+Marketplace maintenance: at release time, update the `gem-pr-review` entry's
+`version` in the [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
+marketplace to the released version.
 ```
 
 - [ ] **Step 3: Document in README**
@@ -682,8 +556,8 @@ copilot plugin install gem-pr-review
 In `README.md`'s `## Use it as a plugin` section, after the `copilot plugin install xpepper/pr-review-gemini` code block, add:
 
 ```markdown
-Alternatively, register this repository as a Copilot plugin marketplace:
-`copilot plugin marketplace add xpepper/pr-review-gemini`.
+Alternatively, register xpepper's Copilot plugin marketplace:
+`copilot plugin marketplace add xpepper/copilot-plugins`.
 ```
 
 - [ ] **Step 4: Run tests and commit**
@@ -697,7 +571,7 @@ git commit -m "docs: document marketplace install path"
 
 ---
 
-### Task 8: Full verification and handoff updates
+### Task 7: Full verification and handoff updates
 
 **Files:**
 - Modify: `TODO.md`, `docs/roadmap.md`, `HANDOFF.md`
@@ -728,6 +602,7 @@ git commit -m "docs: record plugin-first docs increment in handoff"
 
 ## Self-Review Notes
 
-- Spec coverage: README rewrite (Task 3), plugin.md (Task 2), installation reorder + cross-links (Task 4), tests (Tasks 1, 6, 7), marketplace entry + experiment + bump-version extension (Tasks 5-6), marketplace docs (Task 7), AGENTS.md §4 handoff (Task 8). Success criteria map 1:1.
-- Task 5 is the only task with a STOP branch; if it stops, Tasks 6-7 are void and the owner decides restructuring.
-- Version fields: only Task 6 touches version code; no version bump anywhere.
+- Spec coverage: README rewrite (Task 3), plugin.md (Task 2), installation reorder + cross-links (Task 4), docs tests (Tasks 1, 6), marketplace experiment + repo creation (Task 5), marketplace docs + maintenance note (Task 6), AGENTS.md §4 handoff (Task 7). Success criteria map 1:1.
+- Task 5 is the only task with a STOP branch; if it stops, Task 6 is void and the owner decides restructuring.
+- No code changes in this repository; version stays 0.3.3 everywhere.
+- Task 5 creates a public repository under the owner's account (`xpepper/copilot-plugins`) — explicitly decided with the owner before execution.

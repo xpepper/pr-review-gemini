@@ -116,29 +116,36 @@ in the file's established style:
 Per
 [GitHub's docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace),
 a marketplace is a Git repository containing `marketplace.json` in
-`.github/plugin/` with marketplace metadata and a `plugins` array; each entry
-carries `name`, `description`, `version`, and `source` (path to the plugin
-directory relative to the repo root). Users register it with
-`copilot plugin marketplace add xpepper/pr-review-gemini`.
+`.github/plugin/`. GitHub's own `github/copilot-plugins` reference marketplace
+shows that a plugin entry can live in a *different* repository via the object
+source form `{"source": "github", "repo": "<owner>/<repo>", "path": "<dir>"}`.
 
-- Add `.github/plugin/marketplace.json` listing this plugin.
-- **Open question to resolve by experiment:** whether `source` accepts the
-  repository root (`"."`) — this repo's `plugin.json` sits at the root and
-  restructuring is undesirable. If `"."` is rejected, evaluate the smallest
-  conforming alternative before proceeding.
-- Verify locally: `copilot plugin marketplace add` against this repo, install
-  the plugin from it, and run a review through the skill without publishing
-  (ask it to review a PR in dry-run terms).
+**Settled with the owner:** the marketplace lives in its own repository,
+**`xpepper/copilot-plugins`** (does not exist yet; to be created), and lists
+this plugin by pointing at `xpepper/pr-review-gemini`.
+
+- Resolve by experiment (local scratch marketplace, no repo created yet):
+  whether the object source's `path` accepts the repository root (`"."`) —
+  this repo's `plugin.json` sits at the root and restructuring is
+  undesirable. If `"."` is rejected, try `""` then `"/"`; if none work, STOP
+  and report — restructuring needs the owner's decision.
+- Create `xpepper/copilot-plugins` with `.github/plugin/marketplace.json`
+  naming the marketplace `xpepper-copilot-plugins` (avoiding collision with
+  GitHub's official `copilot-plugins` marketplace name) and listing
+  `gem-pr-review` via the cross-repo source.
+- Verify end to end: `copilot plugin marketplace add xpepper/copilot-plugins`,
+  install the plugin from it, confirm the skill loads.
 - Document the marketplace install path in `docs/plugin.md` and the README
-  plugin section once verified.
-- Extend the `bump-version.mjs` manifest set to include
-  `.github/plugin/marketplace.json` so releases keep its `version` field in
-  sync (small code change, part of this work item).
+  plugin section once verified, plus a maintenance note: at release time,
+  update `plugins[0].version` in the marketplace entry to the released
+  version (manual step; cross-repo auto-sync is out of scope).
 
 ## Out of scope
 
-- Code changes other than the `bump-version.mjs` manifest-set extension that
-  the marketplace work item requires.
+- Code changes: with the marketplace in its own repository, this increment
+  touches no `src/` or `scripts/` code in this repository.
+- Cross-repo automation of the marketplace entry version (manual maintenance
+  note in `docs/plugin.md` instead).
 - Rewrites of `docs/roadmap.md` or `docs/dogfooding-feedback.md` (link fixes
   only if broken).
 - Version bump or release chore; this increment lands on a branch and is
