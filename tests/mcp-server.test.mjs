@@ -1238,6 +1238,156 @@ index 0000000..1111111 100644
     });
   });
 
+  describe('Increment 22: Safe Verbose Review Diagnostics MCP Tools', () => {
+    it('tools/list includes gem_pr_review_diagnostics and alias pr_review_diagnostics', async () => {
+      const handler = createMcpHandler();
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 100,
+        method: 'tools/list',
+      });
+
+      const toolNames = response.result.tools.map((t) => t.name);
+      assert.ok(toolNames.includes('gem_pr_review_diagnostics'));
+      assert.ok(toolNames.includes('pr_review_diagnostics'));
+
+      const diagTool = response.result.tools.find((t) => t.name === 'gem_pr_review_diagnostics');
+      assert.ok(diagTool.inputSchema.properties.prNumber);
+      assert.ok(diagTool.inputSchema.properties.diagnostics);
+      assert.ok(diagTool.inputSchema.properties.format);
+
+      const subagentsTool = response.result.tools.find((t) => t.name === 'gem_pr_review_subagents');
+      assert.ok(subagentsTool.inputSchema.properties.verbose);
+
+      const selfTool = response.result.tools.find((t) => t.name === 'gem_self_review');
+      assert.ok(selfTool.inputSchema.properties.verbose);
+    });
+
+    it('formats provided diagnostics via gem_pr_review_diagnostics in markdown and json', async () => {
+      const handler = createMcpHandler();
+      const sampleDiagnostics = {
+        phases: {
+          diffFetch: { durationMs: 15, status: 'completed' },
+        },
+        findings: {
+          total: 2,
+          anchored: 2,
+          demoted: 0,
+          severities: { P0: 0, P1: 1, P2: 1, P3: 0, nit: 0 },
+        },
+      };
+
+      const mdRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 101,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diagnostics',
+          arguments: {
+            diagnostics: sampleDiagnostics,
+            format: 'markdown',
+          },
+        },
+      });
+
+      assert.equal(mdRes.id, 101);
+      assert.match(mdRes.result.content[0].text, /Review Execution Diagnostics/i);
+      assert.match(mdRes.result.content[0].text, /Diff: 15ms/);
+
+      const jsonRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 102,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_diagnostics',
+          arguments: {
+            diagnostics: sampleDiagnostics,
+            format: 'json',
+          },
+        },
+      });
+
+      assert.equal(jsonRes.id, 102);
+      const parsedJson = JSON.parse(jsonRes.result.content[0].text);
+      assert.equal(parsedJson.phases.diffFetch.durationMs, 15);
+      assert.equal(parsedJson.findings.total, 2);
+    });
+
+    it('retrieves cached diagnostics for prNumber via gem_pr_review_diagnostics', async () => {
+      const { saveReviewCache } = await import('../src/cache.js');
+      const os = await import('node:os');
+      const tempCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gem-mcp-diag-'));
+
+      try {
+        await saveReviewCache(
+          {
+            prNumber: 99,
+            headSha: 'diaghead123',
+            diagnostics: {
+              phases: {
+                subagents: { durationMs: 450, status: 'completed' },
+              },
+              findings: { total: 0, anchored: 0, demoted: 0, severities: { P0: 0, P1: 0, P2: 0, P3: 0, nit: 0 } },
+            },
+          },
+          { cacheDir: tempCacheDir }
+        );
+
+        const handler = createMcpHandler();
+        const res = await handler.handleMessage({
+          jsonrpc: '2.0',
+          id: 103,
+          method: 'tools/call',
+          params: {
+            name: 'gem_pr_review_diagnostics',
+            arguments: {
+              prNumber: 99,
+              cacheDir: tempCacheDir,
+              format: 'json',
+            },
+          },
+        });
+
+        assert.equal(res.id, 103);
+        const parsed = JSON.parse(res.result.content[0].text);
+        assert.equal(parsed.phases.subagents.durationMs, 450);
+      } finally {
+        fs.rmSync(tempCacheDir, { recursive: true, force: true });
+      }
+    });
+
+    it('passes verbose: true to gem_self_review and includes diagnostics in summary and payload', async () => {
+      const handler = createMcpHandler({
+        runSelfReviewFn: async (opts) => {
+          assert.equal(opts.verbose, true);
+          return {
+            status: 'passed',
+            verdict: 'PASS',
+            summary: '# Pass\n\n### 🔬 Review Execution Diagnostics\n- Test Telemetry',
+            diagnostics: { phases: { subagents: { durationMs: 100 } } },
+          };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 104,
+        method: 'tools/call',
+        params: {
+          name: 'gem_self_review',
+          arguments: {
+            verbose: true,
+          },
+        },
+      });
+
+      assert.equal(response.id, 104);
+      const payload = JSON.parse(response.result.content[0].text);
+      assert.match(payload.summary, /Review Execution Diagnostics/);
+      assert.ok(payload.diagnostics);
+    });
+  });
+
   describe('startMcpServer stream processing', () => {
     it('processes line-delimited JSON-RPC messages over stdio streams', async () => {
       const inputStream = new PassThrough();

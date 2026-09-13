@@ -237,5 +237,85 @@ describe('Dogfood Review Script CLI', () => {
       assert.match(stdout, /Dry-run complete: no review published to GitHub/);
     });
   });
+
+  describe('Increment 22: Safe Verbose Review Diagnostics CLI Flags', () => {
+    it('parses --verbose, -V, and --json in dogfood-review.mjs', async () => {
+      const { parseCliArgs } = await import('../scripts/dogfood-review.mjs');
+
+      const parsedLong = parseCliArgs(['15', '--verbose', '--json']);
+      assert.equal(parsedLong.prNumber, 15);
+      assert.equal(parsedLong.verbose, true);
+      assert.equal(parsedLong.json, true);
+
+      const parsedShort = parseCliArgs(['15', '-V']);
+      assert.equal(parsedShort.prNumber, 15);
+      assert.equal(parsedShort.verbose, true);
+
+      const parsedDefault = parseCliArgs(['15']);
+      assert.equal(parsedDefault.verbose, false);
+      assert.equal(parsedDefault.json, false);
+    });
+
+    it('parses --verbose, -V, and --json in self-review.mjs', async () => {
+      const { parseCliArgs } = await import('../scripts/self-review.mjs');
+
+      const parsedLong = parseCliArgs(['--verbose', '--json']);
+      assert.equal(parsedLong.verbose, true);
+      assert.equal(parsedLong.json, true);
+
+      const parsedShort = parseCliArgs(['-V']);
+      assert.equal(parsedShort.verbose, true);
+
+      const parsedDefault = parseCliArgs([]);
+      assert.equal(parsedDefault.verbose, false);
+      assert.equal(parsedDefault.json, false);
+    });
+
+    it('prints --verbose and --json in usage help for CLI runners', async () => {
+      const { printUsage: printDogfoodUsage } = await import('../scripts/dogfood-review.mjs');
+      let dfUsage = '';
+      printDogfoodUsage((m) => { dfUsage += m; });
+      assert.match(dfUsage, /--verbose/);
+      assert.match(dfUsage, /--json/);
+
+      const { printUsage: printSelfUsage } = await import('../scripts/self-review.mjs');
+      let selfUsage = '';
+      printSelfUsage((m) => { selfUsage += m; });
+      assert.match(selfUsage, /--verbose/);
+      assert.match(selfUsage, /--json/);
+
+      const { printUsage: printPrUsage } = await import('../scripts/dogfood-pr.mjs');
+      let prUsage = '';
+      printPrUsage((m) => { prUsage += m; });
+      assert.match(prUsage, /--verbose/);
+      assert.match(prUsage, /--json/);
+    });
+
+    it('executes dogfood-review.mjs --self with --json and returns valid JSON including diagnostics', async () => {
+      const dogfoodScript = path.resolve('scripts/dogfood-review.mjs');
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [dogfoodScript, '--self', '--mock', '--json'],
+        { env: { ...process.env, NODE_ENV: 'test' } }
+      );
+
+      const parsed = JSON.parse(stdout);
+      assert.equal(typeof parsed, 'object');
+      assert.ok(parsed.status);
+      assert.ok(parsed.diagnostics);
+      assert.ok(parsed.diagnostics.phases);
+    });
+
+    it('executes self-review.mjs with --mock and --verbose, appending diagnostic report', async () => {
+      const selfReviewScript = path.resolve('scripts/self-review.mjs');
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [selfReviewScript, '--mock', '--verbose'],
+        { env: { ...process.env, NODE_ENV: 'test' } }
+      );
+
+      assert.match(stdout, /Review Execution Diagnostics/i);
+    });
+  });
 });
 

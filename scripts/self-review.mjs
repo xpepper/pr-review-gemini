@@ -37,6 +37,7 @@ Options:
   --install-hook      Install git pre-commit hook to run self-review before commits
   --uninstall-hook    Remove self-review git pre-commit hook
   --command <cmd>     Custom command for pre-commit hook [default: 'npm run self-review']
+  -V, --verbose       Display safe, structured diagnostic execution telemetry
   --json              Output machine-readable JSON result
   --mock              Use synthetic runner for testing without LLM inference
   -v, --version       Display version information
@@ -51,6 +52,7 @@ export function parseCliArgs(args) {
   let failOn = 'P1';
   let json = false;
   let mock = false;
+  let verbose = false;
   let showHelp = false;
   let showVersion = false;
   let installHook = false;
@@ -98,6 +100,8 @@ export function parseCliArgs(args) {
           guidelinesPath = commonOpt.value;
         } else if (commonOpt.type === 'architecture') {
           architecture = commonOpt.value;
+        } else if (commonOpt.type === 'verbose') {
+          verbose = true;
         }
         i = commonOpt.nextIndex;
         continue;
@@ -135,6 +139,7 @@ export function parseCliArgs(args) {
     failOn,
     json,
     mock,
+    verbose,
     showHelp,
     showVersion,
     installHook,
@@ -205,6 +210,7 @@ export async function main() {
       replaceStandardRoles: parsed.replaceStandardRoles,
       guidelinesPath: parsed.guidelinesPath,
       architecture: parsed.architecture,
+      verbose: parsed.verbose,
     });
 
     if (parsed.json) {

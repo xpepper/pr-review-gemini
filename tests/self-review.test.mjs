@@ -1068,5 +1068,47 @@ deleted file mode 100644
       assert.equal(capturedTools.length, 3);
     });
   });
+
+  describe('Safe Verbose Review Diagnostics (Increment 22)', () => {
+    it('attaches diagnostics object to return value of runSelfReview', async () => {
+      const result = await runSelfReview({
+        diffText: 'diff --git a/test.js b/test.js\n+console.log(1);',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+      });
+
+      assert.ok(result.diagnostics, 'runSelfReview must return diagnostics object');
+      assert.ok(result.diagnostics.version);
+      assert.ok(typeof result.diagnostics.durationMs === 'number');
+      assert.ok(result.diagnostics.phases);
+      assert.ok(result.diagnostics.diff);
+      assert.ok(result.diagnostics.safetyDecisions);
+      assert.ok(!result.summary.includes('### 🔬 Review Execution Diagnostics'));
+    });
+
+    it('appends diagnostics report to self-review summary when verbose: true', async () => {
+      const result = await runSelfReview({
+        diffText: 'diff --git a/test.js b/test.js\n+console.log(1);',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        verbose: true,
+      });
+
+      assert.ok(result.diagnostics);
+      assert.ok(result.summary.includes('### 🔬 Review Execution Diagnostics'));
+      assert.ok(result.summary.includes('Phase Timing'));
+    });
+
+    it('guarantees zero machine path leakage in self-review diagnostics', async () => {
+      const result = await runSelfReview({
+        diffText: 'diff --git a/test.js b/test.js\n+console.log(1);',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        verbose: true,
+      });
+
+      const serialized = JSON.stringify(result.diagnostics);
+      assert.doesNotMatch(serialized, /\/Users\//);
+      assert.doesNotMatch(serialized, /\/home\//);
+    });
+  });
 });
+
 

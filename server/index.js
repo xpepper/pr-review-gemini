@@ -19,7 +19,8 @@ import {
   LARGE_DIFF_THRESHOLD_BYTES,
 } from '../src/diff.js';
 import { publishReview } from '../src/publish.js';
-import { publishCachedReview } from '../src/cache.js';
+import { publishCachedReview, getReviewCache } from '../src/cache.js';
+import { formatDiagnosticReport, formatDiagnosticsJson } from '../src/diagnostics.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
@@ -111,6 +112,11 @@ export const MCP_TOOLS = [
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
         guidelines_path: GUIDELINES_PATH_PROPERTY,
+        verbose: {
+          type: 'boolean',
+          description: 'If true, attaches safe structured diagnostic execution telemetry to summary and result',
+          default: false,
+        },
       },
       required: ['prNumber'],
     },
@@ -481,6 +487,11 @@ export const MCP_TOOLS = [
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
         guidelines_path: GUIDELINES_PATH_PROPERTY,
+        verbose: {
+          type: 'boolean',
+          description: 'If true, attaches safe structured diagnostic execution telemetry to summary and result',
+          default: false,
+        },
       },
     },
   },
@@ -538,6 +549,11 @@ export const MCP_TOOLS = [
         },
         guidelinesPath: GUIDELINES_PATH_PROPERTY,
         guidelines_path: GUIDELINES_PATH_PROPERTY,
+        verbose: {
+          type: 'boolean',
+          description: 'If true, attaches safe structured diagnostic execution telemetry to summary and result',
+          default: false,
+        },
       },
     },
   },
@@ -566,6 +582,62 @@ export const MCP_TOOLS = [
       },
     },
   },
+  {
+    name: 'gem_pr_review_diagnostics',
+    description:
+      'Inspects and formats safe structured execution telemetry and diagnostics for a review session or cached PR review.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'Optional GitHub pull request number to inspect cached diagnostics for',
+        },
+        diagnostics: {
+          type: 'object',
+          description: 'Optional telemetry diagnostics object to format and sanitize',
+        },
+        format: {
+          type: 'string',
+          enum: ['markdown', 'json'],
+          description: 'Output format (markdown report or sanitized JSON)',
+          default: 'markdown',
+        },
+        cacheDir: {
+          type: 'string',
+          description: 'Optional custom cache directory',
+        },
+      },
+    },
+  },
+  {
+    name: 'pr_review_diagnostics',
+    description:
+      'Alias for gem_pr_review_diagnostics. Inspects and formats safe structured execution telemetry and diagnostics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'Optional GitHub pull request number to inspect cached diagnostics for',
+        },
+        diagnostics: {
+          type: 'object',
+          description: 'Optional telemetry diagnostics object to format and sanitize',
+        },
+        format: {
+          type: 'string',
+          enum: ['markdown', 'json'],
+          description: 'Output format (markdown report or sanitized JSON)',
+          default: 'markdown',
+        },
+        cacheDir: {
+          type: 'string',
+          description: 'Optional custom cache directory',
+        },
+      },
+    },
+  },
 ];
 
 /**
@@ -590,6 +662,7 @@ export function createMcpHandler(options = {}) {
     listVerificationProfilesFn = listVerificationProfiles,
     createHostSupervisedDiffReaderFn = createHostSupervisedDiffReader,
     loadGuidelinesFn = loadGuidelines,
+    getReviewCacheFn = getReviewCache,
     runnerFn,
     cwd = process.cwd(),
   } = options;
@@ -783,6 +856,7 @@ export function createMcpHandler(options = {}) {
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
                 guidelinesPath: args.guidelinesPath || args.guidelines_path,
+                verbose: Boolean(args.verbose),
                 execGhFn: options.execGhFn,
                 execGitFn: options.execGitFn,
                 execFileFn: options.execFileFn,
@@ -1213,6 +1287,7 @@ export function createMcpHandler(options = {}) {
                 replaceStandardRoles: args.replaceStandardRoles,
                 customRoles: args.customRoles,
                 guidelinesPath: candidateGuidelines,
+                verbose: Boolean(args.verbose),
               });
 
               return {
@@ -1307,6 +1382,58 @@ export function createMcpHandler(options = {}) {
                         null,
                         2
                       ),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_pr_review_diagnostics' ||
+              toolName === 'pr_review_diagnostics'
+            ) {
+              let diagData = args.diagnostics;
+              if (!diagData && args.prNumber) {
+                const cached = await getReviewCacheFn(
+                  { prNumber: args.prNumber, cwd },
+                  { cacheDir: args.cacheDir, cwd }
+                );
+                diagData = cached?.diagnostics;
+              }
+
+              if (!diagData) {
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text: args.prNumber
+                          ? `No diagnostics found in session cache for PR #${args.prNumber}.`
+                          : 'No diagnostics data or prNumber provided.',
+                      },
+                    ],
+                  },
+                };
+              }
+
+              const format = (args.format || 'markdown').toLowerCase();
+              let text;
+              if (format === 'json') {
+                text = formatDiagnosticsJson(diagData);
+              } else {
+                text = formatDiagnosticReport(diagData);
+              }
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text,
                     },
                   ],
                 },

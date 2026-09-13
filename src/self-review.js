@@ -36,6 +36,10 @@ import {
   createSubagentRunner,
 } from './subagents.js';
 import { formatFindingRow, formatFindingsTable } from './selection.js';
+import {
+  createDiagnosticsCollector,
+  formatDiagnosticReport,
+} from './diagnostics.js';
 
 export {
   getWorktreeDiff,
@@ -260,6 +264,17 @@ export async function runSelfReview(options = {}) {
           ? false
           : (modeObj.name === 'full' || modeObj.name === 'deep');
 
+  const collector =
+    options.diagnostics ||
+    createDiagnosticsCollector({ verbose: Boolean(options.verbose), cwd });
+  collector.start();
+  collector.recordConfig({
+    mode: modeObj.name,
+    roles: options.roles || options.enabledRoles || null,
+    replaceStandardRoles: Boolean(options.replaceStandardRoles),
+    architecture: shouldIncludeArchitecture,
+  });
+
   // Load repository review guidelines
   let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
     repoGuidelines: options.repoGuidelines,
@@ -267,6 +282,8 @@ export async function runSelfReview(options = {}) {
     config: resolvedConfig,
     cwd,
   });
+
+  collector.startPhase('diffFetch');
 
   // 1. Acquire diff
   let diffText = options.diffText;
@@ -280,6 +297,14 @@ export async function runSelfReview(options = {}) {
       fsModule,
     });
   }
+
+  collector.endPhase('diffFetch', {
+    byteSize: Buffer.byteLength(diffText || '', 'utf8'),
+  });
+  collector.recordDiffMetadata({
+    totalBytes: Buffer.byteLength(diffText || '', 'utf8'),
+    isLarge: isLargeDiff(diffText || ''),
+  });
 
   const touchedFiles = getTouchedFilesFromDiff(diffText);
 
@@ -314,6 +339,8 @@ export async function runSelfReview(options = {}) {
     }
   };
 
+  collector.startPhase('guidelines');
+
   const isGuidelinesEnabled = resolvedConfig?.guidelines?.enabled !== false;
   if (isGuidelinesEnabled) {
     const rawCandidatePath = options.guidelinesPath || options.guidelines_path || resolvedConfig.guidelines?.path;
@@ -336,11 +363,26 @@ export async function runSelfReview(options = {}) {
     }));
   }
 
+  collector.endPhase('guidelines', {
+    path: activeGuidelines?.relativePath || activeGuidelines?.path || null,
+    bytes: activeGuidelines?.byteSize || 0,
+    found: Boolean(activeGuidelines?.found),
+  });
+  collector.recordGuidelinesMetadata({
+    enabled: isGuidelinesEnabled,
+    found: Boolean(activeGuidelines?.found),
+    path: activeGuidelines?.relativePath || activeGuidelines?.path || null,
+    bytes: activeGuidelines?.byteSize || 0,
+    truncated: Boolean(activeGuidelines?.truncated),
+    untrusted: Boolean(activeGuidelines?.untrusted),
+    source: guidelinesSummary?.source || null,
+  });
+
   // 2. Handle empty diff (clean worktree)
   if (!diffText || !diffText.trim()) {
     const verdict = evaluateSelfReviewVerdict([], { failOn, blockingSeverities });
     const emptyStats = { totalFiles: 0, totalAdditions: 0, totalDeletions: 0, totalBytes: 0, isLarge: false };
-    const summary = formatSelfReviewSummary({
+    let summary = formatSelfReviewSummary({
       verdict: verdict.verdict,
       status: verdict.status,
       findings: [],
@@ -351,6 +393,25 @@ export async function runSelfReview(options = {}) {
       emptyDiff: true,
       guidelines: activeGuidelines,
     });
+
+    collector.recordFindingsClassification({
+      total: 0,
+      anchored: 0,
+      demoted: 0,
+      severities: verdict.counts,
+      confidence: { min: null, max: null, avg: null },
+    });
+    collector.recordSafetyDecisions({
+      staleHeadPassed: true,
+      verdict: verdict.verdict,
+      qualityGate: { passed: verdict.status === 'passed', failOn, blockingCount: 0 },
+    });
+    collector.end();
+    const emptyDiagnostics = collector.toObject();
+
+    if (options.verbose) {
+      summary += '\n\n' + formatDiagnosticReport(emptyDiagnostics);
+    }
 
     return {
       status: verdict.status,
@@ -365,6 +426,7 @@ export async function runSelfReview(options = {}) {
       remediation: [],
       summary,
       guidelines: guidelinesSummary,
+      diagnostics: emptyDiagnostics,
     };
   }
 
@@ -410,6 +472,7 @@ export async function runSelfReview(options = {}) {
     const runner = runnerFn || (await createSubagentRunner({ cwd }));
 
     // 6. Dispatch parallel subagents
+    collector.startPhase('subagents');
     const dispatchOutput = await dispatchSubagentsParallel({
       plan,
       diffText,
@@ -424,8 +487,29 @@ export async function runSelfReview(options = {}) {
     const executionErrors = dispatchOutput.errors || lensResults.filter((r) => r.status === 'error');
     const hasExecutionErrors = executionErrors.length > 0;
 
+    if (Array.isArray(lensResults)) {
+      for (const res of lensResults) {
+        collector.recordLensLifecycle({
+          lensId: res.lensId,
+          name: res.lensName || res.lensId,
+          durationMs: res.durationMs,
+          status: res.status || (res.error ? 'failed' : res.fallbackUsed ? 'retried' : 'completed'),
+          model: res.model,
+          primaryModel: res.primaryModel,
+          fallbacksUsed: res.fallbackUsed ? (res.fallbackModelsTried?.length || 1) : 0,
+          fallbackModelsTried: res.fallbackModelsTried,
+          findingsCount: res.findings?.length ?? 0,
+          error: res.error ? (res.error?.message || String(res.error)) : null,
+        });
+      }
+    }
+    collector.endPhase('subagents', {
+      lensCount: plan.length,
+      errorCount: executionErrors.length,
+    });
+
     if (hasExecutionErrors) {
-      const summary = formatSelfReviewSummary({
+      let summary = formatSelfReviewSummary({
         verdict: 'FAIL',
         status: 'failed',
         findings: [],
@@ -437,6 +521,18 @@ export async function runSelfReview(options = {}) {
         customRoles: allCustomRoles,
         guidelines: activeGuidelines,
       });
+
+      collector.recordSafetyDecisions({
+        staleHeadPassed: true,
+        verdict: 'FAIL',
+        qualityGate: { passed: false, failOn, blockingCount: 0 },
+      });
+      collector.end();
+      const errDiag = collector.toObject();
+
+      if (options.verbose) {
+        summary += '\n\n' + formatDiagnosticReport(errDiag);
+      }
 
       return {
         status: 'failed',
@@ -452,6 +548,7 @@ export async function runSelfReview(options = {}) {
         executionErrors,
         summary,
         guidelines: guidelinesSummary,
+        diagnostics: errDiag,
       };
     }
 
@@ -497,6 +594,7 @@ export async function runSelfReview(options = {}) {
     let architectureResult = null;
     let finalSummary = summary;
     if (shouldIncludeArchitecture && !allSubagentsFailed) {
+      collector.startPhase('architecture');
       try {
         architectureResult = await analyzeArchitecture({
           diffText: effectiveDiff,
@@ -505,9 +603,36 @@ export async function runSelfReview(options = {}) {
         if (architectureResult?.markdown) {
           finalSummary += '\n\n' + architectureResult.markdown;
         }
-      } catch {
-        // Non-fatal
+        collector.endPhase('architecture', { included: true });
+      } catch (err) {
+        collector.endPhase('architecture', { included: false, error: err?.message || String(err) });
       }
+    }
+
+    const confidenceScores = deduplicated.map((f) => f.confidence).filter((c) => typeof c === 'number');
+    const minConf = confidenceScores.length > 0 ? Math.min(...confidenceScores) : null;
+    const maxConf = confidenceScores.length > 0 ? Math.max(...confidenceScores) : null;
+    const avgConf = confidenceScores.length > 0 ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length : null;
+
+    collector.recordFindingsClassification({
+      total: deduplicated.length,
+      anchored: deduplicated.length,
+      demoted: 0,
+      severities: verdict.counts,
+      confidence: { min: minConf, max: maxConf, avg: avgConf },
+    });
+
+    collector.recordSafetyDecisions({
+      staleHeadPassed: true,
+      verdict: verdict.verdict,
+      qualityGate: { passed: verdict.status === 'passed', failOn, blockingCount: verdict.blockingCount },
+    });
+
+    collector.end();
+    const finalDiagnostics = collector.toObject();
+
+    if (options.verbose) {
+      finalSummary += '\n\n' + formatDiagnosticReport(finalDiagnostics);
     }
 
     return {
@@ -524,6 +649,7 @@ export async function runSelfReview(options = {}) {
       summary: finalSummary,
       guidelines: guidelinesSummary,
       architecture: architectureResult || null,
+      diagnostics: finalDiagnostics,
     };
   } finally {
     if (fileBackedDiff?.cleanup) {

@@ -1544,6 +1544,18 @@ echo "prior test"
       assert.equal(guidelinesSplit.value, 'custom.md');
       assert.equal(guidelinesSplit.nextIndex, 1);
 
+      const verboseLong = parseCommonReviewOptions(['--verbose'], 0);
+      assert.equal(verboseLong.matched, true);
+      assert.equal(verboseLong.type, 'verbose');
+      assert.equal(verboseLong.value, true);
+      assert.equal(verboseLong.nextIndex, 0);
+
+      const verboseShort = parseCommonReviewOptions(['-V'], 0);
+      assert.equal(verboseShort.matched, true);
+      assert.equal(verboseShort.type, 'verbose');
+      assert.equal(verboseShort.value, true);
+      assert.equal(verboseShort.nextIndex, 0);
+
       const unmatched = parseCommonReviewOptions(['--unknown', 'val'], 0);
       assert.equal(unmatched.matched, false);
     });

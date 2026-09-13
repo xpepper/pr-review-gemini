@@ -2245,3 +2245,79 @@ index 1111111..2222222 100644
     });
   });
 
+  describe('Increment 22: Safe Verbose Review Diagnostics in CI', () => {
+    it('parseCommentCommand detects --verbose and -V flags', () => {
+      const longRes = parseCommentCommand('/gem-review --quick --verbose');
+      assert.equal(longRes.isCommand, true);
+      assert.equal(longRes.mode, 'quick');
+      assert.equal(longRes.verbose, true);
+
+      const shortRes = parseCommentCommand('/gem-review -V');
+      assert.equal(shortRes.isCommand, true);
+      assert.equal(shortRes.verbose, true);
+
+      const defaultRes = parseCommentCommand('/gem-review --balanced');
+      assert.equal(defaultRes.isCommand, true);
+      assert.equal(defaultRes.verbose, false);
+    });
+
+    it('resolveCiEnvironment extracts verbose flag from comment command and env.INPUT_VERBOSE', () => {
+      const fromCmd = resolveCiEnvironment({
+        eventPayload: {
+          action: 'created',
+          issue: { number: 42, pull_request: {} },
+          comment: { id: 1, body: '/gem-review --verbose', author_association: 'MEMBER' },
+        },
+      });
+      assert.equal(fromCmd.verbose, true);
+
+      const fromEnv = resolveCiEnvironment({}, { INPUT_VERBOSE: 'true' });
+      assert.equal(fromEnv.verbose, true);
+
+      const defaultEnv = resolveCiEnvironment({}, {});
+      assert.equal(defaultEnv.verbose, false);
+    });
+
+    it('formatHelpReply documents --verbose and -V flags', () => {
+      const help = formatHelpReply();
+      assert.match(help, /--verbose/);
+      assert.match(help, /-V/);
+    });
+
+    it('formatCompletionReply appends structured diagnostics report when verbose is enabled', () => {
+      const sampleDiagnostics = {
+        phases: {
+          diffFetch: { durationMs: 12, status: 'completed' },
+          subagents: { durationMs: 340, status: 'completed' },
+        },
+        findings: {
+          total: 1,
+          anchored: 1,
+          demoted: 0,
+          severities: { P0: 0, P1: 0, P2: 1, P3: 0, nit: 0 },
+        },
+        safety: {
+          staleHeadPassed: true,
+          commentsCapped: false,
+          verdict: 'APPROVE',
+        },
+      };
+
+      const replyWithVerbose = formatCompletionReply({
+        qualityGateResult: { passed: true, verdict: 'PASS', totalFindings: 1, blockingCount: 0 },
+        ciEnv: { mode: 'balanced', verbose: true },
+        diagnostics: sampleDiagnostics,
+      });
+
+      assert.match(replyWithVerbose, /Verbose Diagnostics/i);
+      assert.match(replyWithVerbose, /Diff: 12ms/);
+
+      const replyWithoutVerbose = formatCompletionReply({
+        qualityGateResult: { passed: true, verdict: 'PASS', totalFindings: 1, blockingCount: 0 },
+        ciEnv: { mode: 'balanced', verbose: false },
+        diagnostics: sampleDiagnostics,
+      });
+
+      assert.doesNotMatch(replyWithoutVerbose, /Verbose Diagnostics/i);
+    });
+  });
