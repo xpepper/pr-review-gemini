@@ -547,6 +547,156 @@ describe('CI Event Payload & Environment Resolution', () => {
   });
 
   describe('CI Action Runner (scripts/ci-action.mjs)', () => {
+    const documentationDiff = `diff --git a/README.md b/README.md
+index 1111111..2222222 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-Old
++New
+`;
+
+    it('runs and reports the selected documentation consistency test', async () => {
+      const tmpOut = path.join(os.tmpdir(), `gh-out-docs-${Date.now()}.txt`);
+      let selectedTest = null;
+      let metadataQueries = 0;
+
+      const result = await runCiAction({
+        prNumber: 41,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff,
+        execGhFn: async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            metadataQueries += 1;
+            return JSON.stringify({
+              isCrossRepository: false,
+              headRefOid: 'head-sha',
+              baseRefOid: 'base-sha',
+              baseRefName: 'main',
+              author: { login: 'octocat' },
+              title: 'Documentation update',
+            });
+          }
+          throw new Error(`Unexpected gh invocation: ${args.join(' ')}`);
+        },
+        executeDocumentationConsistency: async ({ testFile }) => {
+          selectedTest = testFile;
+          return { status: 'passed' };
+        },
+      }, {
+        GITHUB_OUTPUT: tmpOut,
+      }, silentIo);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.documentationConsistency.status, 'passed');
+      assert.equal(selectedTest, 'tests/skills.test.mjs');
+      assert.equal(metadataQueries, 1);
+      assert.match(result.reviewResult.summary, /Documentation Consistency Check.*PASSED/i);
+      assert.match(fs.readFileSync(tmpOut, 'utf8'), /documentation_consistency_status=passed/);
+
+      fs.unlinkSync(tmpOut);
+    });
+
+    it('falls back to reviewer metadata retrieval when the trust query is incomplete', async () => {
+      let metadataQueries = 0;
+      const result = await runCiAction({
+        prNumber: 42,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff,
+        execGhFn: async (args) => {
+          if (args[0] !== 'pr' || args[1] !== 'view') {
+            throw new Error(`Unexpected gh invocation: ${args.join(' ')}`);
+          }
+          metadataQueries += 1;
+          if (args.at(-1).includes('isCrossRepository')) {
+            return JSON.stringify({ isCrossRepository: false });
+          }
+          return JSON.stringify({
+            headRefOid: 'fallback-head-sha',
+            baseRefOid: 'fallback-base-sha',
+            baseRefName: 'main',
+            author: { login: 'octocat' },
+            title: 'Documentation update',
+          });
+        },
+        executeDocumentationConsistency: async () => ({ status: 'passed' }),
+      }, {}, silentIo);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(metadataQueries, 2);
+      assert.equal(result.documentationConsistency.status, 'passed');
+    });
+
+    it('fails CI when the selected documentation consistency test fails', async () => {
+      const tmpOut = path.join(os.tmpdir(), `gh-out-docs-fail-${Date.now()}.txt`);
+
+      const result = await runCiAction({
+        prNumber: 42,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff,
+        executeDocumentationConsistency: async () => ({ status: 'failed' }),
+      }, {
+        GITHUB_OUTPUT: tmpOut,
+      }, silentIo);
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.documentationConsistency.status, 'failed');
+      assert.match(result.reviewResult.summary, /Documentation Consistency Check.*FAILED/i);
+      assert.match(fs.readFileSync(tmpOut, 'utf8'), /verdict=FAIL/);
+
+      fs.unlinkSync(tmpOut);
+    });
+
+    it('skips the documentation consistency test for an untrusted fork', async () => {
+      let executed = false;
+      const result = await runCiAction({
+        prNumber: 43,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff,
+        execGhFn: async () => JSON.stringify({ isCrossRepository: true }),
+        executeDocumentationConsistency: async () => {
+          executed = true;
+          return { status: 'passed' };
+        },
+      }, {}, silentIo);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.documentationConsistency.status, 'skipped');
+      assert.equal(result.documentationConsistency.reason, 'untrusted_fork');
+      assert.equal(executed, false);
+      assert.match(result.reviewResult.summary, /SKIPPED.*untrusted fork/i);
+    });
+
+    it('skips execution when the selected documentation test changes in the PR', async () => {
+      let executed = false;
+      const result = await runCiAction({
+        prNumber: 44,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff + `diff --git a/tests/skills.test.mjs b/tests/skills.test.mjs
+index 1111111..2222222 100644
+--- a/tests/skills.test.mjs
++++ b/tests/skills.test.mjs
+@@ -1 +1 @@
+-Old
++New
+`,
+        executeDocumentationConsistency: async () => {
+          executed = true;
+          return { status: 'passed' };
+        },
+      }, {}, silentIo);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.documentationConsistency.status, 'skipped');
+      assert.equal(result.documentationConsistency.reason, 'selected_test_changed');
+      assert.equal(executed, false);
+    });
+
     it('executes review in mock mode, passes quality gate, and writes step outputs', async () => {
       const tmpOut = path.join(os.tmpdir(), `gh-out-test-${Date.now()}.txt`);
       const tmpSummary = path.join(os.tmpdir(), `gh-summary-test-${Date.now()}.md`);
@@ -1965,6 +2115,17 @@ Hope that helps!
         });
         assert.match(summary, /## ❌ Detached Worktree Verification Failed/);
         assert.match(summary, /- \*\*Detached Verification \(test\)\*\*: `FAILED`/);
+      });
+
+      it('displays documentation consistency failure independently of review findings', () => {
+        const summary = formatCiSummary({
+          qualityGateResult: mockQualityPass,
+          ciEnv,
+          documentationConsistency: { status: 'failed' },
+        });
+        assert.match(summary, /## ❌ Documentation Consistency Check Failed/);
+        assert.match(summary, /- \*\*Verdict\*\*: `FAIL`/);
+        assert.match(summary, /- \*\*Documentation Consistency Check\*\*: `FAILED`/);
       });
 
       it('displays quality gate failed banner when review fails but verification passes', () => {

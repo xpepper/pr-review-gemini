@@ -26,6 +26,9 @@ is live, and the Action is listed in Code quality and Continuous integration.
   reference pages.
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
+- [x] Add a host-controlled documentation consistency check after the verified
+  PR #46 false negative: select `tests/skills.test.mjs` only for documentation
+  changes, skip untrusted or PR-modified tests, and block on a selected failure.
 - [ ] Defer larger capabilities, including SARIF export, until dogfooding evidence
   establishes a user need.
 

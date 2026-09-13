@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `docs/documentation-ia-slice-1`
-* **Active Work**: Documentation-only information-architecture slice: concise
-  README landing page and focused installation, GitHub Action, and CLI pages.
+* **Current Branch**: `feat/documentation-consistency-check`
+* **Active Work**: Targeted post-MVP reviewer calibration: run an allowlisted
+  documentation-consistency test only for safe documentation-impact PRs.
 * **Test Suite**: `npm test` runs and passes (838 tests across 158 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.3.3`
 * **Release**: `v0.3.3` is an annotated tag at the current `main` commit and its
@@ -51,6 +51,15 @@ dogfooding feedback collection, and evidence-led polish. See
 [`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md) for the review
 record and [`docs/roadmap.md`](docs/roadmap.md) for prioritization. SARIF export
 remains deferred pending user evidence.
+
+### Documentation Consistency Check
+
+PR #46 demonstrated that a diff-only balanced review can miss stale,
+cross-artifact documentation tests. The targeted follow-up detects
+documentation-impact paths, selects `tests/skills.test.mjs`, skips forks and
+PR-modified selected tests, reports its decision, and blocks CI on a selected
+test failure. The validated evidence is recorded in
+[`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md).
 
 ### Documentation IA, Slice 1
 
@@ -586,4 +595,3 @@ All 23 increments (Increments 0 through 22) across all phases of the project roa
 
 Remaining de-prioritized backlog:
 - SARIF 2.1.0 report export for GitHub Code Scanning integration.
-
