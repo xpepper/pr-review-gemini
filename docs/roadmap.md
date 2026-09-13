@@ -202,21 +202,37 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 
 ---
 
-## 6. GitHub Marketplace Action Publication Note
+## Post-MVP Roadmap
 
-With the completion of Increment 13 (Reusable GitHub Action manifest `action.yml`), Increment 15 (Release Management & Semantic Versioning), Increment 18 (PR Comment Command Dispatcher), and Increment 19 (Repository Review Guidelines), `gem-pr-review` is packaged as a standalone composite action ready for official GitHub Marketplace publication.
+The MVP increments (0–22) are complete. Release `v0.3.3` is published and the
+[Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
+is live in the Code quality and Continuous integration categories.
 
-GitHub surfaces the notification:
-> **"You can publish this Action to the GitHub Marketplace [Draft a release]"**
-> *(referencing the GitHub Action UI prompt banner displayed on repositories containing root `action.yml`)*
+1. **Documentation information architecture — now.** Keep the README as a concise
+   landing page and progressively move detailed installation, configuration, CLI,
+   MCP, safety, verification, release, and troubleshooting reference material to
+   focused pages under `docs/`.
+2. **Repeatable dogfooding feedback — now.** Use the privacy-safe,
+   evidence-based format in [`dogfooding-feedback.md`](dogfooding-feedback.md) for
+   every real review. Treat model findings as hypotheses until checked against the
+   diff and repository context.
+3. **Evidence-led reviewer polish — next.** Address only high-confidence,
+   reproducible quality, clarity, latency, cost, CI/authentication, or
+   documentation issues revealed by real reviews.
+4. **Larger capabilities — later.** Keep SARIF 2.1.0 export deferred until
+   feedback demonstrates a concrete need.
 
-### Marketplace Publication Checklist & Prerequisites
+The completed-increment history above is retained as an MVP record, not as an
+active implementation backlog.
+
+## 6. GitHub Marketplace Action Publication Record
+
+With the completion of Increment 13 (Reusable GitHub Action manifest `action.yml`), Increment 15 (Release Management & Semantic Versioning), Increment 18 (PR Comment Command Dispatcher), and Increment 19 (Repository Review Guidelines), `gem-pr-review` was packaged as a standalone composite action for GitHub Marketplace publication.
+
+### Completed Marketplace Publication Checklist
 - [x] Composite Action manifest at repository root (`action.yml`) with descriptive name, description, branding (icon: `check-circle`, color: `blue`), inputs, and outputs.
 - [x] Node.js 20+ zero-dependency runtime leveraging `@github/copilot-sdk` and GitHub CLI (`gh`).
 - [x] Automated release workflow (`.github/workflows/release.yml`) triggered on `v*` tags with manifest synchronization validation.
-- [x] Published GitHub Release `v0.3.2` with manifest synchronization and test-suite verification.
-- [ ] Start the Marketplace publication flow from the GitHub repository release UI for the current release or a subsequent release.
-- [ ] Check the checkbox *"Publish this Action to the GitHub Marketplace"* in the release draft modal.
-- [ ] Confirm primary category (`Code quality`) and optional secondary category (`Continuous integration`).
-- [ ] Publish release to make `xpepper/pr-review-gemini` discoverable across the GitHub Actions Marketplace.
-
+- [x] Published GitHub Release `v0.3.3` with manifest synchronization and test-suite verification.
+- [x] Published the Action on GitHub Marketplace.
+- [x] Confirmed the Code quality and Continuous integration Marketplace categories.

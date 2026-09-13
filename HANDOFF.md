@@ -3,10 +3,14 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (Increment 22 merged, clean working tree)
-* **Active PR**: None (PR #40 merged to `main`)
+* **Current Branch**: `docs/post-mvp-dogfooding-baseline`
+* **Active Work**: Documentation-only post-MVP baseline and dogfooding process.
 * **Test Suite**: `npm test` runs and passes (838 tests across 158 suites, 0 failures)
-* **Manifests**: `npm run version:check` verified synchronized at `0.2.0`
+* **Manifests**: `npm run version:check` verified synchronized at `0.3.3`
+* **Release**: `v0.3.3` is an annotated tag at the current `main` commit and its
+  GitHub Release is published.
+* **Marketplace**: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review)
+  is live in Code quality and Continuous integration.
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
   - PR #2: `feat(diff): implement unified diff parser and hunk anchoring`
@@ -38,9 +42,14 @@
 
 ---
 
-## Status: ALL_INCREMENTS_COMPLETE — All Roadmap Increments Delivered & Verified
+## Status: MVP Complete — Post-MVP Polish & Dogfooding
 
-All increments defined in `docs/roadmap.md` (Phases 1 through 7, plus Increments 13 through 22) are now **fully delivered, verified, dogfood-reviewed, and merged into `main`**.
+All MVP increments (0–22) are delivered and merged into `main`. The active
+post-MVP priorities are documentation information architecture, privacy-safe
+dogfooding feedback collection, and evidence-led polish. See
+[`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md) for the review
+record and [`docs/roadmap.md`](docs/roadmap.md) for prioritization. SARIF export
+remains deferred pending user evidence.
 
 ### Increment 22 Summary: Safe Verbose Review Diagnostics & Execution Telemetry
 Increment 22 has been fully delivered, verified, dogfooded on GitHub PR #40, and merged into `main` (commit `921e211`):
@@ -566,6 +575,5 @@ All 23 increments (Increments 0 through 22) across all phases of the project roa
 
 Remaining de-prioritized backlog:
 - SARIF 2.1.0 report export for GitHub Code Scanning integration.
-
 
 
