@@ -197,6 +197,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /Copilot CLI runtime/, 'Plugin reference should document the runtime requirement');
     assert.match(content, /\/gem-pr-review /, 'Plugin reference should document skill invocation');
     assert.match(content, /gem_pr_review_subagents/, 'Plugin reference should document MCP tools');
+    assert.match(content, /marketplace add xpepper\/copilot-plugins/, 'Plugin reference should document marketplace install');
   });
 
   it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {

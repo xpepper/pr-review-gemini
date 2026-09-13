@@ -16,6 +16,9 @@ Copilot CLI, the verified harness:
 copilot plugin install xpepper/pr-review-gemini
 ```
 
+Alternatively, register xpepper's Copilot plugin marketplace:
+`copilot plugin marketplace add xpepper/copilot-plugins`.
+
 Then start Copilot CLI and invoke the skill on a pull request:
 
 ```text

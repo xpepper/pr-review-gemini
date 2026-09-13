@@ -29,6 +29,13 @@ From GitHub (verified path):
 copilot plugin install xpepper/pr-review-gemini
 ```
 
+Or register xpepper's Copilot plugin marketplace and install from it:
+
+```bash
+copilot plugin marketplace add xpepper/copilot-plugins
+copilot plugin install gem-pr-review@xpepper-copilot-plugins
+```
+
 Verify the skill is available by starting Copilot CLI and checking that
 `/gem-pr-review` completes as a command. Invoke it with a pull request number:
 
@@ -97,3 +104,8 @@ The plugin, the [GitHub Action](github-action.md), and the
 [local CLI](cli.md) run the same engine with the same host-gated safety
 model. They are complementary: use the plugin interactively from your
 harness, the Action in CI, and the CLI for scripting and dry runs.
+
+Marketplace maintenance: at release time, update the `gem-pr-review` entry's
+`version` and its `ref` pin to the released tag in the
+[`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
+marketplace manifest.
