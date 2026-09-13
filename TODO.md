@@ -8,9 +8,10 @@
 
 ## Status: ALL_INCREMENTS_COMPLETE — All Roadmap Increments Completed & Verified
 
-All increments planned in `docs/roadmap.md` (Phases 1 through 7, plus Increments 13 through 22) have been fully implemented, verified test-first with `npm test` (838 tests across 158 suites), synchronized at version `0.2.0`, dogfood-reviewed on GitHub PRs, and merged into `main`.
+All increments planned in `docs/roadmap.md` (Phases 1 through 7, plus Increments 13 through 22) have been fully implemented, verified test-first with `npm test` (838 tests across 158 suites), synchronized at version `0.3.2`, dogfood-reviewed on GitHub PRs, and merged into `main`.
 
 ### Future Opportunities (Backlog)
+- [ ] Publish the `Gem PR Review` composite action to GitHub Marketplace through GitHub's Marketplace release flow; select the Code quality category and complete the owner-operated Marketplace terms.
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
