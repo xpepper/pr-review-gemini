@@ -590,7 +590,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@main
