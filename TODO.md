@@ -6,25 +6,37 @@
 
 ---
 
-## Active Mission: Increment 21 — Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
-- [ ] Implement architecture analysis specialist subagent / prompt mode in `src/reviewer.js`
-- [ ] Generate high-level system impact narrative and affected component overview
-- [ ] Generate GitHub Flavored Markdown Mermaid sequence diagrams and component diagrams for complex PRs
-- [ ] Expose MCP tool and CLI flag (`--architecture`)
-- [ ] Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`
+## Active Mission: Increment 22 — Safe Verbose Review Diagnostics
+- [ ] Add an opt-in `--verbose` diagnostic mode for `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, and `scripts/self-review.mjs`; propagate it through supported CI comment commands (`/gem-review --verbose`).
+- [ ] Implement structured, redacted execution telemetry:
+  - Phase timing (diff fetch, guidelines, subagent dispatch, verification, caching, publishing)
+  - Selected mode, roles, and models; fallback attempts
+  - Diff and guideline metadata (sizes, truncation)
+  - Cache outcomes (hit/miss, freshness validation)
+  - Per-lens lifecycle, duration, and error status
+  - Finding anchoring, classification, and demotion
+  - Publication, stale-head checks, and quality gate decisions
+- [ ] Preserve concise default output and strictly redact sensitive data (zero prompt/diff bodies, zero credentials/tokens, zero absolute machine paths, zero raw env variables).
+- [ ] Expose diagnostics in machine-readable format compatible with JSON consumers (`--json` or structured report).
+- [ ] Cover normal, degraded, fallback, rejected, and error execution paths with comprehensive automated tests.
+- [ ] Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
 
-### Future Capabilities (Post-Increment 21 Roadmap)
-- [ ] **Increment 22: Safe Verbose Review Diagnostics**
-  - Add `--verbose` to the PR and self-review CLI runners, with propagation through the dogfood wrapper and CI command dispatcher where appropriate.
-  - Emit phase timing, resolved mode/roles/model selection (including fallback attempts), diff metadata, guideline-resolution status, cache activity, per-lens completion/error status, finding classification, and host-gated publication decisions.
-  - Keep normal output concise and ensure verbose output never includes prompt/diff bodies, credentials, tokens, absolute machine paths, or unredacted environment data.
-  - Add machine-readable diagnostic events or a `--json`-compatible diagnostics field so failed remote reviews can be investigated without parsing terminal prose.
-  - Cover flag parsing, redaction, success, partial subagent failure, model fallback, stale-head rejection, and publish/demotion telemetry with automated tests.
+### Future Capabilities (Post-Increment 22 Roadmap)
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
 
 ## Completed Increments
+- [x] **Increment 21 / PR #39: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
+  - [x] Implemented PR architecture impact analyzer in `src/architecture.js` (`analyzeArchitecture`, `extractComponentsAndInteractions`, `synthesizeWalkthrough`, `formatArchitectureSummary`).
+  - [x] Implemented Mermaid diagram generators (`generateMermaidSequenceDiagram`, `generateMermaidComponentDiagram`) with strict syntax and label sanitization (`sanitizeMermaidLabel`, `sanitizeMermaidId`).
+  - [x] Integrated into `runReview` (`src/reviewer.js`) for `--full` and `--deep` modes or explicit `--architecture` flag; defined `ARCHITECTURE_LENS`.
+  - [x] Integrated into `runSelfReview` (`src/self-review.js`) for local worktree architecture reports.
+  - [x] Exposed MCP tools `gem_pr_review_architecture` and `pr_review_architecture` in `server/index.js`.
+  - [x] Added `--architecture` / `--arch` and `--no-architecture` flags to `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, and `src/cli.js`.
+  - [x] Added configuration in `src/config.js` (`architecture: { enabled: 'auto', diagrams: ['sequence', 'component'] }`).
+  - [x] Added 27 new unit and integration tests across `tests/architecture.test.mjs`, `tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/mcp-server.test.mjs`, and `tests/skills.test.mjs` (802 total tests passing across 149 suites).
+  - [x] Dogfood reviewed on PR #39 with 0 defects and squash-merged to `main`.
 - [x] **Increment 20 / PR #37: PR Review Thread Conversation Replies & Automated Resolution**
   - [x] Implemented review thread discovery and discussion state tracker in `src/prior.js` (`fetchReviewThreads`, `evaluateReviewThread`, `evaluateReviewThreads`).
   - [x] Supported conversational multi-turn replies and discussion states (`unresolved`, `author_replied`, `fix_pending`, `closed`).

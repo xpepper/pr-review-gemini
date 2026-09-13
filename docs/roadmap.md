@@ -171,9 +171,25 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Automated thread verification against latest head diff and GraphQL `resolveReviewThread` mutations.
   - Comment command trigger `/gem-review resolve` in `src/ci.js` and `scripts/ci-action.mjs` with visual reaction lifecycles (🚀, 👍, 😕).
   - MCP inspection and resolution tools `gem_pr_review_threads` and alias `pr_review_threads` in `server/index.js` with host-gated diff safety checks.
-  - Dogfood review loop on PR #37 verified clean across 3 review passes and squash-merged to `main`.
-- [ ] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
-  - High-level architectural walkthrough and visual component flow diagrams for complex PRs.
+- [x] **Increment 21: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams (#39)**
+  - Implemented PR architecture impact analyzer in `src/architecture.js`:
+    - Component and cross-module interaction extraction from unified diffs (`extractComponentsAndInteractions`).
+    - Public API and export change detection (`publicApiChanges`).
+    - Mermaid label and identifier sanitization (`sanitizeMermaidLabel`, `sanitizeMermaidId`) eliminating brackets, HTML tags, and unescaped quotes.
+    - Generation of valid Mermaid sequence diagrams (`generateMermaidSequenceDiagram`, `sequenceDiagram`, `autonumber`, message flows).
+    - Generation of valid Mermaid component flowcharts (`generateMermaidComponentDiagram`, `flowchart TD`, subsystem subgraphs).
+    - Narrative system walkthrough synthesis (`synthesizeWalkthrough`) and markdown report formatting (`formatArchitectureSummary`).
+  - Integrated into review orchestration (`src/reviewer.js`):
+    - Automatically included when review mode is `--full` or `--deep`, or when requested via `--architecture` (or `--arch`) CLI flag.
+    - Added `ARCHITECTURE_LENS` definition to `LENS_DEFINITIONS`.
+    - Attached architecture analysis results to returned review object and session cache.
+  - Integrated into one-shot self-review (`src/self-review.js`):
+    - Evaluates worktree diff architecture and appends impact reports to self-review results.
+  - Added MCP tools `gem_pr_review_architecture` and `pr_review_architecture` in `server/index.js` supporting direct diff text or `prNumber`.
+  - Added CLI options (`--architecture`, `--arch`, `--no-architecture`) across `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, and `src/cli.js`.
+  - Added configuration support in `src/config.js` (`DEFAULT_ARCHITECTURE_CONFIG`, `architecture: { enabled: 'auto', diagrams: ['sequence', 'component'] }`).
+  - Added comprehensive test suites across `tests/architecture.test.mjs`, `tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/mcp-server.test.mjs`, and `tests/skills.test.mjs` (802 total tests passing across 149 suites with 0 failures).
+  - Executed dogfood review loop against PR #39, verified 0 blocking defects, and merged into `main` (commit `61e06a8`).
 - [ ] **Increment 22: Safe Verbose Review Diagnostics**
   - Add an opt-in `--verbose` diagnostic mode for `dogfood-review`, `dogfood-pr`, and `self-review`; propagate it through supported CI comment commands.
   - Report structured, redacted execution telemetry: phase timing; selected mode, roles, and models; fallback attempts; diff and guideline metadata; cache outcomes; per-lens lifecycle/errors; finding anchoring/demotion; and publication/stale-head decisions.

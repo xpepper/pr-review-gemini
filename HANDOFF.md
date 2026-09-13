@@ -3,9 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `main` (Increment 20 merged, clean working tree)
-* **Active PR**: None (PR #37 merged to `main`)
-* **Test Suite**: `npm test` runs and passes (775 tests across 141 suites, 0 failures)
+* **Current Branch**: `main` (Increment 21 merged, clean working tree)
+* **Active PR**: None (PR #39 merged to `main`)
+* **Test Suite**: `npm test` runs and passes (802 tests across 149 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.2.0`
 * **Roadmap Increments Delivered**:
   - PR #1: `feat(config): implement model tier and settings resolution`
@@ -33,32 +33,42 @@
   - PR #32 (Issue #31 / Increment 18): `feat(ci): interactive PR comment command dispatcher (/gem-review)` (Merged, commit `7f3af22`)
   - PR #33 (Increment 19): `feat(guidelines): repository review guidelines & project memory (.github/gem-pr-review.md)` (Merged)
   - PR #37 (Increment 20): `feat(threads): PR review thread conversation replies and automated resolution` (Merged)
+  - PR #39 (Increment 21): `feat(architecture): auto-generated PR architecture summary and Mermaid sequence diagrams` (Merged, commit `61e06a8`)
 
 ---
 
-## Status: READY_FOR_INCREMENT_21 — Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams
+## Status: READY_FOR_INCREMENT_22 — Safe Verbose Review Diagnostics
 
-Increment 20 has been fully delivered, verified, dogfooded on GitHub PR #37 across 3 review passes, and merged into `main`:
-- `src/prior.js`: Review thread discovery via GraphQL/REST (`fetchReviewThreads`), author reply and turn tracking, multi-turn conversational evaluation against latest diff (`evaluateReviewThread`, `evaluateReviewThreads`), GraphQL automated thread resolution (`resolveReviewThread`), follow-up thread replies (`replyToReviewThread`), and batch verified resolution orchestrator (`resolveVerifiedThreads`).
-- `src/reviewer.js`: Integrated thread evaluation and optional live resolution (`resolveThreads`, `autoReplyThreads`, `dryRun`) into PR review flow and incremental re-reviews with concise thread status summaries.
-- `src/ci.js` & `scripts/ci-action.mjs`: Added `/gem-review resolve` comment command workflow with reactive status lifecycle (🚀 in progress, 👍 verified resolution completion, 😕 error handling), autorun authorization checks, and safe error propagation.
-- `server/index.js`: Added MCP tools `gem_pr_review_threads` and alias `pr_review_threads` with host-gated PR diff verification requirements.
-- `scripts/dogfood-review.mjs` & `scripts/dogfood-pr.mjs`: Added `--resolve-threads` and `--no-reply-threads` CLI options.
-- Comprehensive test suite: 775 passing tests across 141 test suites.
+Increment 21 has been fully delivered, verified, dogfooded on GitHub PR #39, and merged into `main`:
+- `src/architecture.js`: Implemented architecture impact analyzer (`analyzeArchitecture`), component/interaction extraction from unified diffs (`extractComponentsAndInteractions`), public API and export detection (`publicApiChanges`), Mermaid label/ID sanitization (`sanitizeMermaidLabel`, `sanitizeMermaidId`), Mermaid sequence diagram generator (`generateMermaidSequenceDiagram`), Mermaid component flowchart generator (`generateMermaidComponentDiagram`), narrative system walkthrough synthesis (`synthesizeWalkthrough`), and markdown report formatting (`formatArchitectureSummary`).
+- `src/reviewer.js`: Integrated architecture analysis into review workflow; automatically enabled in `--full` and `--deep` modes, or via explicit `--architecture` / `--arch` flag. Registered `ARCHITECTURE_LENS` in `LENS_DEFINITIONS` and re-exported all architecture utilities.
+- `src/self-review.js`: Integrated architecture impact report into self-review workflow for local worktrees.
+- `server/index.js`: Added MCP tools `gem_pr_review_architecture` and `pr_review_architecture` supporting direct diff text or `prNumber` via host diff retrieval.
+- `src/config.js`: Added `architecture: { enabled: 'auto', diagrams: ['sequence', 'component'] }` configuration.
+- Centralized CLI & Runners: Added `--architecture` / `--arch` and `--no-architecture` flags to `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, and `src/cli.js`.
+- Documentation & Skills: Updated `skills/gem-pr-review/SKILL.md` and `README.md`.
+- Comprehensive test suite: 802 passing tests across 149 test suites with 0 failures.
 
-### Next Steps for Increment 21:
-1. Create feature branch: `git checkout -b feat/architecture-diagrams`
-2. Implement architecture impact analyzer subagent / lens in `src/architecture.js` or `src/reviewer.js`:
-   - Inspect PR changes across module boundaries, subsystem interactions, and public APIs.
-   - Synthesize a concise high-level architecture walkthrough explaining system-level changes.
-3. Implement Mermaid sequence and component diagram generation:
-   - Generate valid Mermaid syntax (`sequenceDiagram`, `flowchart TD`/`LR`, `graph TD`) visualizing message flows and component relationships modified by the PR.
-   - Sanitize labels to prevent syntax rendering errors (escape quotes, brackets, avoid HTML tags).
-4. Integrate into review output:
-   - Include architecture summary and Mermaid diagrams in PR review markdown output when mode is `--full` or `--deep` (or when `--architecture` flag is specified).
-   - Add MCP tool `gem_pr_review_architecture`.
-5. Add unit and integration tests across `tests/architecture.test.mjs`, `tests/reviewer.test.mjs`, `tests/skills.test.mjs`.
-6. Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
+### Next Steps for Increment 22: Safe Verbose Review Diagnostics
+1. Create feature branch: `git checkout -b feat/verbose-diagnostics`
+2. Design & implement telemetry collector module (`src/diagnostics.js` or integrated into `src/reviewer.js`):
+   - Phase execution timing (diff retrieval, guidelines discovery, subagent dispatch, worktree test verification, session caching, GitHub publishing).
+   - Configuration & model resolution telemetry: selected review mode, active/custom roles, primary and fallback models per lens, and fallback attempt tracking.
+   - Diff & guideline metadata: total diff bytes, large-diff threshold classification (> 200 KB), manifest file count, guideline path, guideline bytes, and truncation status.
+   - Session cache telemetry: cache hit/miss status, cache file path, and PR head freshness validation outcome.
+   - Per-lens execution lifecycle: start time, duration, status (`completed`, `retried`, `failed`), and error classification.
+   - Finding classification: total detected findings, anchored vs demoted counts, severity breakdown (P0/P1/P2/P3/nit), and confidence distributions.
+   - Publication & safety gate decisions: stale-head validation check, comment count capping, approval verdict reasoning, and CI quality gate evaluation.
+3. Strict redaction & sanitization guarantees:
+   - Ensure zero exposure of sensitive data: no prompt or raw diff bodies, no tokens/passwords/credentials, no local machine absolute paths (`/Users/`, `/home/`), no raw unredacted environment variables.
+4. CLI & CI Integration:
+   - Add `--verbose` (and `-V`) flag parsing to `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, and `src/cli.js`.
+   - Propagate `--verbose` through `/gem-review` comment command dispatcher (`src/ci.js`).
+   - Support machine-readable diagnostic output (`--json` or structured report) for headless/CI pipelines.
+5. Verification & Dogfooding:
+   - Add unit and integration tests across normal, degraded (partial failure), fallback retry, and rejected execution paths.
+   - Verify `npm test` and `npm run version:check`.
+   - Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
 
 ---
 
