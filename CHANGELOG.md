@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-09-13
+
+### 🚀 Features
+
+- **diagnostics:** safe verbose review diagnostics and execution telemetry (#40) (#40) (`
+921e21`)
+- **architecture:** add architecture summary and Mermaid diagrams (#39) (#39) (`
+61e06a`)
+- **threads:** PR review thread conversation replies and automated resolution (#37) (#37) (`
+8bf553`)
+
+### 📝 Documentation
+
+- complete Increment 22 handoff and mark ALL_INCREMENTS_COMPLETE (`c9b053a`)
+- complete Increment 21 handoff and set Increment 22 as active mission (`
+181d0f`)
+- plan verbose review diagnostics (#38) (#38) (`
+fac0d7`)
+- complete Increment 20 handoff and set Increment 21 as active mission (`
+5d55ee`)
+- add step-by-step release guide and correct manifest list in README (#36) (#36) (`
+201519`)
+
 ## [0.2.0] - 2026-09-12
 
 ### 🚀 Features
@@ -130,4 +153,3 @@ c2d6d6`)
 238381`)
 - initialize agent plugin scaffolding and manifest test (`
 1ef6d9`)
-
