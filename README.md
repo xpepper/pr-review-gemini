@@ -583,7 +583,7 @@ To cut a new release from `main`:
    ```
 
 ### Automated Release Workflow
-Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) on GitHub Actions. It runs the full test suite, validates manifest synchronization, ensures the git tag matches `package.json`, and publishes the official GitHub Release with release notes.
+Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) on GitHub Actions. It runs the full test suite, validates manifest synchronization, and ensures the tag matches `package.json`. After verification passes, publish a normal GitHub Release by manually dispatching the workflow with its existing tag. This deliberate publication step also leaves room to create a GitHub Marketplace release draft for the verified tag.
 
 ---
 
