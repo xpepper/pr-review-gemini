@@ -11,7 +11,7 @@ then add the Action to a repository workflow:
 
 ```yaml
 - name: AI PR Code Review
-  uses: xpepper/pr-review-gemini@main
+  uses: xpepper/pr-review-gemini@v0.3.3
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     mode: balanced

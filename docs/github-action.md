@@ -44,7 +44,7 @@ jobs:
           ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
 
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@main
+        uses: xpepper/pr-review-gemini@v0.3.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
@@ -56,9 +56,10 @@ jobs:
 The `pull-requests: write` permission allows reviews and inline comments.
 `issues: write` is required only for the optional `/gem-review` issue-comment
 workflow and its reaction/reply lifecycle. The workflow condition only routes
-matching comments to the Action; before it performs review work, the Action
-host-gates the commenter to an `OWNER`, `MEMBER`, or `COLLABORATOR`, unless the
-commenter is explicitly allowlisted.
+matching comments to the Action using a substring check; command parsing and
+authorization happen inside the Action. Before it performs review work, the
+Action host-gates the commenter to an `OWNER`, `MEMBER`, or `COLLABORATOR`,
+unless the commenter is explicitly allowlisted.
 
 ## Inputs
 

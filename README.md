@@ -28,12 +28,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
-      - uses: xpepper/pr-review-gemini@main
+      - uses: xpepper/pr-review-gemini@v0.3.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
           fail_on: P1
 ```
+
+This minimal workflow handles pull-request events only. For the `/gem-review`
+comment trigger and concurrency controls, see the complete
+[GitHub Action reference](docs/github-action.md).
 
 ## Safety model
 
