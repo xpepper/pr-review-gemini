@@ -1714,6 +1714,9 @@ index 1111111..2222222 100644
       const releaseCreation = content.indexOf('gh release create "$TAG_NAME"');
       assert.ok(existingReleaseCheck >= 0, 'publish job must reject an existing release');
       assert.ok(existingReleaseCheck < releaseCreation, 'existing release check must run before release creation');
+      assert.match(content, /release_lookup=\$\(gh release view "\$TAG_NAME" 2>&1\)/);
+      assert.match(content, /\[\s*"\$release_lookup"\s*!=\s*"release not found"\s*\]/);
+      assert.match(content, /Unable to verify whether a release exists/);
     });
   });
 
