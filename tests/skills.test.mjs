@@ -290,7 +290,30 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
     assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
   });
+
+  it('documents safe verbose review diagnostics and telemetry in SKILL.md (Increment 22)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Safe Verbose Review Diagnostics/i, 'Should document Safe Verbose Review Diagnostics');
+    assert.match(content, /--verbose|-V/i, 'Should document --verbose or -V flag');
+    assert.match(content, /--json/i, 'Should document --json flag');
+    assert.match(content, /gem_pr_review_diagnostics/i, 'Should document gem_pr_review_diagnostics MCP tool');
+    assert.match(content, /pr_review_diagnostics/i, 'Should document pr_review_diagnostics alias');
+    assert.match(content, /\/gem-review --verbose/i, 'Should document /gem-review --verbose CI command');
+    assert.match(content, /redaction|sanitiz/i, 'Should document telemetry redaction guarantees');
+  });
+
+  it('documents safe verbose review diagnostics and telemetry in README.md (Increment 22)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Safe Verbose Review Diagnostics/i, 'README should document Safe Verbose Review Diagnostics');
+    assert.match(readmeContent, /--verbose|-V/i, 'README should document --verbose or -V flag');
+    assert.match(readmeContent, /--json/i, 'README should document --json flag');
+    assert.match(readmeContent, /gem_pr_review_diagnostics/i, 'README should document gem_pr_review_diagnostics MCP tool');
+    assert.match(readmeContent, /verbose/i, 'README should document verbose input');
+    assert.match(readmeContent, /diagnostics/i, 'README should document diagnostics output');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
-
-
-

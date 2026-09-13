@@ -119,6 +119,7 @@ export async function saveReviewCache(data, options = {}) {
     lensesExecuted: data.lensesExecuted || [],
     diffTransport: data.diffTransport || null,
     revalidation: data.revalidation || null,
+    diagnostics: data.diagnostics || null,
     createdAt: new Date().toISOString(),
   };
 

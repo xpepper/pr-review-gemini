@@ -258,7 +258,16 @@ Generates a structured system architecture walkthrough and valid Mermaid diagram
 - **Review Mode Integration**: Automatically included when reviewing in `--full` or `--deep` modes, or on demand via `--architecture` (or `--arch`) CLI flag.
 - **MCP Inspection Tool**: Analyze architecture directly via MCP tool `gem_pr_review_architecture` (alias `pr_review_architecture`).
 
+### 15. Safe Verbose Review Diagnostics & Telemetry
+Captures and formats safe, structured execution telemetry without exposing sensitive data:
+- **Phase Timings & Lifecycles**: Records end-to-end and phase timings (`diffFetch`, `guidelinesLoad`, `cacheLookup`, `subagentsInference`, `verification`, `synthesis`, `threadResolution`, `architecture`, `publishing`), model attempts, token counts, and fallback failovers.
+- **Strict Redaction Guarantees**: Strict sanitization guarantees zero exposure of raw prompt or diff bodies, authentication tokens, API keys, and local machine filesystem paths.
+- **CLI Flags (`--verbose` / `-V`, `--json`)**: Attach detailed diagnostics to review summaries or emit structured machine-readable JSON for pipeline automation (`node scripts/dogfood-review.mjs <PR> --verbose --json`).
+- **Interactive CI Dispatch (`/gem-review --verbose`)**: Collapsible `<details>` diagnostics report directly in PR comment replies.
+- **MCP Inspection Tool**: Inspect review diagnostics via `gem_pr_review_diagnostics` (alias `pr_review_diagnostics`) in Markdown or JSON format.
+
 ---
+
 
 ## Model Context Protocol (MCP) Server
 
@@ -284,6 +293,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 - **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
 - **`gem_pr_review_threads`** *(alias `pr_review_threads`)*: Discovers review comment threads, tracks author replies, verifies fixes against diff hunks, and optionally auto-resolves verified threads.
 - **`gem_pr_review_architecture`** *(alias `pr_review_architecture`)*: Analyzes PR diffs or unified text to produce an architecture impact summary and Mermaid sequence/component diagrams.
+- **`gem_pr_review_diagnostics`** *(alias `pr_review_diagnostics`)*: Inspects and formats safe structured execution telemetry and diagnostics for a review session or cached PR review.
 - **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
 - **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
 
@@ -440,6 +450,7 @@ Guidelines support global rules and targeted lens/role sections:
 | `action` | Review action: `publish` (post review to PR) or `dry-run` (generate summary only) | No | `publish` |
 | `select` | Finding filter specification (e.g. `p0,p1`, `min:p2`, `1,3`) | No | *all findings* |
 | `guidelines_path` | Optional custom path to repository review guidelines file | No | `.github/gem-pr-review.md` |
+| `verbose` | Attach structured diagnostic telemetry to review summary and outputs (`true`, `false`) | No | `false` |
 
 ### Action Outputs (`action.yml`)
 
@@ -449,6 +460,7 @@ Guidelines support global rules and targeted lens/role sections:
 | `findings_count` | Total number of findings detected across all lenses | `3` |
 | `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
 | `summary` | Markdown review summary | `## PR Review Summary...` |
+| `diagnostics` | Sanitized JSON string of the complete execution telemetry payload | `{"metadata":...}` |
 
 ### Automated Event Detection & Incremental Re-reviews
 
@@ -581,7 +593,7 @@ Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/w
 npm test
 ```
 
-All 802 unit tests across 149 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, review thread verification & automated resolution, PR architecture walkthrough & Mermaid diagrams, and centralized CLI infrastructure.
+All 838 unit tests across 158 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, review thread verification & automated resolution, PR architecture walkthrough & Mermaid diagrams, centralized CLI infrastructure, and safe verbose review diagnostics.
 
 ---
 

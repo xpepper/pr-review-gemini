@@ -810,6 +810,50 @@ Inspect PR architecture programmatically via MCP:
   - Parameters: `prNumber` (optional integer), `diffText` (optional string), `repo` (optional string).
   - Returns: `summary`, `components`, `interactions`, `publicApiChanges`, `subsystems`, `sequenceDiagram`, `componentDiagram`, and `markdown`.
 
+---
+
+## Safe Verbose Review Diagnostics & Telemetry
+
+`gem-pr-review` provides structured, safe execution telemetry across all review workflows. It captures operational metrics, model resolution paths, phase timings, and safety gate decisions while enforcing strict redaction guarantees to ensure zero sensitive data exposure.
+
+### 1. Structured Telemetry & Diagnostics Collector
+Review runs collect structured execution telemetry without impacting performance:
+- **Phase Timings**: Precise start, end, and duration timings across review phases (`diffFetch`, `guidelinesLoad`, `cacheLookup`, `subagentsInference`, `verification`, `synthesis`, `threadResolution`, `architecture`, `publishing`).
+- **Configuration & Model Resolution**: Records resolved review mode, requested vs effective models, reasoning effort levels, fallback chain executions, and active feature flags.
+- **Diff & Guidelines Metadata**: Logs changed file counts, additions, deletions, total diff byte size, transport strategy (inline vs file-backed), and repository guideline ingestion status.
+- **Cache Telemetry**: Tracks cache hit/miss status, cached finding counts, and commit head freshness checks.
+- **Specialist Lens Lifecycles**: Records per-lens execution time, model attempt count, fallback transitions, token usage metrics, raw candidate finding counts, and schema parse statuses.
+- **Finding Anchoring & Classification**: Tracks total findings, severity distribution (`P0`, `P1`, `P2`, `P3`, `nit`), verified diff anchors, candidate recoveries, and deduplication counts.
+- **Publication & Safety Decisions**: Logs publish verdicts (`APPROVE`, `REQUEST_CHANGES`, `COMMENT`), blocking counts, and host-gated safety determinations.
+
+### 2. Strict Redaction & Sanitization Guarantees
+All telemetry is sanitized before persistence or formatting:
+- **Zero Raw Code/Prompt Exposure**: Raw diff hunks, file contents, prompt templates, and free-form model commentary are never retained in diagnostic payloads.
+- **Secret & Token Scrubbing**: API tokens, authorization headers, passwords, and private keys are scrubbed matching patterns for GitHub tokens (`ghp_`, `gho_`, `github_pat_`), bearer tokens, and generic credentials.
+- **Developer Machine Path Redaction**: Local machine filesystem paths (developer workstation and user home directory paths) are sanitized into repository-relative paths or replaced with `[REDACTED_PATH]`.
+
+### 3. CLI & CI Flags
+- **`--verbose` / `-V`**:
+  Attaches a structured diagnostic report to the review summary output across all runners (`dogfood-review.mjs`, `dogfood-pr.mjs`, `self-review.mjs`).
+- **`--json`**:
+  Outputs sanitized telemetry and review results as structured JSON suitable for pipeline ingestion.
+- **Interactive PR Comment Dispatch (`/gem-review --verbose`)**:
+  When invoked with `--verbose` in PR comments, appends a collapsible `<details><summary>Review Execution Diagnostics</summary>...</details>` report to the markdown reply.
+- **GitHub Action (`action.yml`)**:
+  - Input `verbose`: Enable diagnostic telemetry reporting in CI (default: `'false'`).
+  - Output `diagnostics`: Sanitized JSON string of the complete execution telemetry payload.
+
+### 4. MCP Tools: `gem_pr_review_diagnostics` & `pr_review_diagnostics`
+Inspect and format review diagnostics programmatically via MCP:
+- `gem_pr_review_diagnostics` (and alias `pr_review_diagnostics`):
+  - Parameters:
+    - `prNumber` (optional integer): Retrieve cached telemetry for a PR review pass.
+    - `diagnostics` (optional object): Raw or collected telemetry object to format.
+    - `format` (optional string, `'markdown'` | `'json'`, default: `'markdown'`): Formatted report or JSON string.
+    - `cacheDir` (optional string): Custom session cache directory.
+  - Also, `gem_pr_review_subagents` and `gem_self_review` accept `verbose: true` to attach diagnostics to the result summary and payload.
+
+
 
 
 
