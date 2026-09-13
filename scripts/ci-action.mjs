@@ -299,6 +299,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       roles: ciEnv.roles,
       replaceStandardRoles: ciEnv.replaceStandardRoles,
       guidelinesPath: ciEnv.guidelinesPath,
+      verbose: ciEnv.verbose,
     });
 
     let verificationResult = null;
@@ -458,6 +459,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         blocking_count: String(qualityGate.blockingCount),
         verification_status: verificationResult ? verificationResult.status : 'none',
         summary: reviewResult.summary || '',
+        diagnostics: JSON.stringify(reviewResult.diagnostics || {}),
       },
       { outputFile: env.GITHUB_OUTPUT }
     );
@@ -490,6 +492,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         qualityGateResult: qualityGate,
         ciEnv,
         verificationResult,
+        diagnostics: reviewResult.diagnostics,
       });
       await safePostComment(completionReply);
     }

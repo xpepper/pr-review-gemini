@@ -35,6 +35,10 @@ inputs:
   guidelines_path:
     description: 'Custom path to repository review guidelines file (defaults to .github/gem-pr-review.md)'
     required: false
+  verbose:
+    description: 'Enable verbose diagnostic execution telemetry'
+    required: false
+    default: 'false'
 
 outputs:
   verdict:
@@ -52,6 +56,9 @@ outputs:
   summary:
     description: 'Markdown review summary'
     value: ${{ steps.review.outputs.summary }}
+  diagnostics:
+    description: 'Structured, sanitized execution telemetry JSON'
+    value: ${{ steps.review.outputs.diagnostics }}
 
 runs:
   using: 'composite'
@@ -68,6 +75,7 @@ runs:
         INPUT_ACTION: ${{ inputs.action }}
         INPUT_SELECT: ${{ inputs.select }}
         INPUT_GUIDELINES_PATH: ${{ inputs.guidelines_path }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |

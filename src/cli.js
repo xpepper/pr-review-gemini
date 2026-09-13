@@ -89,7 +89,7 @@ export function resolveDebugFlag(options = {}) {
     return true;
   }
   const argv = Array.isArray(options.argv) ? options.argv : [];
-  if (argv.includes('--debug') || argv.includes('--verbose')) {
+  if (argv.includes('--debug') || argv.includes('--verbose') || argv.includes('-V')) {
     return true;
   }
   return false;
@@ -246,6 +246,9 @@ export function parseCommonReviewOptions(args, index) {
   const arg = args[index];
   if (arg === '--replace-standard-roles') {
     return { matched: true, type: 'replaceStandardRoles', value: true, nextIndex: index };
+  }
+  if (arg === '--verbose' || arg === '-V') {
+    return { matched: true, type: 'verbose', value: true, nextIndex: index };
   }
   if (arg === '--architecture' || arg === '--arch') {
     return { matched: true, type: 'architecture', value: true, nextIndex: index };

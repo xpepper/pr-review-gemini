@@ -34,6 +34,8 @@ Options:
   --select <spec>   Filter findings by indices or severities (e.g. "p0,p1")
   --model <model>   Override model name (defaults to "auto")
   --mock            Use synthetic runner for testing without inference
+  -V, --verbose     Display safe, structured diagnostic execution telemetry
+  --json            Output machine-readable review results as JSON
   -v, --version     Display version information
   --help, -h        Display this help message
 `);

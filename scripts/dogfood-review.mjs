@@ -53,6 +53,8 @@ Options:
   --repo <repo>     GitHub repository in owner/repo format (e.g. xpepper/pr-review-gemini)
   --model <model>   Override model name
   --mock            Use synthetic runner for testing without inference
+  -V, --verbose     Display safe, structured diagnostic execution telemetry
+  --json            Output machine-readable review results as JSON
   -v, --version     Display version information
   --help, -h        Display this help message
 `);
@@ -75,6 +77,8 @@ export function parseCliArgs(args) {
   let self = false;
   let incremental = false;
   let resolveThreads = false;
+  let verbose = false;
+  let json = false;
   let showHelp = false;
   let showVersion = false;
   const roles = [];
@@ -108,6 +112,8 @@ export function parseCliArgs(args) {
       all = true;
     } else if (arg === '--interactive') {
       interactive = true;
+    } else if (arg === '--json') {
+      json = true;
     } else if (arg === '--mock') {
       mock = true;
     } else if (arg === '--mock-gh') {
@@ -123,6 +129,8 @@ export function parseCliArgs(args) {
           guidelinesPath = commonOpt.value;
         } else if (commonOpt.type === 'architecture') {
           architecture = commonOpt.value;
+        } else if (commonOpt.type === 'verbose') {
+          verbose = true;
         }
         i = commonOpt.nextIndex;
         continue;
@@ -197,6 +205,8 @@ export function parseCliArgs(args) {
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
     architecture: architecture !== null ? architecture : undefined,
+    verbose,
+    json,
   };
 }
 
@@ -237,6 +247,8 @@ export async function main() {
     guidelinesPath,
     baseRef,
     architecture,
+    verbose,
+    json,
   } = parseCliArgs(rawArgs);
 
   if (self) {
@@ -254,9 +266,14 @@ export async function main() {
         replaceStandardRoles,
         guidelinesPath,
         architecture,
+        verbose,
       });
 
-      console.log(result.summary);
+      if (json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(result.summary);
+      }
       process.exit(result.status === 'failed' ? 1 : 0);
     } catch (err) {
       console.error(`Self-review failed: ${err.message}`);
@@ -409,7 +426,13 @@ export async function main() {
       guidelinesPath,
       baseRef,
       architecture,
+      verbose,
     });
+
+    if (json) {
+      console.log(JSON.stringify(reviewResult, null, 2));
+      return;
+    }
 
     console.log('\n────────────────────────────────────────────────────────');
     console.log(reviewResult.summary);

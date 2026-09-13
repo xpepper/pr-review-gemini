@@ -14,6 +14,7 @@ import {
   evaluateReviewThreads,
   resolveVerifiedThreads,
 } from './prior.js';
+import { formatDiagnosticReport } from './diagnostics.js';
 
 const SEVERITY_LEVELS = ['P0', 'P1', 'P2', 'P3', 'nit'];
 
@@ -270,6 +271,13 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     env.INPUT_GUIDELINES ||
     null;
 
+  // 12. Verbose Diagnostics
+  const verbose = Boolean(
+    options.verbose ??
+    cmd?.verbose ??
+    (env.INPUT_VERBOSE === 'true' || env.INPUT_VERBOSE === '1')
+  );
+
   return {
     prNumber,
     repo,
@@ -283,6 +291,7 @@ export function resolveCiEnvironment(options = {}, env = process.env) {
     verify,
     githubToken,
     guidelinesPath,
+    verbose,
     isComment: eventInfo.isComment,
     isCommentCommand,
     isAuthorized,
@@ -457,6 +466,7 @@ export function parseCommentCommand(commentBody) {
     failOn: null,
     action: null,
     select: null,
+    verbose: false,
     help: false,
     rawArgs: [],
     unrecognizedArgs: [],
@@ -509,6 +519,7 @@ export function parseCommentCommand(commentBody) {
   let failOn = null;
   let action = null;
   let select = null;
+  let verbose = false;
   let help = false;
   const unrecognizedArgs = [];
 
@@ -575,6 +586,8 @@ export function parseCommentCommand(commentBody) {
       select = token.slice('--select='.length);
     } else if (token === '--select' && i + 1 < tokens.length && !tokens[i + 1].startsWith('-')) {
       select = tokens[++i];
+    } else if (token === '--verbose' || token === '-V') {
+      verbose = true;
     } else {
       unrecognizedArgs.push(token);
     }
@@ -592,6 +605,7 @@ export function parseCommentCommand(commentBody) {
     action,
     resolve: action === 'resolve',
     select,
+    verbose: Boolean(verbose),
     help,
     rawArgs: tokens,
     unrecognizedArgs,
@@ -898,6 +912,7 @@ Trigger automated multi-lens AI code reviews directly from pull request comments
 - \`--select=<filter>\`: Filter findings to publish (e.g. \`--select=p0,p1\`, \`--select="min:p2"\`)
 - \`--resolve\`, \`resolve\`: Automatically verify and resolve addressed review threads against latest PR head diff
 - \`--dry-run\`: Generate review summary without posting comments to the PR
+- \`--verbose\`, \`-V\`: Include structured diagnostic execution telemetry in review output
 - \`--help\`, \`-h\`: Display this command usage guide
 
 #### Examples
@@ -931,6 +946,7 @@ export function formatCompletionReply({
   qualityGateResult = {},
   ciEnv = {},
   verificationResult = null,
+  diagnostics = null,
 } = {}) {
   const verificationPassed = isVerificationPassed(verificationResult);
   const qualityGatePassed = qualityGateResult.passed !== false;
@@ -960,12 +976,21 @@ export function formatCompletionReply({
     ? 'Failed quality gate'
     : 'Failed verification';
 
-  return `> ${icon} **Gem PR Review Complete**
+  let reply = `> ${icon} **Gem PR Review Complete**
 >
 > - **Verdict**: \`${verdict}\` (${reason})
 > - **Mode**: \`${mode}\`${incremental}
 > - **Findings**: ${findings} detected (${blocking} blocking)
 > - **Quality Gate (fail_on)**: \`${failOn}\`${verifyLine}`;
+
+  if (ciEnv.verbose && diagnostics) {
+    const diagReport = formatDiagnosticReport(diagnostics);
+    if (diagReport) {
+      reply += `\n\n<details><summary>🔍 Verbose Diagnostics</summary>\n\n${diagReport}\n</details>`;
+    }
+  }
+
+  return reply;
 }
 
 /**
