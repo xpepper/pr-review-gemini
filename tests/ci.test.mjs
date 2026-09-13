@@ -2262,13 +2262,16 @@ index 1111111..2222222 100644
     });
 
     it('resolveCiEnvironment extracts verbose flag from comment command and env.INPUT_VERBOSE', () => {
-      const fromCmd = resolveCiEnvironment({
-        eventPayload: {
-          action: 'created',
-          issue: { number: 42, pull_request: {} },
-          comment: { id: 1, body: '/gem-review --verbose', author_association: 'MEMBER' },
+      const fromCmd = resolveCiEnvironment(
+        {
+          eventPayload: {
+            action: 'created',
+            issue: { number: 42, pull_request: {} },
+            comment: { id: 1, body: '/gem-review --verbose', author_association: 'MEMBER' },
+          },
         },
-      });
+        {}
+      );
       assert.equal(fromCmd.verbose, true);
 
       const fromEnv = resolveCiEnvironment({}, { INPUT_VERBOSE: 'true' });
