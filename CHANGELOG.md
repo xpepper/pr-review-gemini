@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-09-13
+
+### 🧪 Tests
+
+- **ci:** isolate verbose command environment (`
+d3d51a`)
+
+### 🔧 Maintenance & Chores
+
+- Merge pull request #42 from xpepper/fix/release-ci-environment-test (#42) (`0adaed4`)
+
 ## [0.3.1] - 2026-09-13
 
 ### 🐛 Bug Fixes
