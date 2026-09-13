@@ -137,8 +137,20 @@ import {
   synthesizeWalkthrough,
   ARCHITECTURE_LENS,
 } from './architecture.js';
+import {
+  createDiagnosticsCollector,
+  formatDiagnosticReport,
+  formatDiagnosticsJson,
+  sanitizeTelemetry,
+  redactSensitiveString,
+} from './diagnostics.js';
 
 export {
+  createDiagnosticsCollector,
+  formatDiagnosticReport,
+  formatDiagnosticsJson,
+  sanitizeTelemetry,
+  redactSensitiveString,
   analyzeArchitecture,
   formatArchitectureSummary,
   generateMermaidSequenceDiagram,
@@ -752,11 +764,16 @@ export async function runReview({
   autoReplyThreads = true,
   checkThreads = null,
   architecture = null,
+  verbose = false,
+  diagnostics: injectedCollector = null,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
     throw new Error(`Invalid PR number: ${prNumber}`);
   }
+
+  const collector = injectedCollector || createDiagnosticsCollector({ verbose: Boolean(verbose), cwd });
+  collector.start();
 
   let resolvedConfig = config || (await loadConfig({ cwd }));
   const resolvedMode = resolveReviewMode(mode);
@@ -773,8 +790,17 @@ export async function runReview({
       ? execGitFn
       : (args, opts) => defaultExecGit(args, { cwd, ...opts });
 
+  collector.recordConfig({
+    mode: resolvedMode.name,
+    roles: roles || enabledRoles || null,
+    replaceStandardRoles: Boolean(replaceStandardRoles),
+    architecture: shouldIncludeArchitecture,
+  });
+
   let activeGuidelines = null;
   let guidelinesSummary = null;
+
+  collector.startPhase('diffFetch');
 
   // 1. Retrieve diff if not provided directly
   let unifiedDiffText = diffText;
@@ -789,6 +815,7 @@ export async function runReview({
   }
 
   if (!unifiedDiffText || !unifiedDiffText.trim()) {
+    collector.endPhase('diffFetch', { status: 'failed', error: 'Empty diff' });
     throw new Error(`PR diff is empty or could not be retrieved for PR #${num}`);
   }
 
@@ -801,6 +828,17 @@ export async function runReview({
     diffTransport = await createFileBackedDiff(unifiedDiffText);
     autoCreatedTransport = true;
   }
+
+  collector.endPhase('diffFetch', {
+    byteSize: Buffer.byteLength(unifiedDiffText, 'utf8'),
+    isLarge,
+  });
+  collector.recordDiffMetadata({
+    totalBytes: Buffer.byteLength(unifiedDiffText, 'utf8'),
+    isLarge,
+    totalFiles: diffTransport?.manifest?.totalFiles ?? parseUnifiedDiff(unifiedDiffText).length,
+    thresholdBytes: LARGE_DIFF_THRESHOLD_BYTES,
+  });
 
   try {
     // 2. Retrieve PR metadata if gh is available
@@ -934,6 +972,8 @@ export async function runReview({
       }
     }
 
+    collector.startPhase('guidelines');
+
     if (!isGuidelinesEnabled || isExplicitPathUnsafe) {
       activeGuidelines = createEmptyGuidelines({ enabled: isGuidelinesEnabled && !isExplicitPathUnsafe, found: false });
       guidelinesSummary = createGuidelinesSummary(activeGuidelines);
@@ -1021,6 +1061,21 @@ export async function runReview({
       }));
     }
 
+    collector.endPhase('guidelines', {
+      path: activeGuidelines?.relativePath || activeGuidelines?.path || null,
+      bytes: activeGuidelines?.byteSize || 0,
+      found: Boolean(activeGuidelines?.found),
+    });
+    collector.recordGuidelinesMetadata({
+      enabled: isGuidelinesEnabled,
+      found: Boolean(activeGuidelines?.found),
+      path: activeGuidelines?.relativePath || activeGuidelines?.path || null,
+      bytes: activeGuidelines?.byteSize || 0,
+      truncated: Boolean(activeGuidelines?.truncated),
+      untrusted: Boolean(activeGuidelines?.untrusted),
+      source: guidelinesSummary?.source || null,
+    });
+
     // 2b. Incremental re-review discovery & relationship classification
     let priorData = null;
     let commitRel = null;
@@ -1058,6 +1113,16 @@ export async function runReview({
           summary += '\n\n' + formatThreadResolutionSummary(threadResult.evaluation);
         }
 
+        collector.recordSafetyDecisions({
+          staleHeadPassed: Boolean(currentHeadSha),
+          verdict: 'SAME_HEAD',
+        });
+        collector.end();
+        const sameHeadDiagnostics = collector.toObject();
+        if (verbose) {
+          summary += '\n\n' + formatDiagnosticReport(sameHeadDiagnostics);
+        }
+
         return {
           prNumber: num,
           repo: repo || null,
@@ -1090,6 +1155,7 @@ export async function runReview({
           threads: threadResult.evaluation?.threads || threadResult.threads,
           threadCounts: threadResult.evaluation?.counts || null,
           threadResolution: threadResult.resolution,
+          diagnostics: sameHeadDiagnostics,
         };
       }
 
@@ -1159,9 +1225,13 @@ export async function runReview({
       customRoles,
     });
     const executedLenses = plan.map((p) => p.lensId);
+    const roleNameById = new Map(
+      plan.map((p) => [p.lensId, p.lensDef?.name || formatDefaultRoleName(p.lensId)])
+    );
     let allFindings = [];
     let subagentErrors = [];
 
+    collector.startPhase('subagents');
     if (typeof runnerFn === 'function') {
       const subagentResult = await dispatchSubagentsParallel({
         plan,
@@ -1175,6 +1245,30 @@ export async function runReview({
       });
       allFindings = subagentResult.findings;
       subagentErrors = subagentResult.errors;
+
+      if (Array.isArray(subagentResult.results)) {
+        for (const res of subagentResult.results) {
+          collector.recordLensLifecycle({
+            lensId: res.lensId,
+            name: roleNameById.get(res.lensId) || LENS_DEFINITIONS[res.lensId]?.name || formatDefaultRoleName(res.lensId),
+            durationMs: res.durationMs,
+            status: res.status || (res.error ? 'failed' : res.fallbackUsed ? 'retried' : 'completed'),
+            model: res.model,
+            primaryModel: res.primaryModel,
+            fallbacksUsed: res.fallbackUsed ? (res.fallbackModelsTried?.length || 1) : 0,
+            fallbackModelsTried: res.fallbackModelsTried,
+            findingsCount: res.findings?.length ?? 0,
+            error: res.error ? (res.error?.message || String(res.error)) : null,
+          });
+        }
+      }
+      collector.endPhase('subagents', {
+        lensCount: plan.length,
+        findingsCount: allFindings.length,
+        errorCount: subagentErrors.length,
+      });
+    } else {
+      collector.endPhase('subagents', { lensCount: plan.length, skipped: true });
     }
 
     // 4. Deduplicate findings (merging still-open prior findings in incremental mode)
@@ -1193,10 +1287,6 @@ export async function runReview({
         severityCounts[sev]++;
       }
     }
-
-    const roleNameById = new Map(
-      plan.map((p) => [p.lensId, p.lensDef?.name || formatDefaultRoleName(p.lensId)])
-    );
     const lensesList = executedLenses
       .map((id) => roleNameById.get(id) || LENS_DEFINITIONS[id]?.name || formatDefaultRoleName(id))
       .join(', ');
@@ -1245,6 +1335,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
 
     let architectureResult = null;
     if (shouldIncludeArchitecture && !allSubagentsFailed) {
+      collector.startPhase('architecture');
       try {
         architectureResult = await analyzeArchitecture({
           diffText: unifiedDiffText,
@@ -1253,8 +1344,9 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         if (architectureResult?.markdown) {
           summary += '\n\n' + architectureResult.markdown;
         }
-      } catch {
-        // Non-fatal: architecture analysis failure should not block core review passes
+        collector.endPhase('architecture', { included: true });
+      } catch (err) {
+        collector.endPhase('architecture', { included: false, error: err?.message || String(err) });
       }
     }
 
@@ -1271,6 +1363,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
 
     // 5b. In-session caching (publish-later retention)
     let cachedRecord = null;
+    collector.startPhase('caching');
     if (cacheReview !== false && currentHeadSha) {
       try {
         cachedRecord = await saveReviewCache(
@@ -1289,9 +1382,13 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
           },
           { cacheDir }
         );
+        collector.endPhase('caching', { cached: true, path: cachedRecord?.cachePath || null });
+        collector.recordCacheMetadata({ hit: false, path: cachedRecord?.cachePath || null, headFreshness: 'valid' });
       } catch {
-        // Cache save failure is non-fatal for direct review execution
+        collector.endPhase('caching', { cached: false, error: 'Cache save failed' });
       }
+    } else {
+      collector.endPhase('caching', { skipped: true });
     }
 
     // 6. Publish or Dry Run
@@ -1311,6 +1408,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         findingsToPublish = filterFindings(deduplicated, selection);
       }
 
+      collector.startPhase('publishing');
       const pubResult = await publishReview({
         prNumber: num,
         reviewBody: summary,
@@ -1325,6 +1423,40 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         hasExecutionErrors: subagentErrors.length > 0,
         executionErrors: subagentErrors,
       });
+      collector.endPhase('publishing', { published: true, verdict: pubResult.verdict });
+
+      const classification = pubResult.classification || classifyFindings(deduplicated, diffs, {
+        maxInlineComments: resolvedConfig.publishing?.maxInlineComments ?? 50,
+      });
+
+      const confidenceScores = deduplicated.map((f) => f.confidence).filter((c) => typeof c === 'number');
+      const minConf = confidenceScores.length > 0 ? Math.min(...confidenceScores) : null;
+      const maxConf = confidenceScores.length > 0 ? Math.max(...confidenceScores) : null;
+      const avgConf = confidenceScores.length > 0 ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length : null;
+
+      collector.recordFindingsClassification({
+        total: deduplicated.length,
+        anchored: classification?.anchored?.length ?? deduplicated.length,
+        demoted: classification?.demoted?.length ?? 0,
+        severities: severityCounts,
+        confidence: { min: minConf, max: maxConf, avg: avgConf },
+      });
+
+      collector.recordSafetyDecisions({
+        staleHeadPassed: Boolean(currentHeadSha),
+        commentsCapped: Boolean(pubResult.commentsCapped),
+        inlineCommentsCount: pubResult.inlineCommentsCount || classification?.anchored?.length || 0,
+        maxInlineComments: resolvedConfig.publishing?.maxInlineComments ?? 50,
+        verdict: pubResult.verdict || (deduplicated.some((f) => f.severity === 'P0' || f.severity === 'P1') ? 'COMMENT' : 'APPROVE'),
+      });
+
+      collector.end();
+      const diagnosticsData = collector.toObject();
+
+      let finalReviewBody = pubResult.reviewBody;
+      if (verbose) {
+        finalReviewBody += '\n\n' + formatDiagnosticReport(diagnosticsData);
+      }
 
       return {
         prNumber: num,
@@ -1343,7 +1475,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         errors: subagentErrors,
         findings: deduplicated,
         rawFindingsCount: allFindings.length,
-        summary: pubResult.reviewBody,
+        summary: finalReviewBody,
         classification: pubResult.classification,
         publication: pubResult,
         published: true,
@@ -1351,12 +1483,45 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         cached: Boolean(cachedRecord),
         guidelines: guidelinesSummary,
         architecture: architectureResult || null,
+        diagnostics: diagnosticsData,
       };
     }
 
     const classification = classifyFindings(deduplicated, diffs, {
       maxInlineComments: resolvedConfig.publishing?.maxInlineComments ?? 50,
     });
+
+    const confidenceScores = deduplicated.map((f) => f.confidence).filter((c) => typeof c === 'number');
+    const minConf = confidenceScores.length > 0 ? Math.min(...confidenceScores) : null;
+    const maxConf = confidenceScores.length > 0 ? Math.max(...confidenceScores) : null;
+    const avgConf = confidenceScores.length > 0 ? confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length : null;
+
+    collector.recordFindingsClassification({
+      total: deduplicated.length,
+      anchored: classification?.anchored?.length ?? deduplicated.length,
+      demoted: classification?.demoted?.length ?? 0,
+      severities: severityCounts,
+      confidence: { min: minConf, max: maxConf, avg: avgConf },
+    });
+
+    const maxComments = resolvedConfig.publishing?.maxInlineComments ?? 50;
+    const isCapped = (classification?.anchored?.length ?? 0) > maxComments;
+    const hasBlocking = deduplicated.some((f) => f.severity === 'P0' || f.severity === 'P1');
+
+    collector.recordSafetyDecisions({
+      staleHeadPassed: Boolean(currentHeadSha),
+      commentsCapped: isCapped,
+      inlineCommentsCount: Math.min(classification?.anchored?.length ?? 0, maxComments),
+      maxInlineComments: maxComments,
+      verdict: hasBlocking ? 'COMMENT' : 'APPROVE',
+    });
+
+    collector.end();
+    const diagnosticsData = collector.toObject();
+
+    if (verbose) {
+      summary += '\n\n' + formatDiagnosticReport(diagnosticsData);
+    }
 
     return {
       prNumber: num,
@@ -1383,6 +1548,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       cached: Boolean(cachedRecord),
       guidelines: guidelinesSummary,
       architecture: architectureResult || null,
+      diagnostics: diagnosticsData,
     };
   } finally {
     if (autoCreatedTransport && diffTransport) {

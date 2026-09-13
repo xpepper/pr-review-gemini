@@ -569,6 +569,7 @@ export async function dispatchSubagentsParallel({
       const fallbackModels = (configuredFallbacks || []).filter((m) => m && m !== primaryModel);
       const modelCandidates = [primaryModel, ...fallbackModels];
 
+      const lensStartTime = Date.now();
       let lastError = null;
       const attempts = [];
 
@@ -606,6 +607,8 @@ export async function dispatchSubagentsParallel({
             success: true,
           });
 
+          const durationMs = Math.max(0, Date.now() - lensStartTime);
+
           return {
             lensId: item.lensId,
             tier: item.tier,
@@ -617,6 +620,8 @@ export async function dispatchSubagentsParallel({
             findings: lensFindings,
             rawOutput,
             error: null,
+            durationMs,
+            status: isFallback ? 'retried' : 'completed',
           };
         } catch (err) {
           lastError = err;
@@ -660,6 +665,8 @@ export async function dispatchSubagentsParallel({
         }
       }
 
+      const durationMs = Math.max(0, Date.now() - lensStartTime);
+
       return {
         lensId: item.lensId,
         tier: item.tier,
@@ -671,6 +678,8 @@ export async function dispatchSubagentsParallel({
         findings: [],
         rawOutput: '',
         error: lastError,
+        durationMs,
+        status: 'failed',
       };
     });
 

@@ -2281,5 +2281,112 @@ index 0000000..3333333
       assert.ok(!result.summary.includes('### 🏗️ Architecture & System Impact'));
     });
   });
+
+  describe('Safe Verbose Review Diagnostics (Increment 22)', () => {
+    const sampleDiff = `diff --git a/src/sample.js b/src/sample.js
+index 1111111..2222222 100644
+--- a/src/sample.js
++++ b/src/sample.js
+@@ -1,3 +1,4 @@
+ function calculate() {
++  console.log("diagnostic test");
+   return 42;
+ }
+`;
+
+    it('exports diagnostics utilities from src/reviewer.js', async () => {
+      const {
+        createDiagnosticsCollector,
+        formatDiagnosticReport,
+        formatDiagnosticsJson,
+        sanitizeTelemetry,
+      } = await import('../src/reviewer.js');
+      assert.ok(typeof createDiagnosticsCollector === 'function');
+      assert.ok(typeof formatDiagnosticReport === 'function');
+      assert.ok(typeof formatDiagnosticsJson === 'function');
+      assert.ok(typeof sanitizeTelemetry === 'function');
+    });
+
+    it('attaches diagnostics object to return value of runReview', async () => {
+      const result = await runReview({
+        prNumber: 22,
+        diffText: sampleDiff,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        dryRun: true,
+      });
+
+      assert.ok(result.diagnostics, 'runReview must return diagnostics object');
+      assert.ok(result.diagnostics.version, 'diagnostics must have version');
+      assert.ok(typeof result.diagnostics.durationMs === 'number', 'diagnostics must have durationMs');
+      assert.ok(result.diagnostics.phases, 'diagnostics must have phases');
+      assert.ok(result.diagnostics.config, 'diagnostics must have config');
+      assert.ok(result.diagnostics.diff, 'diagnostics must have diff metadata');
+      assert.ok(Array.isArray(result.diagnostics.lenses), 'diagnostics must have lenses array');
+      assert.ok(result.diagnostics.findings, 'diagnostics must have findings');
+      assert.ok(result.diagnostics.safetyDecisions, 'diagnostics must have safetyDecisions');
+      assert.ok(!result.summary.includes('### 🔬 Review Execution Diagnostics'), 'default output should omit verbose diagnostics from summary');
+    });
+
+    it('appends diagnostics summary to review summary when verbose: true', async () => {
+      const result = await runReview({
+        prNumber: 22,
+        diffText: sampleDiff,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        dryRun: true,
+        verbose: true,
+      });
+
+      assert.ok(result.diagnostics);
+      assert.ok(
+        result.summary.includes('### 🔬 Review Execution Diagnostics'),
+        'verbose mode must include diagnostic report in review summary'
+      );
+      assert.ok(result.summary.includes('Phase Timing'));
+      assert.ok(result.summary.includes('Diff Metadata'));
+    });
+
+    it('records degraded execution telemetry when a specialist subagent fails', async () => {
+      const result = await runReview({
+        prNumber: 22,
+        diffText: sampleDiff,
+        mode: 'quick',
+        runnerFn: async ({ lens }) => {
+          if (lens.id === 'security') {
+            throw new Error('Inference service unavailable');
+          }
+          return '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>';
+        },
+        dryRun: true,
+        verbose: true,
+      });
+
+      assert.ok(result.diagnostics);
+      const secLens = result.diagnostics.lenses.find((l) => l.lensId === 'security');
+      assert.ok(secLens, 'diagnostics must record failing security lens');
+      assert.equal(secLens.status, 'failed');
+      assert.ok(secLens.error.includes('Inference service unavailable'));
+      assert.ok(result.summary.includes('Inference service unavailable'));
+    });
+
+    it('guarantees zero leakage of machine paths, tokens, or prompt bodies in diagnostics', async () => {
+      const result = await runReview({
+        prNumber: 22,
+        diffText: sampleDiff,
+        mode: 'quick',
+        runnerFn: async () => '<<<PR_REVIEW_JSON>>>[]<<<PR_REVIEW_JSON>>>',
+        dryRun: true,
+        verbose: true,
+      });
+
+      const serialized = JSON.stringify(result.diagnostics);
+      assert.doesNotMatch(serialized, /\/Users\//, 'Diagnostics must not expose /Users/ machine paths');
+      assert.doesNotMatch(serialized, /\/home\//, 'Diagnostics must not expose /home/ machine paths');
+      assert.doesNotMatch(serialized, /promptBody/i, 'Diagnostics must not expose promptBody');
+      assert.doesNotMatch(serialized, /diffText/i, 'Diagnostics must not expose diffText');
+    });
+  });
 });
+
 
