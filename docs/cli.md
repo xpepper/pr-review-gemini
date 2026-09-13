@@ -39,9 +39,9 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--repo <owner/repo>` | Set the target repository. |
 | `--model <model>` | Override the review model. |
 | `--mock` | Use a synthetic model runner. |
-| `-V`, `--verbose` | Include sanitized diagnostic telemetry. |
+| `-V`, `--verbose` | Include sanitized diagnostic telemetry (uppercase `V`). |
 | `--json` | Emit machine-readable results. |
-| `-v`, `--version` | Show version information. |
+| `-v`, `--version` | Show version information (lowercase `v`). |
 | `-h`, `--help` | Show command help. |
 
 ### Review modes
