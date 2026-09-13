@@ -559,12 +559,27 @@ index 1111111..2222222 100644
     it('runs and reports the selected documentation consistency test', async () => {
       const tmpOut = path.join(os.tmpdir(), `gh-out-docs-${Date.now()}.txt`);
       let selectedTest = null;
+      let metadataQueries = 0;
 
       const result = await runCiAction({
         prNumber: 41,
         action: 'dry-run',
         mock: true,
         diffText: documentationDiff,
+        execGhFn: async (args) => {
+          if (args[0] === 'pr' && args[1] === 'view') {
+            metadataQueries += 1;
+            return JSON.stringify({
+              isCrossRepository: false,
+              headRefOid: 'head-sha',
+              baseRefOid: 'base-sha',
+              baseRefName: 'main',
+              author: { login: 'octocat' },
+              title: 'Documentation update',
+            });
+          }
+          throw new Error(`Unexpected gh invocation: ${args.join(' ')}`);
+        },
         executeDocumentationConsistency: async ({ testFile }) => {
           selectedTest = testFile;
           return { status: 'passed' };
@@ -576,10 +591,42 @@ index 1111111..2222222 100644
       assert.equal(result.exitCode, 0);
       assert.equal(result.documentationConsistency.status, 'passed');
       assert.equal(selectedTest, 'tests/skills.test.mjs');
+      assert.equal(metadataQueries, 1);
       assert.match(result.reviewResult.summary, /Documentation Consistency Check.*PASSED/i);
       assert.match(fs.readFileSync(tmpOut, 'utf8'), /documentation_consistency_status=passed/);
 
       fs.unlinkSync(tmpOut);
+    });
+
+    it('falls back to reviewer metadata retrieval when the trust query is incomplete', async () => {
+      let metadataQueries = 0;
+      const result = await runCiAction({
+        prNumber: 42,
+        action: 'dry-run',
+        mock: true,
+        diffText: documentationDiff,
+        execGhFn: async (args) => {
+          if (args[0] !== 'pr' || args[1] !== 'view') {
+            throw new Error(`Unexpected gh invocation: ${args.join(' ')}`);
+          }
+          metadataQueries += 1;
+          if (args.at(-1).includes('isCrossRepository')) {
+            return JSON.stringify({ isCrossRepository: false });
+          }
+          return JSON.stringify({
+            headRefOid: 'fallback-head-sha',
+            baseRefOid: 'fallback-base-sha',
+            baseRefName: 'main',
+            author: { login: 'octocat' },
+            title: 'Documentation update',
+          });
+        },
+        executeDocumentationConsistency: async () => ({ status: 'passed' }),
+      }, {}, silentIo);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(metadataQueries, 2);
+      assert.equal(result.documentationConsistency.status, 'passed');
     });
 
     it('fails CI when the selected documentation consistency test fails', async () => {

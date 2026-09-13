@@ -294,11 +294,18 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       ? MOCK_DIFF
       : await getPrDiff({ prNumber: ciEnv.prNumber, repo: ciEnv.repo, execGhFn, cwd }));
     let documentationConsistency = selectDocumentationConsistencyCheck(diffText);
+    let prMetadata = null;
 
     if (documentationConsistency.status === 'selected') {
       try {
         const metadata = JSON.parse(await execGhFn(
-          ['pr', 'view', String(ciEnv.prNumber), '--json', 'isCrossRepository'],
+          [
+            'pr',
+            'view',
+            String(ciEnv.prNumber),
+            '--json',
+            'isCrossRepository,headRefOid,baseRefOid,baseRefName,author,title',
+          ],
           { cwd }
         ));
         if (metadata.isCrossRepository !== false) {
@@ -306,6 +313,15 @@ export async function runCiAction(options = {}, env = process.env, io = console)
             ...documentationConsistency,
             status: 'skipped',
             reason: metadata.isCrossRepository === true ? 'untrusted_fork' : 'origin_unverified',
+          };
+        } else {
+          prMetadata = {
+            number: ciEnv.prNumber,
+            title: typeof metadata.title === 'string' ? metadata.title : `PR #${ciEnv.prNumber}`,
+            author: typeof metadata.author?.login === 'string' ? metadata.author.login : null,
+            headSha: typeof metadata.headRefOid === 'string' ? metadata.headRefOid : null,
+            baseSha: typeof metadata.baseRefOid === 'string' ? metadata.baseRefOid : null,
+            baseRefName: typeof metadata.baseRefName === 'string' ? metadata.baseRefName : null,
           };
         }
       } catch {
@@ -347,6 +363,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       mode: ciEnv.mode,
       repo: ciEnv.repo,
       diffText,
+      prMetadata,
       runnerFn,
       execGhFn,
       cwd,

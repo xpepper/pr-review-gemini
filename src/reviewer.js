@@ -743,6 +743,7 @@ export async function runReview({
   execGitFn,
   cwd = process.cwd(),
   repo,
+  prMetadata: suppliedPrMetadata = null,
   expectedHeadSha,
   baseRef,
   dryRun = false,
@@ -846,7 +847,24 @@ export async function runReview({
     let prMetadata = { number: num, title: `PR #${num}` };
     let currentHeadSha = expectedHeadSha || null;
 
-    if (execGhFn) {
+    if (suppliedPrMetadata && typeof suppliedPrMetadata === 'object') {
+      prMetadata = {
+        ...prMetadata,
+        ...suppliedPrMetadata,
+        number: num,
+      };
+      currentHeadSha = prMetadata.headSha || currentHeadSha;
+    }
+
+    if (
+      execGhFn &&
+      (
+        !suppliedPrMetadata ||
+        typeof suppliedPrMetadata !== 'object' ||
+        !prMetadata.headSha ||
+        !prMetadata.baseRefName
+      )
+    ) {
       const fetchedMeta = await fetchPrMetadataWithFallback({ prNumber: num, repo, execGhFn, cwd });
       if (fetchedMeta) {
         currentHeadSha = fetchedMeta.headSha || currentHeadSha;
