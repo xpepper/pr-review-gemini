@@ -6,12 +6,28 @@
 
 ---
 
-## Status: ALL_INCREMENTS_COMPLETE — All Roadmap Increments Completed & Verified
+## Status: MVP Complete — Post-MVP Polish & Dogfooding
 
-All increments planned in `docs/roadmap.md` (Phases 1 through 7, plus Increments 13 through 22) have been fully implemented, verified test-first with `npm test` (838 tests across 158 suites), synchronized at version `0.3.2`, dogfood-reviewed on GitHub PRs, and merged into `main`.
+All MVP increments (0–22) are complete. Release `v0.3.3` is published, the
+[Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
+is live, and the Action is listed in Code quality and Continuous integration.
+
+### Post-MVP Priorities
+
+- [x] Establish the `v0.3.3` release baseline: `main`, the release tag, published
+  GitHub Release, Marketplace listing, manifest synchronization, tests, and
+  verify-on-tag / explicit-publish workflow behavior.
+- [x] Define a privacy-safe, evidence-based dogfooding record in
+  [`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md).
+- [ ] Simplify `README.md` into a concise landing page and move detailed reference
+  material into focused documentation pages, beginning with installation and
+  Action configuration.
+- [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
+  high-confidence polish opportunities.
+- [ ] Defer larger capabilities, including SARIF export, until dogfooding evidence
+  establishes a user need.
 
 ### Future Opportunities (Backlog)
-- [ ] Publish the `Gem PR Review` composite action to GitHub Marketplace through GitHub's Marketplace release flow; select the Code quality category and complete the owner-operated Marketplace terms.
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
@@ -216,4 +232,4 @@ All increments planned in `docs/roadmap.md` (Phases 1 through 7, plus Increments
 - [x] **Increment 9: Interactive Finding Selection & Cached Publish-Later**: Interactive selection UI before posting (`--all` vs picking specific findings) and in-session retention to publish without rerunning inference.
 - [x] **Increment 10: Automatic Fallback Model Retry on Quota / Rate-Limit**: Automatic retry with configured fallback tier (e.g. `heavy_fallbacks`) on quota or capacity errors, without plugin-imposed timeouts.
 - [x] **Increment 11: One-Shot Coding-Task Self-Review (`gem_self_review`)**: Fail-closed tool for coding agents to inspect uncommitted git worktree changes (staged, tracked, untracked) before concluding a task.
-- [ ] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
+- [x] **Increment 12: Candidate Finding Recovery from Degraded/Malformed Model Output**: Deterministically recover contract-valid candidate findings from partial/malformed model output rather than dropping entire review passes.
