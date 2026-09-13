@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-09-13
+
+### 🐛 Bug Fixes
+
+- **release:** expand test files in CI shell (`
+1acfaa`)
+
+### 🔧 Maintenance & Chores
+
+- Merge pull request #41 from xpepper/fix/release-test-glob (#41) (`bbbce9f`)
+
 ## [0.3.0] - 2026-09-13
 
 ### 🚀 Features
