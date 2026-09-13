@@ -60,6 +60,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Check for Existing Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.event.inputs.tag }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "::error::A release for tag '$TAG_NAME' already exists. Publish is not idempotent by design — delete the existing release first if you intend to republish, or dispatch a different tag."
+            exit 1
+          fi
+
       - name: Generate Release Notes
         id: notes
         run: |
