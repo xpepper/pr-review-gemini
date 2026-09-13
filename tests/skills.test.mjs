@@ -269,6 +269,28 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
     assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
   });
+
+  it('documents PR architecture walkthrough and Mermaid sequence/component diagrams in SKILL.md (Increment 21)', () => {
+    assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
+    const content = fs.readFileSync(skillPath, 'utf8');
+    assert.match(content, /Architecture & System Impact/i, 'Should document Architecture & System Impact');
+    assert.match(content, /Mermaid/i, 'Should document Mermaid diagrams');
+    assert.match(content, /sequenceDiagram/i, 'Should document Mermaid sequenceDiagram');
+    assert.match(content, /--architecture/i, 'Should document --architecture flag');
+    assert.match(content, /gem_pr_review_architecture/i, 'Should document gem_pr_review_architecture MCP tool');
+  });
+
+  it('documents PR architecture walkthrough and Mermaid sequence/component diagrams in README.md (Increment 21)', () => {
+    const readmePath = path.resolve('README.md');
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /Architecture.*Mermaid/i, 'README should document Architecture & Mermaid diagrams');
+    assert.match(readmeContent, /--architecture/i, 'README should document --architecture flag');
+    assert.match(readmeContent, /gem_pr_review_architecture/i, 'README should document gem_pr_review_architecture MCP tool');
+    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
+    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  });
 });
+
 
 

@@ -109,6 +109,7 @@ node scripts/dogfood-review.mjs <PR_NUMBER> [options]
 | `--mode <mode>` | Select a review mode by name: `quick`, `balanced`, `full`, or `deep` |
 | `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
 | `--resolve` | Automatically resolve verified review threads and post conversational replies |
+| `--architecture`, `--arch` | Generate architecture impact walkthrough and Mermaid sequence/component diagrams |
 | `--self` | Review local worktree changes instead of a remote pull request |
 | `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
 | `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
@@ -250,6 +251,13 @@ Automated tracking, conversational evaluation, and auto-resolution of inline Git
 - **Diff Hunk Verification**: Verifies whether author code updates or replies addressed the finding against actual unified diff hunks (with a +/- 3 line window).
 - **Automated Resolution**: Pass `--resolve` or run `/gem-review resolve` to post confirmation verification replies and close resolved threads via GitHub GraphQL mutation `resolveReviewThread`.
 
+### 14. PR Architecture Walkthrough & Mermaid Sequence Diagrams
+Generates a structured system architecture walkthrough and valid Mermaid diagrams visualizing PR changes:
+- **Walkthrough Narrative**: Synthesizes affected subsystems, primary components, cross-module interaction flows, and architectural risks or structural observations.
+- **Mermaid Sequence & Component Diagrams**: Automatically generates sanitized, syntax-valid Mermaid diagrams (`sequenceDiagram` and `flowchart TD`) mapping new component interactions and structural boundaries.
+- **Review Mode Integration**: Automatically included when reviewing in `--full` or `--deep` modes, or on demand via `--architecture` (or `--arch`) CLI flag.
+- **MCP Inspection Tool**: Analyze architecture directly via MCP tool `gem_pr_review_architecture` (alias `pr_review_architecture`).
+
 ---
 
 ## Model Context Protocol (MCP) Server
@@ -275,6 +283,7 @@ The package includes a compliant MCP server (`server/index.js`) declared in `mcp
 - **`gem_pr_review_publish_cached`**: Publishes previously cached review findings without rerunning model inference, after verifying PR head freshness.
 - **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
 - **`gem_pr_review_threads`** *(alias `pr_review_threads`)*: Discovers review comment threads, tracks author replies, verifies fixes against diff hunks, and optionally auto-resolves verified threads.
+- **`gem_pr_review_architecture`** *(alias `pr_review_architecture`)*: Analyzes PR diffs or unified text to produce an architecture impact summary and Mermaid sequence/component diagrams.
 - **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
 - **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
 
@@ -572,7 +581,7 @@ Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/w
 npm test
 ```
 
-All 743 unit tests across 132 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, and centralized CLI infrastructure.
+All 802 unit tests across 149 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, review thread verification & automated resolution, PR architecture walkthrough & Mermaid diagrams, and centralized CLI infrastructure.
 
 ---
 

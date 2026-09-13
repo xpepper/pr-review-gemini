@@ -32,6 +32,7 @@ Options:
   --fail-on <level>   Severity threshold that triggers exit 1 (P0, P1, P2, P3) [default: P1]
   --role <id>         Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
+  --architecture      Generate architecture walkthrough and Mermaid sequence/component diagrams
   --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
   --install-hook      Install git pre-commit hook to run self-review before commits
   --uninstall-hook    Remove self-review git pre-commit hook
@@ -56,6 +57,7 @@ export function parseCliArgs(args) {
   let uninstallHook = false;
   let command;
   let guidelinesPath = null;
+  let architecture = null;
   const roles = [];
   let replaceStandardRoles = false;
 
@@ -94,6 +96,8 @@ export function parseCliArgs(args) {
           roles.push(...commonOpt.value);
         } else if (commonOpt.type === 'guidelines') {
           guidelinesPath = commonOpt.value;
+        } else if (commonOpt.type === 'architecture') {
+          architecture = commonOpt.value;
         }
         i = commonOpt.nextIndex;
         continue;
@@ -139,6 +143,7 @@ export function parseCliArgs(args) {
     guidelinesPath,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
+    architecture: architecture !== null ? architecture : undefined,
   };
 }
 
@@ -199,6 +204,7 @@ export async function main() {
       roles: parsed.roles,
       replaceStandardRoles: parsed.replaceStandardRoles,
       guidelinesPath: parsed.guidelinesPath,
+      architecture: parsed.architecture,
     });
 
     if (parsed.json) {

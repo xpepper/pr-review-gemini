@@ -27,6 +27,7 @@ Options:
   --deep            Deep-focus review on correctness
   --incremental     Re-review PR incrementally against previous review
   --resolve         Verify and resolve addressed review threads against latest PR head
+  --architecture    Generate architecture walkthrough and Mermaid sequence/component diagrams
   --dry-run         Run review analysis without publishing to GitHub (default)
   --publish         Publish host-gated review to GitHub
   --interactive     Prompt for interactive finding selection before publishing

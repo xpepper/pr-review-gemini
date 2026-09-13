@@ -33,6 +33,14 @@ export const DEFAULT_GUIDELINES_CONFIG = Object.freeze({
 });
 
 /**
+ * Default architecture configuration (Increment 21).
+ */
+export const DEFAULT_ARCHITECTURE_CONFIG = Object.freeze({
+  enabled: 'auto',
+  diagrams: Object.freeze(['sequence', 'component']),
+});
+
+/**
  * Sensible default configuration.
  */
 export const DEFAULT_CONFIG = Object.freeze({
@@ -63,6 +71,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   autoPostReviews: false,
   approveMaxPriorityLevel: 'off',
   guidelines: DEFAULT_GUIDELINES_CONFIG,
+  architecture: DEFAULT_ARCHITECTURE_CONFIG,
 });
 
 const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'prototype', 'constructor']);
@@ -229,6 +238,7 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
     autoPostReviews: DEFAULT_CONFIG.autoPostReviews,
     approveMaxPriorityLevel: DEFAULT_CONFIG.approveMaxPriorityLevel,
     guidelines: { ...DEFAULT_CONFIG.guidelines },
+    architecture: { ...DEFAULT_CONFIG.architecture },
   };
 
   for (const src of sources) {
@@ -288,6 +298,20 @@ export function resolveConfig({ userConfig, projectConfig, overrides } = {}) {
           Math.floor(rawMaxBytes),
           ABSOLUTE_MAX_GUIDELINES_BYTES
         );
+      }
+    }
+
+    // Architecture configuration (Increment 21)
+    if (typeof src.architecture === 'boolean') {
+      resolved.architecture.enabled = src.architecture;
+    } else if (typeof src.architecture === 'string' && (src.architecture === 'auto' || src.architecture === 'always' || src.architecture === 'never')) {
+      resolved.architecture.enabled = src.architecture === 'always' ? true : src.architecture === 'never' ? false : 'auto';
+    } else if (isPlainObject(src.architecture)) {
+      if (typeof src.architecture.enabled === 'boolean' || src.architecture.enabled === 'auto') {
+        resolved.architecture.enabled = src.architecture.enabled;
+      }
+      if (Array.isArray(src.architecture.diagrams)) {
+        resolved.architecture.diagrams = sanitizeStringList(src.architecture.diagrams);
       }
     }
 
