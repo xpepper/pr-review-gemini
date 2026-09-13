@@ -1710,6 +1710,10 @@ index 1111111..2222222 100644
       assert.match(content, /needs:\s*verify/);
       assert.match(content, /if:\s*github\.event_name\s*==\s*['"]workflow_dispatch['"]/);
       assert.match(content, /name:\s*['"]Publish GitHub Release['"]/);
+      const existingReleaseCheck = content.indexOf('gh release view "$TAG_NAME"');
+      const releaseCreation = content.indexOf('gh release create "$TAG_NAME"');
+      assert.ok(existingReleaseCheck >= 0, 'publish job must reject an existing release');
+      assert.ok(existingReleaseCheck < releaseCreation, 'existing release check must run before release creation');
     });
   });
 
