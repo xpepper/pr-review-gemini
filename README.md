@@ -1,610 +1,80 @@
 # Gem PR Review
 
-Parallel, multi-lens AI code review for GitHub pull requests, adhering to the [Agent Plugins 1.0](https://agent-plugins.org/) standard.
+Gem PR Review is a parallel, multi-lens AI code reviewer for GitHub pull
+requests. It runs as a GitHub Action, Copilot CLI plugin, or local CLI and is
+built to keep proposed findings grounded in the pull request diff.
 
-Evaluates pull requests across specialized lenses (correctness, contracts, security, performance, conventions, tests), anchors comments strictly in actual git diff hunks to eliminate hallucinations, supports incremental re-reviews on updated commits, and executes tests in detached worktrees.
+[Install Gem PR Review from GitHub Marketplace](https://github.com/marketplace/actions/gem-pr-review)
 
----
+## Quick start
 
-## Quick Start (Get Started in 30 Seconds)
-
-### Prerequisites
-- **Node.js**: `>= 20.0.0`
-- **GitHub CLI (`gh`)**: Authenticated (`gh auth status`)
-
-### 1. Run via Streamlined Terminal Command
-Review any open pull request with automatic model resolution (`--model auto`):
-```bash
-npm run dogfood:pr <PR_NUMBER>
-```
-
-### 2. Run via CLI (Dry-Run)
-Inspect review findings on any pull request without publishing comments to GitHub:
-```bash
-node scripts/dogfood-review.mjs <PR_NUMBER> --dry-run
-```
-
-To test the review pipeline instantly without model inference or API keys, use `--mock`:
-```bash
-node scripts/dogfood-review.mjs <PR_NUMBER> --mock --dry-run
-```
-
-### 3. Run via GitHub Copilot CLI (Agent Skill)
-Install the plugin directly from GitHub into Copilot CLI:
-```bash
-copilot plugin install xpepper/pr-review-gemini
-```
-*(Or during local development, load without installing: `copilot --plugin-dir .`)*
-
-Then start Copilot CLI and trigger the skill:
-```bash
-copilot
-/gem-pr-review <PR_NUMBER>
-```
-
-### Which Entry Point Should I Use?
-
-The plugin's user-facing name is **Gem PR Review**. The word "dogfood" appears
-only in the names of terminal runner scripts: it refers to using the reviewer
-to review this plugin's own pull requests, not to a separate model or review
-tool.
-
-| You run | What it does | When to use it |
-| :--- | :--- | :--- |
-| `/gem-pr-review <PR_NUMBER>` | Invokes the Gem PR Review Copilot skill. | Normal use from Copilot CLI. |
-| `npm run dogfood:pr <PR_NUMBER>` | Runs the streamlined terminal wrapper, which defaults to `--model auto`. | Simple terminal use. |
-| `node scripts/dogfood-review.mjs <PR_NUMBER>` | Runs the full underlying PR-review CLI. | Advanced flags or automation. |
-
-All three entry points run the same multi-lens PR reviewer. The Copilot skill
-may invoke `scripts/dogfood-pr.mjs` internally, which is why that name can
-appear in Copilot's command output.
-
-### 4. Run via MCP Inspector (Web UI)
-Launch the interactive Model Context Protocol inspector to test all tools visually:
-```bash
-npx @modelcontextprotocol/inspector node server/index.js
-```
-
-### 5. Run via GitHub Actions (Automated CI Review)
-Automate multi-lens AI code review on every pull request using the official GitHub Action:
-```yaml
-- name: AI PR Code Review
-  uses: xpepper/pr-review-gemini@main
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    mode: balanced
-    fail_on: P1
-```
-
-### 6. Install Git Pre-Commit Self-Review Hook
-Automatically run fail-closed self-review on uncommitted changes before every git commit:
-```bash
-npm run install-hook
-```
-*(To remove: `node scripts/self-review.mjs --uninstall-hook`)*
-
----
-
-## Core Usage & CLI Options
-
-The CLI runner (`scripts/dogfood-review.mjs`) provides full control over review modes and publishing:
-
-```bash
-node scripts/dogfood-review.mjs <PR_NUMBER> [options]
-```
-
-| Flag | Description |
-| :--- | :--- |
-| `--dry-run`, `--no-comment` | Analyze the PR and print the markdown summary without publishing to GitHub |
-| `--publish`, `--comment` | Submit the host-gated review and diff-anchored inline comments to GitHub |
-| `--publish-cached` | Publish previously cached review findings without rerunning model inference |
-| `--all` | Publish all findings immediately without interactive triage prompt |
-| `--interactive` | Prompt for interactive finding selection table before publishing |
-| `--select <spec>` | Batch-select findings by index, range, or severity (e.g. `"1,3"`, `"p0,p1"`, `"min:p2"`) |
-| `--cache-dir <dir>` | Custom directory for session findings cache (defaults to `.gem-pr-cache`) |
-| `--quick` | Fast triage running 3 critical lenses (Correctness, Security, Conventions) |
-| `--balanced` | *(Default)* Standard multi-lens review running 5 specialist lenses |
-| `--full` | Exhaustive review running 6 lenses, including Test Quality & Coverage |
-| `--deep` | Focused deep dive with high reasoning effort on Correctness & Concurrency |
-| `--mode <mode>` | Select a review mode by name: `quick`, `balanced`, `full`, or `deep` |
-| `--incremental` | Re-review only new commits since the last review and revalidate prior findings |
-| `--resolve` | Automatically resolve verified review threads and post conversational replies |
-| `--architecture`, `--arch` | Generate architecture impact walkthrough and Mermaid sequence/component diagrams |
-| `--self` | Review local worktree changes instead of a remote pull request |
-| `--role <id>` | Target specific review roles or custom lenses (repeatable or comma-separated: `--role=a11y,perf`) |
-| `--replace-standard-roles` | Execute only custom/specified roles, skipping standard mode lenses |
-| `--guidelines <path>` | Custom guidelines file path (defaults to `.github/gem-pr-review.md`) |
-| `--repo <owner/repo>` | Target repository (defaults to current git origin) |
-| `--model <model>` | Override the default model used by review subagents |
-| `--mock` | Use synthetic runner for rapid offline testing without inference |
-| `-v`, `--version` | Display version information |
-
-### CLI Examples
-
-**Standard balanced dry-run:**
-```bash
-node scripts/dogfood-review.mjs 42 --dry-run
-```
-
-**Fast triage on smaller PRs:**
-```bash
-node scripts/dogfood-review.mjs 42 --quick --dry-run
-```
-
-**Incremental re-review on updated PR:**
-```bash
-node scripts/dogfood-review.mjs 42 --incremental --dry-run
-```
-
-**Publish host-gated review to GitHub:**
-```bash
-node scripts/dogfood-review.mjs 42 --publish
-```
-
-**Inspect findings in dry-run and publish cached results later:**
-```bash
-node scripts/dogfood-review.mjs 42 --dry-run
-node scripts/dogfood-review.mjs 42 --publish-cached
-```
-
-**Interactive triage before publishing:**
-```bash
-node scripts/dogfood-review.mjs 42 --publish --interactive
-```
-
----
-
-## Review Modes & Specialist Lenses
-
-Each review mode selects a curated set of independent specialist lenses calibrated for language-agnostic software engineering risks:
-
-| Specialist Lens | Calibrated Focus Area | `quick` | `balanced` | `full` | `deep` |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| **Correctness & Concurrency** | Where the argument breaks down, edge cases, unhandled error escapes, precondition & landing surface invariants, race conditions | ✅ | ✅ | ✅ | ✅ *(High Reasoning)* |
-| **Contracts & Data** | Explicit parameterization vs. ambient process coupling (`process.argv`), API stability, schema drift, data exposure boundaries | | ✅ | ✅ | |
-| **Security & Trust** | Trust boundary crossings (SQL, shell, template injection, XSS, path traversal), landing surface authorization, secret leaks | ✅ | ✅ | ✅ | |
-| **Performance & Resources** | Redundant work & side-effect duplication (repeated subprocess/git log refetches, duplicate I/O), $O(N^2)$ traps, resource lifecycles | | ✅ | ✅ | |
-| **Conventions & Maintainability** | Dead code & phantom variable assignments, copy-paste duplication across sibling CLI entrypoints (DRY), architectural cohesion | ✅ | ✅ | ✅ | |
-| **Test Quality & Coverage** | Evidence before completion (automated verification for new behaviors and edge cases), test integrity, brittle/flaky mocks | | | ✅ | |
-
----
-
-## Key Features
-
-### 1. Host-Gated Publishing & Anti-Hallucination
-The AI agent is never permitted to make direct, unvalidated write requests to GitHub. Every comment passes through host-enforced safety gates:
-- **Diff Anchor Validation**: Verifies that every proposed comment references an actual changed line inside a valid `@@ -old,+new @@` git hunk.
-- **Stale Head Protection**: Blocks submission if the PR branch has moved since analysis started.
-- **Capping & Spam Prevention**: Caps inline comments at 50 to avoid flooding the PR.
-- **Decision Engine**: Resolves to `APPROVE` only when all criteria are satisfied (no P0/P1 issues, verified tests, non-author reviewer).
-
-### 2. Incremental Re-reviews (`--incremental`)
-When authors push updates to address review comments, re-running the full PR wastes tokens and loses context:
-- Inspects only the new commit range (`prior_head...current_head`).
-- Classifies commit relationships (`same_head`, `incremental`, `diverged`, `none`).
-- Revalidates previous findings, categorizing each as **`resolved`**, **`still open`**, or **`obsolete`**.
-
-### 3. Detached Worktree Test Verification (`gem_pr_review_verify`)
-Safely executes test suites against the PR head in an isolated, detached git worktree:
-- Zero pollution of your active working directory or uncommitted changes.
-- Automatically handles worktree creation, timeout supervision, and clean disposal.
-- Supports pre-configured profiles (`node-test`, `npm-test`, `pytest`, `cargo-test`, `go-test`, etc.) or custom commands.
-
-### 4. Large-Diff Transport & File-Backed Paging (> 200 KB)
-Protects session context and prevents model degradation when reviewing large pull requests:
-- **Threshold Detection**: Automatically detects when raw unified diffs exceed 200 KB (`200 * 1024` bytes).
-- **File-Backed Transport**: Diffs exceeding 200 KB are stored in temporary file storage while the model receives a structured changed-file manifest. Diffs $\le$ 200 KB continue to use direct in-memory inlining for backward compatibility.
-- **Host-Supervised Inspection**: Equips reviewer subagents with host-enforced inspection tools (`read`, `grep`, `find`) strictly capped at an access budget of ~640 KB across 16 read operations (up to 1 MB maximum).
-
-### 5. Interactive Finding Selection & Cached Publish-Later
-Provides human reviewers with granular triage control and eliminates redundant model re-evaluations:
-- **Interactive Triage**: Inspect findings in a formatted console table showing severity (`P0`–`P3`, `nit`), confidence, location, and title. Select individual indices (`1, 3`), ranges (`1-4`), exclusions (`all, -2`), or severity levels (`p0,p1`, `min:p2`, `no-nits`).
-- **Publish-Later Caching**: Every review pass retains evaluated findings in a session cache keyed by PR number and head commit SHA. Inspect findings in dry-run mode and publish later via `--publish-cached` or MCP tool `gem_pr_review_publish_cached` without rerunning expensive subagent inference.
-- **Head Freshness Verification**: Validates cached findings against the PR's current head SHA on GitHub, automatically rejecting and invalidating stale caches if new commits were pushed.
-
-### 6. Automatic Fallback Model Retry on Quota/Capacity Errors (Zero Timeouts)
-Guarantees uninterrupted review runs even during API rate limits and model capacity constraints:
-- **Intelligent Error Classification**: Accurately detects HTTP 429, resource exhaustion (`RESOURCE_EXHAUSTED`, `INSUFFICIENT_QUOTA`), and model overload/capacity limits while failing fast on unrelated bugs.
-- **Automatic Failover**: Automatically retries the failing review lens against secondary models in the configured fallback chain (e.g. `heavy_fallbacks: ["claude-3.5-sonnet", "gpt-4o"]`) without losing or repeating already-completed sibling lens evaluations.
-- **Zero Plugin-Imposed Timeouts**: Strict timeout-free execution avoids artificial review deadlines or stuck-reviewer heuristics.
-
-### 7. One-Shot Coding-Task Self-Review (`gem_self_review`)
-Provides coding agents and developers with a fail-closed self-review safety gate before committing or concluding tasks:
-- **Local Git Worktree Diff Acquisition**: Automatically captures uncommitted changes across staged files (`git diff --cached`), unstaged modifications (`git diff`), and untracked files (`git status --porcelain` via synthetic diffs) with zero remote PR or network dependencies.
-- **Fail-Closed Safety Gate**: Returns an explicit `status: 'passed'` vs `status: 'failed'` (`verdict: 'PASS'` vs `'FAIL'`), failing closed whenever blocking defects (`P0` or `P1`) are detected so agents can self-correct before committing.
-- **Actionable Remediation**: Produces concrete file and line-anchored remediation instructions for each detected defect.
-- **CLI Runners**: Run via `npm run self-review`, `node scripts/self-review.mjs [options]`, or `node scripts/dogfood-review.mjs --self`.
-
-### 8. Candidate Finding Recovery from Degraded/Malformed Model Output
-Prevents loss of high-signal review findings when LLMs produce truncated or syntax-flawed output under token limits or generation cutoffs:
-- **Resilient Envelope Extraction**: Extracts finding envelopes (`<<<PR_REVIEW_JSON>>>`) even when closing delimiters are truncated.
-- **Deterministic JSON Repair**: Automatically repairs trailing commas, unclosed brackets and braces, smart quotes, and unescaped literal newlines in review commentary.
-- **Individual Candidate Object Scanner**: Scans balanced `{ ... }` candidate objects and recovers individual findings even when outer structures are corrupt or mixed with free-form text.
-- **Contract Normalization**: Normalizes severities (`P0`–`nit` as well as descriptive labels), line numbers, file paths, and confidence scores across PR reviews, cached reviews, and local self-reviews.
-
-### 9. Reviewer Sensitivity & Quality Calibration
-Calibrates specialist review lenses against language-agnostic software engineering risks to catch subtle design, lifecycle, and operational defects:
-- **Universal Design Dimensions**: Detects ambient state coupling (`process.argv` vs explicit options), redundant work and subprocess refetches, dead variable assignments and phantom logic, landing surface invariants and preconditions, and copy-paste boilerplate across sibling entrypoints (DRY).
-- **Evidence Before Completion**: Holds test coverage lenses to strict verification standards, flagging unverified behavioral paths, brittle mocks, and tests asserting implementation details instead of observable behavior.
-- **Calibration Benchmark Suite**: Includes an automated benchmark evaluation suite (`src/calibration.js`, `tests/calibration.test.mjs`) tracking sensitivity, defect recall, and precision against real pull request defect patterns.
-
-### 10. Streamlined Dogfood CLI & Model Catalog Resilience
-Enables rapid, zero-friction dogfood reviews before merging pull requests with automatic failover:
-- **Streamlined Runner (`npm run dogfood:pr`)**: Reviews any PR with automatic model resolution (`--model auto`), diff hunk anchoring verification, and interactive triage.
-- **Model Catalog Resilience (`isModelUnavailableError`)**: Detects when configured primary or fallback models are unsupported, unentitled, or unavailable in the local host environment.
-- **Automatic Fallback to `auto`**: Seamlessly falls back to model `'auto'` (`fallback_to_auto: true`, enabled by default) when configured models are unavailable, guaranteeing review completion without manual intervention.
-
-### 11. Centralized CLI Infrastructure & Pre-Commit Hook Integration
-Eliminates duplicated boilerplate across sibling CLI entrypoints through a single source of truth (`src/cli.js`):
-- **Centralized Infrastructure**: Unifies direct invocation detection (`isDirectRun`), top-level promise rejection handling (`runIfDirect`), version/help flag dispatch (`handleCommonFlags`), and terminal error presentation (`formatCliError`).
-- **Pre-Commit Hook Integration**: Run `npm run install-hook` to configure `.git/hooks/pre-commit` to execute `npm run self-review` before git commits, preventing blocking defects from landing on branches.
-
-### 12. Interactive PR Comment Command Dispatcher (`/gem-review`)
-Trigger AI-assisted code reviews directly from pull request comments using `/gem-review` or `/gem-pr-review`:
-- **Interactive Review Dispatch**: Run targeted review passes on demand with custom flags (`--quick`, `--balanced`, `--full`, `--deep`, `--incremental`, `--role=<id>`, `--verify`, `--fail-on=<sev>`, `--dry-run`, `--help`).
-- **Host-Gated Security**: Gating based on `author_association` (`OWNER`, `MEMBER`, `COLLABORATOR`) or explicit allowed users prevents unauthorized runner minutes or model quota consumption.
-- **Visual Reaction Lifecycle**: Immediate feedback directly on invoking comments: 👀 (`eyes`) acknowledgment, 🚀 (`rocket`) execution, 👍 (`+1`) completion with a markdown reply summary, and 😕 (`confused`) denial/error notices.
-
-### 13. Review Thread Verification & Automated Resolution
-Automated tracking, conversational evaluation, and auto-resolution of inline GitHub PR review comment threads:
-- **Thread Discovery & Turn Tracking**: Queries GraphQL `reviewThreads` (with REST fallback) to track conversational turns, author replies, and discussion states (`resolved`, `outdated`, `author_replied`, `unresolved`).
-- **Diff Hunk Verification**: Verifies whether author code updates or replies addressed the finding against actual unified diff hunks (with a +/- 3 line window).
-- **Automated Resolution**: Pass `--resolve` or run `/gem-review resolve` to post confirmation verification replies and close resolved threads via GitHub GraphQL mutation `resolveReviewThread`.
-
-### 14. PR Architecture Walkthrough & Mermaid Sequence Diagrams
-Generates a structured system architecture walkthrough and valid Mermaid diagrams visualizing PR changes:
-- **Walkthrough Narrative**: Synthesizes affected subsystems, primary components, cross-module interaction flows, and architectural risks or structural observations.
-- **Mermaid Sequence & Component Diagrams**: Automatically generates sanitized, syntax-valid Mermaid diagrams (`sequenceDiagram` and `flowchart TD`) mapping new component interactions and structural boundaries.
-- **Review Mode Integration**: Automatically included when reviewing in `--full` or `--deep` modes, or on demand via `--architecture` (or `--arch`) CLI flag.
-- **MCP Inspection Tool**: Analyze architecture directly via MCP tool `gem_pr_review_architecture` (alias `pr_review_architecture`).
-
-### 15. Safe Verbose Review Diagnostics & Telemetry
-Captures and formats safe, structured execution telemetry without exposing sensitive data:
-- **Phase Timings & Lifecycles**: Records end-to-end and phase timings (`diffFetch`, `guidelinesLoad`, `cacheLookup`, `subagentsInference`, `verification`, `synthesis`, `threadResolution`, `architecture`, `publishing`), model attempts, token counts, and fallback failovers.
-- **Strict Redaction Guarantees**: Strict sanitization guarantees zero exposure of raw prompt or diff bodies, authentication tokens, API keys, and local machine filesystem paths.
-- **CLI Flags (`--verbose` / `-V`, `--json`)**: Attach detailed diagnostics to review summaries or emit structured machine-readable JSON for pipeline automation (`node scripts/dogfood-review.mjs <PR> --verbose --json`).
-- **Interactive CI Dispatch (`/gem-review --verbose`)**: Collapsible `<details>` diagnostics report directly in PR comment replies.
-- **MCP Inspection Tool**: Inspect review diagnostics via `gem_pr_review_diagnostics` (alias `pr_review_diagnostics`) in Markdown or JSON format.
-
----
-
-
-## Model Context Protocol (MCP) Server
-
-The package includes a compliant MCP server (`server/index.js`) declared in `mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "gem-pr-review": {
-      "command": "node",
-      "args": ["server/index.js"]
-    }
-  }
-}
-```
-
-### Exposed Tools
-- **`gem_self_review`** *(alias `gem_pr_review_self`)*: One-shot coding-task self-review on uncommitted local worktree changes with fail-closed safety gate.
-- **`gem_pr_review_diff`**: Unified diff extraction, hunk boundary parsing, and commentability verification.
-- **`gem_pr_review_diff_read`**: Host-supervised diff reading (`read`, `grep`, `find`) with access budget capping.
-- **`gem_pr_review_subagents`**: Multi-lens parallel analysis with mode resolution (`quick`, `balanced`, `full`, `deep`).
-- **`gem_pr_review_publish_cached`**: Publishes previously cached review findings without rerunning model inference, after verifying PR head freshness.
-- **`gem_pr_review_prior`**: Discovers past reviews and revalidates finding lifecycle statuses.
-- **`gem_pr_review_threads`** *(alias `pr_review_threads`)*: Discovers review comment threads, tracks author replies, verifies fixes against diff hunks, and optionally auto-resolves verified threads.
-- **`gem_pr_review_architecture`** *(alias `pr_review_architecture`)*: Analyzes PR diffs or unified text to produce an architecture impact summary and Mermaid sequence/component diagrams.
-- **`gem_pr_review_diagnostics`** *(alias `pr_review_diagnostics`)*: Inspects and formats safe structured execution telemetry and diagnostics for a review session or cached PR review.
-- **`gem_pr_review_verify`**: Detached worktree test execution with process supervision.
-- **`gem_pr_review_publish`**: Host-gated review submission with diff anchor validation.
-
-*(Legacy tool names `pr_review_*` remain supported as backward-compatible aliases).*
-
-Test all tools interactively via MCP Inspector:
-```bash
-npx @modelcontextprotocol/inspector node server/index.js
-```
-
----
-
-## Configuration
-
-Configuration is optional and works out of the box with sensible defaults. You can customize behavior using project-level or user-level configuration files:
-
-- **Project Config**: `.github/gem-pr-review.json` *(fallback: `.github/pr-review.json`)*
-- **User Config**: `~/.copilot/gem-pr-review.json` *(fallback: `~/.copilot/pr-review.json`)*
-
-### Example Configuration
-
-```json
-{
-  "fallback_to_auto": true,
-  "tiers": {
-    "light": "gpt-4o-mini",
-    "medium": "claude-3.5-sonnet",
-    "heavy": "claude-3.7-sonnet"
-  },
-  "reasoningEfforts": {
-    "light": "off",
-    "medium": "off",
-    "heavy": "medium"
-  },
-  "heavy_fallbacks": ["claude-3.5-sonnet", "gpt-4o"],
-  "medium_fallbacks": ["gpt-4o-mini"],
-  "custom_roles": {
-    "accessibility": {
-      "name": "Accessibility & WCAG",
-      "prompt": "Evaluate WCAG 2.1 AA compliance, ARIA attributes, semantic HTML elements, keyboard traps, and screen reader announcements.",
-      "model": "gpt-4o",
-      "reasoningEffort": "medium"
-    },
-    "database_migrations": {
-      "name": "Database Migrations",
-      "prompt": "Verify zero-downtime migrations, column additions with defaults, lock times, missing foreign key indexes, and backward-compatible data transforms.",
-      "tier": "heavy",
-      "reasoningEffort": "high"
-    }
-  },
-  "lenses": {
-    "correctness": {
-      "model": "claude-3.7-sonnet",
-      "reasoningEffort": "high",
-      "fallbacks": ["gpt-4o"]
-    },
-    "security": {
-      "model": "gpt-4o",
-      "reasoningEffort": "low"
-    }
-  },
-  "guidelines": {
-    "enabled": true,
-    "path": ".github/gem-pr-review.md",
-    "max_bytes": 65536
-  },
-  "verification": {
-    "defaultProfile": "node-test",
-    "profiles": {
-      "node-test": {
-        "command": "node",
-        "args": ["--test"],
-        "timeoutMs": 60000
-      }
-    }
-  }
-}
-```
-
-### Configuration Options & Precedence
-
-- **`fallback_to_auto`**: When set to `true` (default: `true`), automatically falls back to model `'auto'` if configured primary or fallback models are not found, unentitled, or unavailable in the host environment.
-- **`guidelines`**: Repository review guidelines configuration. Controls automatic ingestion of project-specific review instructions and invariants (`.github/gem-pr-review.md`).
-  - `enabled`: Set to `false` to disable guideline discovery and prompt injection (default: `true`).
-  - `path`: Custom relative path to repository guidelines markdown file (default: `.github/gem-pr-review.md` or `.github/review-instructions.md`).
-  - `max_bytes`: Maximum allowed size for guideline files in bytes (default: `65536`, 64 KB). Files exceeding this bound are safely truncated with an explanatory warning.
-- **`custom_roles`** *(or `roles`)*: Pluggable domain-specific review roles. Each entry specifies a domain `prompt`, optional `name`, preferred `model`, `reasoningEffort`, `tier`, and fallback chain. Mounted alongside standard lenses by default.
-- **`replace_standard_roles`**: When set to `true`, disables built-in standard lenses and runs only custom or explicitly specified roles.
-- **`enabled_roles`**: Array of role IDs to execute (e.g. `["accessibility", "security"]`), filtering out unlisted roles.
-- **`tiers`**: Base model mappings for `light`, `medium`, and `heavy` tiers.
-- **`reasoningEfforts`**: Reasoning effort levels (`off`, `low`, `medium`, `high`) configured per tier (`light`, `medium`, `heavy`).
-- **`heavy_fallbacks` / `medium_fallbacks` / `light_fallbacks`**: Configurable chains of backup models automatically tried on quota exhaustion or capacity limits (also configurable via `fallbacks: { heavy: [...], medium: [...] }`).
-- **`lenses`**: Optional per-lens overrides (`model`, `reasoningEffort`, `tier`, `fallbacks`) for specialist review lenses (`correctness`, `contracts`, `security`, `performance`, `conventions`, `tests`). Review modes continue to decide which lenses execute, while per-lens overrides decouple individual specialist models, reasoning profiles, and failover chains.
-- **Resolution Precedence**:
-  $$\text{lens / custom role override} \longrightarrow \text{tier configuration} \longrightarrow \text{plugin defaults}$$
-
----
-
-## Repository Review Guidelines & Invariants (`.github/gem-pr-review.md`)
-
-`gem-pr-review` dynamically discovers, parses, and injects project-specific review instructions, architecture invariants, conventions, and domain checklists into specialist subagents.
-
-### Automatic Discovery & Precedence
-Guidelines are discovered and loaded with the following precedence:
-1. **Explicit Custom Override**: If specified via CLI (`--guidelines <path>`), CI action input (`guidelines_path`), or repository configuration (`guidelines.path` in `.github/gem-pr-review.json`), that exact file is evaluated directly as an override.
-2. **Default Convention**: `.github/gem-pr-review.md` (checked when no custom override is configured).
-3. **Fallback Convention**: `.github/review-instructions.md` (checked when default convention is not present).
-
-If no guidelines file exists or if `guidelines.enabled: false`, the review runs with standard lens instructions without disruption.
-
-### Structure & Multi-Lens Section Routing
-Guidelines support global rules and targeted lens/role sections:
-- **Global Invariants**: Top-level instructions and sections matching `## Global Invariants`, `## General`, or `## Architectural Rules` are injected into **all** specialist subagents.
-- **Specialist Lens Sections**: Sections matching built-in lenses (e.g. `## Security`, `## Performance`, `## Correctness`, `## Contracts`, `## Conventions`, `## Tests`) or explicit role markers (`## Lens: Security`, `## Role: db`) are routed exclusively to the corresponding subagent prompt.
-
-```markdown
-# Repository Review Guidelines
-
-## Global Invariants
-- All state changes must be accompanied by automated unit or integration tests.
-- Never log, expose, or return raw authentication tokens, secret keys, or passwords.
-- Maintain backwards compatibility for all public exported functions.
-
-## Security
-- Validate origin and sanitize payload data on all external webhook endpoints.
-- Ensure all database queries use parameterized prepared statements.
-
-## Performance
-- Avoid N+1 query loops by batching lookups or using joins.
-- Stream large responses rather than buffering full payloads into memory.
-```
-
-### Prompt Injection & Safety Bounds
-- **Subagent Injection**: Guidelines are prepended directly following lens core instructions under `## Repository Review Guidelines & Invariants:`.
-- **Bounded Ingestion**: Reading is capped at 64 KB (`guidelines.max_bytes`) to protect model context windows; truncated content appends a visible notice.
-- **Privacy & Sanitization**: Reported file paths are strictly repository-relative (`.github/gem-pr-review.md`), ensuring zero local machine path exposure.
-- **MCP Inspection Tool**: Inspect and parse active guidelines without running full review via `gem_pr_review_guidelines` or `pr_review_guidelines`.
-
----
-
-## Automated CI Code Review (GitHub Action)
-
-`gem-pr-review` includes a first-class, zero-dependency composite GitHub Action (`action.yml`) enabling automated AI code review on pull requests in GitHub Actions CI.
-
-### Action Inputs (`action.yml`)
-
-| Input | Description | Required | Default |
-| :--- | :--- | :---: | :--- |
-| `github_token` | GitHub token for authenticating API requests and posting reviews | No | `${{ github.token }}` |
-| `pr_number` | Pull request number to review (auto-detected from `GITHUB_EVENT_PATH` if omitted) | No | *auto-detected* |
-| `mode` | Review mode (`quick`, `balanced`, `full`, `deep`) | No | `balanced` |
-| `fail_on` | Severity threshold that triggers job failure (`P0`, `P1`, `P2`, `P3`, or `none`) | No | `none` |
-| `incremental` | Whether to run an incremental re-review (`auto`, `true`, `false`). In `auto` mode, `synchronize` events automatically trigger incremental reviews | No | `auto` |
-| `action` | Review action: `publish` (post review to PR) or `dry-run` (generate summary only) | No | `publish` |
-| `select` | Finding filter specification (e.g. `p0,p1`, `min:p2`, `1,3`) | No | *all findings* |
-| `guidelines_path` | Optional custom path to repository review guidelines file | No | `.github/gem-pr-review.md` |
-| `verbose` | Attach structured diagnostic telemetry to review summary and outputs (`true`, `false`) | No | `false` |
-
-### Action Outputs (`action.yml`)
-
-| Output | Description | Example |
-| :--- | :--- | :--- |
-| `verdict` | Overall review verdict (`PASS` or `FAIL`) | `PASS` |
-| `findings_count` | Total number of findings detected across all lenses | `3` |
-| `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
-| `summary` | Markdown review summary | `## PR Review Summary...` |
-| `diagnostics` | Sanitized JSON string of the complete execution telemetry payload | `{"metadata":...}` |
-
-### Automated Event Detection & Incremental Re-reviews
-
-When running in GitHub Actions:
-- **Zero-configuration PR resolution**: `pr_number` and repository are automatically parsed from the `GITHUB_EVENT_PATH` webhook payload.
-- **Smart Incremental Reviews**: When `incremental: auto` (the default) is set, new pushes to an open PR (`synchronize` event) automatically trigger `--incremental` mode. The action evaluates only newly introduced diff hunks and revalidates prior findings as `resolved`, `still open`, or `obsolete`.
-
-### CI Quality Gate (`fail_on`)
-
-Enforce AI review standards as mandatory GitHub branch protection checks:
-- Set `fail_on: P1` to fail CI (exit code 1) when any critical (`P0`) or major (`P1`) defects are detected.
-- Combine with GitHub branch protection rules to require passing AI reviews before merging.
-
-### Starter Workflow Template
-
-Add `.github/workflows/gem-pr-review.yml` to your repository:
+Add this workflow to `.github/workflows/gem-pr-review.yml`:
 
 ```yaml
-name: 'Gem PR Review'
+name: Gem PR Review
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
 
 jobs:
   review:
-    name: AI PR Code Review
-    if: |
-      github.event_name == 'pull_request' ||
-      (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request != null &&
-        (contains(github.event.comment.body, '/gem-review') || contains(github.event.comment.body, '/gem-pr-review'))
-      )
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@main
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+      - uses: xpepper/pr-review-gemini@v0.3.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
           fail_on: P1
-          incremental: auto
-          action: publish
 ```
 
-> [!NOTE]
-> **Host-Gated Security & Execution Boundary**: By default, `pr-review-gemini` operates strictly as a diff-only static analysis tool. The CI runner keeps the repository checked out on the trusted base branch (`main`) and inspects PR diffs directly via GitHub API (`gh pr diff`), ensuring untrusted code from external pull requests is never checked out into the runner workspace.
->
-> Detached worktree test verification (`--verify`) is an optional, maintainer-initiated feature that executes test suites against the PR head in an isolated temporary worktree with process group timeout supervision and scrubbed environment variables (stripping GitHub tokens and CI secrets). In CI environments, `--verify` is restricted to same-repository branches and canonical safe built-in profiles (`test`, `build`, `lint`). Verification automatically fails closed on cross-repository/fork PRs or API origin check errors to guarantee that untrusted fork code is never executed. Custom verification profiles require explicit opt-in (`enableCustomCiProfiles: true`) and strict command validation rejecting shell metacharacters and unapproved executables.
+This minimal workflow handles pull-request events only. For the `/gem-review`
+comment trigger and concurrency controls, see the complete
+[GitHub Action reference](docs/github-action.md).
 
----
+## Safety model
 
-## Agent Plugins Standard
+GitHub mutations are host-gated: the reviewer cannot write to GitHub directly.
+Before publication, the host validates every inline comment against a changed
+diff hunk, blocks publication when the PR head has become stale, and caps inline
+comments. In CI, the Action analyzes the diff while the runner remains on the
+trusted base branch; it does not check out or execute untrusted PR-head code by
+default. Optional detached-worktree verification has additional same-repository
+and safe-profile gates.
 
-This repository strictly complies with the [Agent Plugins 1.0 specification](https://agent-plugins.org/):
-- **`plugin.json`**: Plugin manifest declaring metadata and keywords (`gem-pr-review`).
-- **`skills/gem-pr-review/SKILL.md`**: Skill prompt instructions, lens contracts, and severity schemas.
-- **`mcp.json`**: Model Context Protocol configuration for host tool execution.
+## Capabilities
 
-### Collision-Free by Design
-By using the distinctive `/gem-pr-review` slash command, this plugin runs alongside any existing generic `pr-review` tools without collision:
-- **Direct Skill Invocation**: `/gem-pr-review <PR_NUMBER>`
-- **Local Session Priority**: Run `copilot --plugin-dir .` to explicitly scope this plugin for your CLI session.
-- **Direct CLI Execution**: Run `node scripts/dogfood-review.mjs <PR_NUMBER>` to bypass Copilot CLI's global plugin registry entirely.
-- **Explicit MCP Tool Prompting**: In Copilot CLI chat, prompt directly: *"Use the gem-pr-review MCP server to review PR 123"*. The model will invoke `gem_pr_review_subagents` from this server.
+- Parallel specialist review modes for correctness, contracts, security,
+  performance, conventions, and tests.
+- Incremental re-reviews, finding selection, cached publish-later workflows,
+  and safe review-thread resolution.
+- Local fail-closed self-review, optional architecture walkthroughs, and
+  sanitized verbose diagnostics.
 
----
+## Documentation
 
-## Semantic Versioning, Release Automation & Manifest Synchronization
+- [Installation and quick starts](docs/installation.md)
+- [GitHub Action reference](docs/github-action.md)
+- [CLI reference](docs/cli.md)
+- [Dogfooding feedback process](docs/dogfooding-feedback.md)
+- [Architecture and roadmap](docs/roadmap.md)
 
-To ensure continuous integrity across Copilot CLI and Agent Plugins 1.0 ecosystems, `pr-review-gemini` maintains strict manifest synchronization across four version-bearing manifests:
-1. `package.json` — Node.js package definition
-2. `plugin.json` — Agent Plugins 1.0 manifest
-3. `mcp.json` — Model Context Protocol server manifest
-4. `skills/gem-pr-review/SKILL.md` — Frontmatter version metadata
+## Support and feedback
 
-### Automated Version Verification & Atomic Bumping
-- **Validation Script**: `npm run version:check` verifies that all four files contain identical SemVer versions.
-- **Conventional Commit Engine**: Inspects Git history since the latest tag and calculates whether a `major`, `minor`, or `patch` bump is required.
-- **Atomic Rollback Engine**: The bump utility (`scripts/bump-version.mjs`) updates all manifests synchronously with rollback safeguards if any write fails.
-- **Central Version Source**: `src/version.js` exposes the canonical `VERSION` constant used across CLI banners and MCP server info.
-
-### Creating a Release (Step-by-Step)
-
-To cut a new release from `main`:
-
-1. **Preview the next SemVer bump & release notes**:
-   ```bash
-   node scripts/bump-version.mjs auto --dry-run --changelog
-   ```
-
-2. **Execute the release**:
-   Atomically updates all 4 manifests, prepends new release notes to `CHANGELOG.md`, creates a `chore(release): vX.Y.Z` commit, and creates an annotated tag `vX.Y.Z`:
-   ```bash
-   npm run release
-   # Or specify an explicit target version:
-   node scripts/bump-version.mjs 0.2.0 --release
-   ```
-   > [!NOTE]
-   > To update manifests only without creating a git commit or tag, use `npm run bump` (or `node scripts/bump-version.mjs patch|minor|major`).
-
-3. **Push commit and tag to trigger the workflow**:
-   ```bash
-   git push origin main --tags
-   ```
-
-### Automated Release Workflow
-Pushing a tag matching `v*` triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) on GitHub Actions. It runs the full test suite, validates manifest synchronization, and ensures the tag matches `package.json`. After verification passes, publish a normal GitHub Release by manually dispatching the workflow with its existing tag. This deliberate publication step also leaves room to create a GitHub Marketplace release draft for the verified tag.
-
----
-
-## Verification & Quality
-
-```bash
-npm test
-```
-
-All 838 unit tests across 158 suites verify parser accuracy, host-gated security, candidate finding recovery, subagent orchestration, fallback retry resilience, interactive selection, review caching, self-review fail-closed safety gates, composite GitHub Action schema, automated CI event payload parsing, quality gate enforcement, custom review roles, central versioning, atomic manifest synchronization, comment command dispatching, repository review guidelines & invariants, review thread verification & automated resolution, PR architecture walkthrough & Mermaid diagrams, centralized CLI infrastructure, and safe verbose review diagnostics.
-
----
-
-## Documentation & Architecture
-
-- **[Architecture & Porting Roadmap](docs/roadmap.md)**: Design comparison with `pi-pr-review` and increment history.
-- **[Agent Guidelines](AGENTS.md)**: Operating principles and paired-agent development standards.
-- **[Session Status & Handoff](HANDOFF.md)**: Current completion status and active notes.
-- **[Task List](TODO.md)**: Roadmap item tracking and maintenance backlog.
-
----
+Report reproducible bugs or documentation gaps through
+[GitHub Issues](https://github.com/xpepper/pr-review-gemini/issues). For real
+PR reviews, use the privacy-safe, evidence-based
+[dogfooding feedback process](docs/dogfooding-feedback.md): verify findings
+against the diff and repository context before recording them, and never include
+credentials, raw prompts or diffs, sensitive diagnostics, or local machine
+paths.
 
 ## License
 

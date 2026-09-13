@@ -19,9 +19,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
   verify-on-tag / explicit-publish workflow behavior.
 - [x] Define a privacy-safe, evidence-based dogfooding record in
   [`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md).
-- [ ] Simplify `README.md` into a concise landing page and move detailed reference
-  material into focused documentation pages, beginning with installation and
-  Action configuration.
+- [x] Simplify `README.md` into a concise landing page and move installation,
+  GitHub Action, and CLI reference material into focused documentation pages.
+- [ ] Continue the documentation information architecture with focused MCP,
+  custom-role, repository-guideline, diagnostics, verification, and release
+  reference pages.
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
 - [ ] Defer larger capabilities, including SARIF export, until dogfooding evidence

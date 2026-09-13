@@ -208,10 +208,12 @@ The MVP increments (0–22) are complete. Release `v0.3.3` is published and the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live in the Code quality and Continuous integration categories.
 
-1. **Documentation information architecture — now.** Keep the README as a concise
-   landing page and progressively move detailed installation, configuration, CLI,
-   MCP, safety, verification, release, and troubleshooting reference material to
-   focused pages under `docs/`.
+1. **Documentation information architecture — now.** The first slice made the
+   README a concise landing page and added focused
+   [installation](installation.md), [GitHub Action](github-action.md), and
+   [CLI](cli.md) pages. Next, progressively move MCP, custom-role,
+   repository-guideline, diagnostics, verification, release, and troubleshooting
+   reference material to focused pages under `docs/`.
 2. **Repeatable dogfooding feedback — now.** Use the privacy-safe,
    evidence-based format in [`dogfooding-feedback.md`](dogfooding-feedback.md) for
    every real review. Treat model findings as hypotheses until checked against the

@@ -3,8 +3,9 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `docs/post-mvp-dogfooding-baseline`
-* **Active Work**: Documentation-only post-MVP baseline and dogfooding process.
+* **Current Branch**: `docs/documentation-ia-slice-1`
+* **Active Work**: Documentation-only information-architecture slice: concise
+  README landing page and focused installation, GitHub Action, and CLI pages.
 * **Test Suite**: `npm test` runs and passes (838 tests across 158 suites, 0 failures)
 * **Manifests**: `npm run version:check` verified synchronized at `0.3.3`
 * **Release**: `v0.3.3` is an annotated tag at the current `main` commit and its
@@ -50,6 +51,16 @@ dogfooding feedback collection, and evidence-led polish. See
 [`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md) for the review
 record and [`docs/roadmap.md`](docs/roadmap.md) for prioritization. SARIF export
 remains deferred pending user evidence.
+
+### Documentation IA, Slice 1
+
+This documentation-only slice makes `README.md` a concise first-time-user
+landing page. Detailed installation, GitHub Action, and CLI guidance moved to
+[`docs/installation.md`](docs/installation.md),
+[`docs/github-action.md`](docs/github-action.md), and
+[`docs/cli.md`](docs/cli.md). The next active documentation work is focused
+MCP, custom-role, repository-guideline, diagnostics, verification, and release
+reference pages; it is not a new implementation increment.
 
 ### Increment 22 Summary: Safe Verbose Review Diagnostics & Execution Telemetry
 Increment 22 has been fully delivered, verified, dogfooded on GitHub PR #40, and merged into `main` (commit `921e211`):
@@ -575,5 +586,4 @@ All 23 increments (Increments 0 through 22) across all phases of the project roa
 
 Remaining de-prioritized backlog:
 - SARIF 2.1.0 report export for GitHub Code Scanning integration.
-
 
