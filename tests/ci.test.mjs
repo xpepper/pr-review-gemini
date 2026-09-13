@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import {
   parseEventPayload,
   resolveCiEnvironment,
@@ -1710,6 +1711,61 @@ index 1111111..2222222 100644
       assert.match(content, /needs:\s*verify/);
       assert.match(content, /if:\s*github\.event_name\s*==\s*['"]workflow_dispatch['"]/);
       assert.match(content, /name:\s*['"]Publish GitHub Release['"]/);
+      const existingReleaseCheck = content.indexOf('gh release view "$TAG_NAME"');
+      const releaseCreation = content.indexOf('gh release create "$TAG_NAME"');
+      assert.ok(existingReleaseCheck >= 0, 'publish job must reject an existing release');
+      assert.ok(existingReleaseCheck < releaseCreation, 'existing release check must run before release creation');
+      assert.match(content, /release_lookup=\$\(gh release view "\$TAG_NAME" 2>&1\)/);
+      assert.match(content, /\[\s*"\$release_lookup"\s*!=\s*"release not found"\s*\]/);
+      assert.match(content, /Unable to verify whether a release exists/);
+    });
+
+    it('fails closed unless the release lookup confirms the tag is missing', () => {
+      const content = fs.readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8');
+      const stepStart = content.indexOf('      - name: Check for Existing Release');
+      const stepEnd = content.indexOf('      - name: Generate Release Notes', stepStart);
+      const runStart = content.indexOf('        run: |\n', stepStart) + '        run: |\n'.length;
+      const script = content
+        .slice(runStart, stepEnd)
+        .split('\n')
+        .map((line) => line.replace(/^          /, ''))
+        .join('\n');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-guard-'));
+      const ghStub = path.join(tmpDir, 'gh');
+
+      fs.writeFileSync(ghStub, '#!/bin/sh\nprintf "%s" "$GH_OUTPUT" >&2\nexit "$GH_EXIT"\n');
+      fs.chmodSync(ghStub, 0o755);
+
+      const runGuard = (exitCode, output) => spawnSync(
+        '/bin/bash',
+        ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GH_EXIT: String(exitCode),
+            GH_OUTPUT: output,
+            PATH: `${tmpDir}:${process.env.PATH}`,
+            TAG_NAME: 'v1.2.3',
+          },
+        },
+      );
+
+      try {
+        const existing = runGuard(0, '');
+        assert.equal(existing.status, 1);
+        assert.match(existing.stdout, /release for tag 'v1\.2\.3' already exists/);
+
+        const missing = runGuard(1, 'release not found');
+        assert.equal(missing.status, 0);
+
+        const apiFailure = runGuard(1, 'gh: API rate limit exceeded (HTTP 403)');
+        assert.equal(apiFailure.status, 1);
+        assert.match(apiFailure.stdout, /Unable to verify whether a release exists/);
+        assert.match(apiFailure.stderr, /API rate limit exceeded/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
   });
 
