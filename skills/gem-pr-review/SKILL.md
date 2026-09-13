@@ -534,7 +534,7 @@ Specialist subagent review passes and local self-review passes format findings i
 | `verdict` | Overall review verdict based on quality gate (`PASS` or `FAIL`) | `PASS` |
 | `findings_count` | Total number of findings detected across all specialist review lenses | `3` |
 | `blocking_count` | Number of blocking findings meeting or exceeding `fail_on` threshold | `0` |
-| `documentation_consistency_status` | Documentation check status (`passed`, `failed`, `skipped`, or `not_applicable`) | `passed` |
+| `documentation_consistency_status` | Documentation check status (`passed`, `failed`, `skipped`, `not_applicable`, or `not_run`) | `passed` |
 | `summary` | Complete markdown review summary | `## PR Review Summary...` |
 
 ### 2. Event Payload & Synchronize Auto-Detection
@@ -863,7 +863,6 @@ Inspect and format review diagnostics programmatically via MCP:
     - `format` (optional string, `'markdown'` | `'json'`, default: `'markdown'`): Formatted report or JSON string.
     - `cacheDir` (optional string): Custom session cache directory.
   - Also, `gem_pr_review_subagents` and `gem_self_review` accept `verbose: true` to attach diagnostics to the result summary and payload.
-
 
 
 

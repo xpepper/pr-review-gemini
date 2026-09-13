@@ -83,7 +83,7 @@ unless the commenter is explicitly allowlisted.
 | `findings_count` | Total findings across all review lenses. |
 | `blocking_count` | Findings meeting or exceeding `fail_on`. |
 | `verification_status` | Detached-worktree verification status: `passed`, `failed`, or `none`. |
-| `documentation_consistency_status` | Documentation check status: `passed`, `failed`, `skipped`, or `not_applicable`. |
+| `documentation_consistency_status` | Documentation check status: `passed`, `failed`, `skipped`, `not_applicable`, or `not_run`. |
 | `summary` | Markdown review summary. |
 | `diagnostics` | Sanitized execution-telemetry JSON. |
 
