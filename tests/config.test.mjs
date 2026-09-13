@@ -990,4 +990,40 @@ describe('Configuration & Model Tier Management', () => {
       assert.equal(cappedConfig.guidelines.max_bytes, 512 * 1024);
     });
   });
+
+  describe('Architecture Configuration (Increment 21)', () => {
+    it('provides sensible default configuration for architecture', () => {
+      assert.ok(DEFAULT_CONFIG.architecture);
+      assert.equal(DEFAULT_CONFIG.architecture.enabled, 'auto');
+      assert.deepEqual(DEFAULT_CONFIG.architecture.diagrams, ['sequence', 'component']);
+    });
+
+    it('resolves boolean architecture enabled flag', () => {
+      const configTrue = resolveConfig({ overrides: { architecture: true } });
+      assert.equal(configTrue.architecture.enabled, true);
+
+      const configFalse = resolveConfig({ overrides: { architecture: false } });
+      assert.equal(configFalse.architecture.enabled, false);
+    });
+
+    it('resolves string architecture enabled flags (always, never, auto)', () => {
+      assert.equal(resolveConfig({ overrides: { architecture: 'always' } }).architecture.enabled, true);
+      assert.equal(resolveConfig({ overrides: { architecture: 'never' } }).architecture.enabled, false);
+      assert.equal(resolveConfig({ overrides: { architecture: 'auto' } }).architecture.enabled, 'auto');
+    });
+
+    it('resolves nested architecture object with custom diagrams list', () => {
+      const config = resolveConfig({
+        overrides: {
+          architecture: {
+            enabled: true,
+            diagrams: ['sequence'],
+          },
+        },
+      });
+      assert.equal(config.architecture.enabled, true);
+      assert.deepEqual(config.architecture.diagrams, ['sequence']);
+    });
+  });
 });
+

@@ -42,6 +42,7 @@ import {
 } from '../src/verify.js';
 import { runSelfReview } from '../src/self-review.js';
 import { loadGuidelines, createGuidelinesSummary, isSafeGuidelinesPath } from '../src/guidelines.js';
+import { analyzeArchitecture } from '../src/architecture.js';
 import { PLUGIN_VERSION } from '../src/version.js';
 
 const GUIDELINES_PATH_PROPERTY = {
@@ -342,6 +343,50 @@ export const MCP_TOOLS = [
         },
       },
       required: ['prNumber'],
+    },
+  },
+  {
+    name: 'gem_pr_review_architecture',
+    description:
+      'Analyzes PR diff architecture impact, affected subsystems, cross-module interactions, public APIs, and generates Mermaid sequence and component diagrams.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'Optional GitHub pull request number (diff fetched via gh if diffText omitted)',
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional unified diff text',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+      },
+    },
+  },
+  {
+    name: 'pr_review_architecture',
+    description:
+      'Alias for gem_pr_review_architecture. Analyzes PR architecture impact and generates Mermaid diagrams.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prNumber: {
+          type: 'integer',
+          description: 'Optional GitHub pull request number',
+        },
+        diffText: {
+          type: 'string',
+          description: 'Optional unified diff text',
+        },
+        repo: {
+          type: 'string',
+          description: 'Optional repository in owner/repo format',
+        },
+      },
     },
   },
   {
@@ -962,6 +1007,72 @@ export function createMcpHandler(options = {}) {
                     {
                       type: 'text',
                       text: JSON.stringify(resultPayload, null, 2),
+                    },
+                  ],
+                },
+              };
+            }
+
+            if (
+              toolName === 'gem_pr_review_architecture' ||
+              toolName === 'pr_review_architecture'
+            ) {
+              let diffText = args.diffText;
+              const rawPrNum = args.prNumber ? Number(args.prNumber) : null;
+              const prNum = Number.isInteger(rawPrNum) && rawPrNum > 0 ? rawPrNum : null;
+              const repo = args.repo || null;
+
+              if ((!diffText || typeof diffText !== 'string') && prNum) {
+                if (getPrDiffFn) {
+                  try {
+                    diffText = await getPrDiffFn(prNum, { repo, cwd });
+                  } catch (err) {
+                    return {
+                      jsonrpc: '2.0',
+                      id,
+                      result: {
+                        isError: true,
+                        content: [
+                          {
+                            type: 'text',
+                            text: `Failed to acquire PR diff for PR #${prNum}: ${err?.message || 'Diff fetch error'}`,
+                          },
+                        ],
+                      },
+                    };
+                  }
+                }
+              }
+
+              if (!diffText || typeof diffText !== 'string' || !diffText.trim()) {
+                return {
+                  jsonrpc: '2.0',
+                  id,
+                  result: {
+                    isError: true,
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Either diffText or a valid prNumber must be provided to analyze architecture.',
+                      },
+                    ],
+                  },
+                };
+              }
+
+              const archResult = await analyzeArchitecture({
+                diffText,
+                prMetadata: prNum ? { number: prNum } : null,
+              });
+
+              return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                  content: [
+                    {
+                      type: 'text',
+                      text: JSON.stringify(archResult, null, 2),
                     },
                   ],
                 },

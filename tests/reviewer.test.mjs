@@ -2181,5 +2181,105 @@ index 1111111..2222222 100644
       assert.ok(liveResult.summary.includes('Verified Resolved'));
     });
   });
+
+  describe('Architecture Summary & Mermaid Sequence Diagrams (Increment 21)', () => {
+    const archDiff = `diff --git a/src/reviewer.js b/src/reviewer.js
+index 1111111..2222222 100644
+--- a/src/reviewer.js
++++ b/src/reviewer.js
+@@ -10,2 +10,3 @@
++import { analyzeArchitecture } from './architecture.js';
+diff --git a/src/architecture.js b/src/architecture.js
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/src/architecture.js
+@@ -0,0 +1,10 @@
++export function analyzeArchitecture() { return {}; }
+`;
+
+    it('exports ARCHITECTURE_LENS and architecture utilities', async () => {
+      const { ARCHITECTURE_LENS, analyzeArchitecture, formatArchitectureSummary } = await import('../src/reviewer.js');
+      assert.ok(ARCHITECTURE_LENS);
+      assert.equal(ARCHITECTURE_LENS.id, 'architecture');
+      assert.ok(typeof analyzeArchitecture === 'function');
+      assert.ok(typeof formatArchitectureSummary === 'function');
+    });
+
+    it('automatically includes architecture summary and Mermaid diagrams in full mode', async () => {
+      const result = await runReview({
+        prNumber: 21,
+        mode: 'full',
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.ok(result.architecture, 'Expected result.architecture to be populated in full mode');
+      assert.ok(result.summary.includes('### 🏗️ Architecture & System Impact'), 'Expected architecture header in summary');
+      assert.ok(result.summary.includes('```mermaid'), 'Expected Mermaid diagram code block in summary');
+      assert.ok(result.summary.includes('sequenceDiagram'), 'Expected sequenceDiagram in summary');
+    });
+
+    it('automatically includes architecture summary and Mermaid diagrams in deep mode', async () => {
+      const result = await runReview({
+        prNumber: 21,
+        mode: 'deep',
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.ok(result.architecture);
+      assert.ok(result.summary.includes('### 🏗️ Architecture & System Impact'));
+    });
+
+    it('omits architecture summary by default in balanced and quick modes', async () => {
+      const balancedResult = await runReview({
+        prNumber: 21,
+        mode: 'balanced',
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.equal(balancedResult.architecture, null);
+      assert.ok(!balancedResult.summary.includes('### 🏗️ Architecture & System Impact'));
+
+      const quickResult = await runReview({
+        prNumber: 21,
+        mode: 'quick',
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.equal(quickResult.architecture, null);
+      assert.ok(!quickResult.summary.includes('### 🏗️ Architecture & System Impact'));
+    });
+
+    it('includes architecture summary when architecture: true flag is explicitly specified in balanced mode', async () => {
+      const result = await runReview({
+        prNumber: 21,
+        mode: 'balanced',
+        architecture: true,
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.ok(result.architecture);
+      assert.ok(result.summary.includes('### 🏗️ Architecture & System Impact'));
+      assert.ok(result.summary.includes('sequenceDiagram'));
+    });
+
+    it('suppresses architecture summary when architecture: false flag is specified even in full mode', async () => {
+      const result = await runReview({
+        prNumber: 21,
+        mode: 'full',
+        architecture: false,
+        diffText: archDiff,
+        dryRun: true,
+      });
+
+      assert.equal(result.architecture, null);
+      assert.ok(!result.summary.includes('### 🏗️ Architecture & System Impact'));
+    });
+  });
 });
 

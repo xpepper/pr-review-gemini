@@ -22,6 +22,7 @@ import {
   buildReviewerPrompt,
   LENS_DEFINITIONS,
 } from './reviewer.js';
+import { analyzeArchitecture } from './architecture.js';
 import {
   resolveActiveGuidelines,
   formatGuidelinesSummaryLine,
@@ -250,6 +251,14 @@ export async function runSelfReview(options = {}) {
 
   const modeObj = resolveReviewMode(rawMode);
   const resolvedConfig = options.config || loadConfig({ cwd });
+  const shouldIncludeArchitecture =
+    typeof options.architecture === 'boolean'
+      ? options.architecture
+      : resolvedConfig.architecture?.enabled === true
+        ? true
+        : resolvedConfig.architecture?.enabled === false
+          ? false
+          : (modeObj.name === 'full' || modeObj.name === 'deep');
 
   // Load repository review guidelines
   let { activeGuidelines, guidelinesSummary } = resolveActiveGuidelines({
@@ -485,6 +494,22 @@ export async function runSelfReview(options = {}) {
       guidelines: activeGuidelines,
     });
 
+    let architectureResult = null;
+    let finalSummary = summary;
+    if (shouldIncludeArchitecture && !allSubagentsFailed) {
+      try {
+        architectureResult = await analyzeArchitecture({
+          diffText: effectiveDiff,
+          prMetadata: { title: 'Local Worktree Changes' },
+        });
+        if (architectureResult?.markdown) {
+          finalSummary += '\n\n' + architectureResult.markdown;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     return {
       status: verdict.status,
       verdict: verdict.verdict,
@@ -496,8 +521,9 @@ export async function runSelfReview(options = {}) {
       lenses: executedLenses,
       diffStats: manifest,
       remediation: verdict.remediation,
-      summary,
+      summary: finalSummary,
       guidelines: guidelinesSummary,
+      architecture: architectureResult || null,
     };
   } finally {
     if (fileBackedDiff?.cleanup) {

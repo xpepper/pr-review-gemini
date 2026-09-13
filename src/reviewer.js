@@ -124,8 +124,32 @@ import {
   MAX_PROMPT_GUIDELINES_BYTES,
   ABSOLUTE_MAX_GUIDELINES_BYTES,
 } from './guidelines.js';
+import {
+  analyzeArchitecture,
+  formatArchitectureSummary,
+  generateMermaidSequenceDiagram,
+  generateMermaidComponentDiagram,
+  sanitizeMermaidLabel,
+  sanitizeMermaidId,
+  extractComponentsAndInteractions,
+  inferSubsystem,
+  inferComponentName,
+  synthesizeWalkthrough,
+  ARCHITECTURE_LENS,
+} from './architecture.js';
 
 export {
+  analyzeArchitecture,
+  formatArchitectureSummary,
+  generateMermaidSequenceDiagram,
+  generateMermaidComponentDiagram,
+  sanitizeMermaidLabel,
+  sanitizeMermaidId,
+  extractComponentsAndInteractions,
+  inferSubsystem,
+  inferComponentName,
+  synthesizeWalkthrough,
+  ARCHITECTURE_LENS,
   resolveLensPlan,
   dispatchSubagentsParallel,
   createSubagentRunner,
@@ -298,6 +322,7 @@ Inspect the unified diff carefully for:
 - Evidence Before Completion: Verify whether newly introduced behaviors, failure paths, and edge cases are backed by passing automated tests.
 - Test Integrity: Flaky assertions, non-deterministic timing, unrealistic mocking boundaries, or tests asserting implementation details instead of observable behavior.`,
   },
+  architecture: ARCHITECTURE_LENS,
 };
 
 const SEVERITY_RANK = {
@@ -726,6 +751,7 @@ export async function runReview({
   resolveThreads = false,
   autoReplyThreads = true,
   checkThreads = null,
+  architecture = null,
 }) {
   const num = Number(prNumber);
   if (!num || num <= 0 || !Number.isInteger(num)) {
@@ -734,6 +760,14 @@ export async function runReview({
 
   let resolvedConfig = config || (await loadConfig({ cwd }));
   const resolvedMode = resolveReviewMode(mode);
+  const shouldIncludeArchitecture =
+    typeof architecture === 'boolean'
+      ? architecture
+      : resolvedConfig.architecture?.enabled === true
+        ? true
+        : resolvedConfig.architecture?.enabled === false
+          ? false
+          : (resolvedMode.name === 'full' || resolvedMode.name === 'deep');
   const effectiveExecGit =
     typeof execGitFn === 'function'
       ? execGitFn
@@ -1209,6 +1243,21 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       summary += '\n\n' + formatThreadResolutionSummary(threadEvaluation);
     }
 
+    let architectureResult = null;
+    if (shouldIncludeArchitecture && !allSubagentsFailed) {
+      try {
+        architectureResult = await analyzeArchitecture({
+          diffText: unifiedDiffText,
+          prMetadata,
+        });
+        if (architectureResult?.markdown) {
+          summary += '\n\n' + architectureResult.markdown;
+        }
+      } catch {
+        // Non-fatal: architecture analysis failure should not block core review passes
+      }
+    }
+
     const transportInfo = diffTransport
       ? {
           isLarge: true,
@@ -1236,6 +1285,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
             lensesExecuted: executedLenses,
             diffTransport: transportInfo,
             revalidation,
+            architecture: architectureResult || null,
           },
           { cacheDir }
         );
@@ -1300,6 +1350,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
         diffTransport: transportInfo,
         cached: Boolean(cachedRecord),
         guidelines: guidelinesSummary,
+        architecture: architectureResult || null,
       };
     }
 
@@ -1331,6 +1382,7 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
       diffTransport: transportInfo,
       cached: Boolean(cachedRecord),
       guidelines: guidelinesSummary,
+      architecture: architectureResult || null,
     };
   } finally {
     if (autoCreatedTransport && diffTransport) {

@@ -775,6 +775,42 @@ Inspect and resolve review threads programmatically through MCP:
   - Parameters: `prNumber` (required), `repo` (optional), `resolve` (optional boolean, default false), `autoReply` (optional boolean, default true), `diffText` (optional).
   - Returns: `threads`, `counts` (`total`, `resolved`, `resolvable`, `authorReplied`, `stillOpen`), `summary`, and `resolution` execution results.
 
+---
+
+## PR Architecture Walkthrough & Mermaid Sequence Diagrams
+
+`gem-pr-review` provides automated architectural impact analysis and generates valid GitHub Flavored Markdown Mermaid sequence diagrams and component flowcharts for pull requests.
+
+### 1. Architecture & System Impact Analysis
+The architecture analyzer inspects changes across module boundaries, subsystem interactions, and public interfaces:
+- **Module Boundaries**: Traces imports, exports, and dependency relationships between changed components.
+- **Subsystem Grouping**: Categorizes modified files into architectural subsystems (`Core Review Engine`, `MCP Server Protocol`, `CLI & Tooling`, `Config & Infrastructure`, `Workflows`, `Test Suite`).
+- **Public API & Contract Changes**: Surfaces added, modified, or removed exports, functions, classes, CLI flags, and MCP tools.
+- **Walkthrough Narrative**: Synthesizes a structured overview explaining system-level impacts and component changes.
+
+### 2. Valid Mermaid Diagrams Generation
+- **Sequence Diagram (`sequenceDiagram`)**:
+  Generates clean `sequenceDiagram` visualizing call flow, message exchanges, and responses between callers, CLI entrypoints, MCP server handlers, and core modules.
+- **Component Flowchart (`flowchart TD`)**:
+  Visualizes component relationships and subsystem interactions with sanitized node labels to prevent syntax rendering errors.
+- **Mermaid Syntax Sanitization**:
+  Automatically strips HTML tags, escapes quotation marks and brackets, and normalizes identifiers to guarantee error-free rendering in GitHub Flavored Markdown.
+
+### 3. Activation & Modes
+- **Automatic Inclusion**:
+  Automatically included in review output when review mode is `--full` or `--deep`.
+- **CLI Flag `--architecture` (or `--arch`)**:
+  Force-enables architecture summary and Mermaid diagrams for any review mode (e.g. `npm run dogfood:pr <PR_NUMBER> --architecture` or `node scripts/self-review.mjs --architecture`).
+- **Suppression `--no-architecture`**:
+  Disables architecture generation when only minimal defect finding is needed.
+
+### 4. MCP Tools: `gem_pr_review_architecture` & `pr_review_architecture`
+Inspect PR architecture programmatically via MCP:
+- `gem_pr_review_architecture` (and alias `pr_review_architecture`):
+  - Parameters: `prNumber` (optional integer), `diffText` (optional string), `repo` (optional string).
+  - Returns: `summary`, `components`, `interactions`, `publicApiChanges`, `subsystems`, `sequenceDiagram`, `componentDiagram`, and `markdown`.
+
+
 
 
 

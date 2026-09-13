@@ -85,14 +85,19 @@ describe('Model Context Protocol (MCP) Server', () => {
       const toolNames = response.result.tools.map((t) => t.name);
       assert.ok(toolNames.includes('gem_pr_review_subagents'));
       assert.ok(toolNames.includes('gem_pr_review_diff'));
-      assert.ok(toolNames.includes('gem_pr_review_publish'));
-      assert.ok(toolNames.includes('gem_pr_review_publish_cached'));
       assert.ok(toolNames.includes('gem_pr_review_prior'));
       assert.ok(toolNames.includes('gem_pr_review_threads'));
       assert.ok(toolNames.includes('pr_review_threads'));
+      assert.ok(toolNames.includes('gem_pr_review_architecture'));
+      assert.ok(toolNames.includes('pr_review_architecture'));
       assert.ok(toolNames.includes('gem_pr_review_verify'));
       assert.ok(toolNames.includes('gem_self_review'));
       assert.ok(toolNames.includes('gem_pr_review_self'));
+
+      const archTool = response.result.tools.find((t) => t.name === 'gem_pr_review_architecture');
+      assert.ok(archTool.description);
+      assert.ok(archTool.inputSchema.properties.diffText);
+      assert.ok(archTool.inputSchema.properties.prNumber);
 
       const threadsTool = response.result.tools.find((t) => t.name === 'gem_pr_review_threads');
       assert.ok(threadsTool.description);
@@ -1151,6 +1156,85 @@ index 1111111..2222222 100644
       assert.equal(response.id, 995);
       assert.equal(response.result?.isError, true);
       assert.match(response.result.content[0].text, /prNumber is required/i);
+    });
+
+    it('handles gem_pr_review_architecture with diffText and returns architecture analysis and diagrams', async () => {
+      const handler = createMcpHandler();
+      const testDiff = `diff --git a/src/architecture.js b/src/architecture.js
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/architecture.js
+@@ -0,0 +1,5 @@
++export function analyzeArchitecture() {}
+`;
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 996,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_architecture',
+          arguments: {
+            diffText: testDiff,
+          },
+        },
+      });
+
+      assert.equal(response.id, 996);
+      assert.ok(!response.result?.isError);
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.ok(parsed.summary);
+      assert.ok(parsed.sequenceDiagram);
+      assert.ok(parsed.componentDiagram);
+      assert.ok(parsed.markdown);
+      assert.ok(parsed.markdown.includes('### 🏗️ Architecture & System Impact'));
+    });
+
+    it('handles pr_review_architecture alias fetching diff via getPrDiffFn', async () => {
+      const handler = createMcpHandler({
+        getPrDiffFn: async (num) => `diff --git a/src/test.js b/src/test.js
+index 0000000..1111111 100644
+--- a/src/test.js
++++ b/src/test.js
+@@ -1,1 +1,2 @@
++// test PR #${num}
+`,
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 997,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_architecture',
+          arguments: {
+            prNumber: 21,
+          },
+        },
+      });
+
+      assert.equal(response.id, 997);
+      assert.ok(!response.result?.isError);
+      const parsed = JSON.parse(response.result.content[0].text);
+      assert.ok(parsed.summary);
+      assert.ok(parsed.markdown.includes('### 🏗️ Architecture & System Impact'));
+    });
+
+    it('returns isError when neither diffText nor prNumber is provided to gem_pr_review_architecture', async () => {
+      const handler = createMcpHandler();
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 998,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_architecture',
+          arguments: {},
+        },
+      });
+
+      assert.equal(response.id, 998);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /diffText or.*prNumber/i);
     });
   });
 

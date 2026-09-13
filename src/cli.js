@@ -247,6 +247,12 @@ export function parseCommonReviewOptions(args, index) {
   if (arg === '--replace-standard-roles') {
     return { matched: true, type: 'replaceStandardRoles', value: true, nextIndex: index };
   }
+  if (arg === '--architecture' || arg === '--arch') {
+    return { matched: true, type: 'architecture', value: true, nextIndex: index };
+  }
+  if (arg === '--no-architecture' || arg === '--no-arch') {
+    return { matched: true, type: 'architecture', value: false, nextIndex: index };
+  }
   let opt = parseOption(args, index, '--role');
   if (opt.matched) {
     const roles = opt.value.split(',').map((s) => s.trim()).filter(Boolean);

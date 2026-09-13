@@ -46,6 +46,7 @@ Options:
   --select <spec>   Filter findings by indices, ranges, or severities (e.g. "1,3", "p0,p1")
   --role <id>       Run specific review role(s) (can be repeated or comma-separated)
   --replace-standard-roles Run only custom/specified roles and skip standard lenses
+  --architecture    Generate architecture walkthrough and Mermaid sequence/component diagrams
   --cache-dir <dir> Custom directory for session cache (defaults to .gem-pr-cache)
   --guidelines <path> Custom guidelines file path (defaults to .github/gem-pr-review.md)
   --base, --base-ref <ref> Target base git ref or branch name for diff and ground truth checks
@@ -79,6 +80,7 @@ export function parseCliArgs(args) {
   const roles = [];
   let replaceStandardRoles = false;
   let guidelinesPath = null;
+  let architecture = null;
 
   let baseRef = null;
 
@@ -119,6 +121,8 @@ export function parseCliArgs(args) {
           roles.push(...commonOpt.value);
         } else if (commonOpt.type === 'guidelines') {
           guidelinesPath = commonOpt.value;
+        } else if (commonOpt.type === 'architecture') {
+          architecture = commonOpt.value;
         }
         i = commonOpt.nextIndex;
         continue;
@@ -192,6 +196,7 @@ export function parseCliArgs(args) {
     showVersion,
     roles: roles.length > 0 ? roles : undefined,
     replaceStandardRoles,
+    architecture: architecture !== null ? architecture : undefined,
   };
 }
 
@@ -231,6 +236,7 @@ export async function main() {
     replaceStandardRoles,
     guidelinesPath,
     baseRef,
+    architecture,
   } = parseCliArgs(rawArgs);
 
   if (self) {
@@ -247,6 +253,7 @@ export async function main() {
         roles,
         replaceStandardRoles,
         guidelinesPath,
+        architecture,
       });
 
       console.log(result.summary);
@@ -401,6 +408,7 @@ export async function main() {
       replaceStandardRoles,
       guidelinesPath,
       baseRef,
+      architecture,
     });
 
     console.log('\n────────────────────────────────────────────────────────');
