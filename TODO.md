@@ -21,6 +21,14 @@ is live, and the Action is listed in Code quality and Continuous integration.
   [`docs/dogfooding-feedback.md`](docs/dogfooding-feedback.md).
 - [x] Simplify `README.md` into a concise landing page and move installation,
   GitHub Action, and CLI reference material into focused documentation pages.
+- [x] Lead the documentation with the plugin identity: plugin-first README,
+  focused plugin reference ([`docs/plugin.md`](docs/plugin.md)), installation
+  reorder with cross-links, and a `gem-pr-review` entry in the
+  [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
+  Copilot plugin marketplace (root-source path `.`, ref-pinned `v0.3.3`,
+  install verified).
+- [ ] Open the PR against `main` for `docs/plugin-first-docs` and land it after
+  review by this tool itself (dogfooding rule).
 - [ ] Continue the documentation information architecture with focused MCP,
   custom-role, repository-guideline, diagnostics, verification, and release
   reference pages.
