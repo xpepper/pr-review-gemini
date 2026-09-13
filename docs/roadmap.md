@@ -190,11 +190,14 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Added configuration support in `src/config.js` (`DEFAULT_ARCHITECTURE_CONFIG`, `architecture: { enabled: 'auto', diagrams: ['sequence', 'component'] }`).
   - Added comprehensive test suites across `tests/architecture.test.mjs`, `tests/reviewer.test.mjs`, `tests/config.test.mjs`, `tests/mcp-server.test.mjs`, and `tests/skills.test.mjs` (802 total tests passing across 149 suites with 0 failures).
   - Executed dogfood review loop against PR #39, verified 0 blocking defects, and merged into `main` (commit `61e06a8`).
-- [ ] **Increment 22: Safe Verbose Review Diagnostics**
-  - Add an opt-in `--verbose` diagnostic mode for `dogfood-review`, `dogfood-pr`, and `self-review`; propagate it through supported CI comment commands.
-  - Report structured, redacted execution telemetry: phase timing; selected mode, roles, and models; fallback attempts; diff and guideline metadata; cache outcomes; per-lens lifecycle/errors; finding anchoring/demotion; and publication/stale-head decisions.
-  - Preserve concise default output and never emit prompt or diff contents, secrets, authentication material, absolute machine paths, or environment values.
-  - Expose diagnostics in a machine-readable form compatible with JSON consumers, and test normal, degraded, and rejected execution paths.
+- [x] **Increment 22: Safe Verbose Review Diagnostics (#40)**
+  - Opt-in `--verbose` (`-V`) diagnostic mode for `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, and `scripts/self-review.mjs`; propagated through supported CI comment commands (`/gem-review --verbose`).
+  - Structured, redacted execution telemetry (`src/diagnostics.js`): phase timing (diff fetch, guidelines, subagents, verification, caching, publishing); selected mode, roles, and models; fallback attempts; diff and guideline metadata; cache outcomes; per-lens lifecycle/errors; finding anchoring/demotion; and publication/stale-head decisions.
+  - Strict privacy and security guarantees: zero exposure of prompt or diff contents, authentication tokens, credentials, or absolute developer machine paths.
+  - Machine-readable diagnostics format (`--json` and `formatDiagnosticsJson`) and Markdown reports (`formatDiagnosticReport`).
+  - MCP tools `gem_pr_review_diagnostics` and `pr_review_diagnostics` in `server/index.js`.
+  - 838 unit and integration tests passing across 158 suites (`tests/diagnostics.test.mjs`).
+  - Dogfood-reviewed on GitHub PR #40 with 0 defects and merged to `main` (commit `921e211`).
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

@@ -6,27 +6,25 @@
 
 ---
 
-## Active Mission: Increment 22 — Safe Verbose Review Diagnostics
-- [ ] Add an opt-in `--verbose` diagnostic mode for `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, and `scripts/self-review.mjs`; propagate it through supported CI comment commands (`/gem-review --verbose`).
-- [ ] Implement structured, redacted execution telemetry:
-  - Phase timing (diff fetch, guidelines, subagent dispatch, verification, caching, publishing)
-  - Selected mode, roles, and models; fallback attempts
-  - Diff and guideline metadata (sizes, truncation)
-  - Cache outcomes (hit/miss, freshness validation)
-  - Per-lens lifecycle, duration, and error status
-  - Finding anchoring, classification, and demotion
-  - Publication, stale-head checks, and quality gate decisions
-- [ ] Preserve concise default output and strictly redact sensitive data (zero prompt/diff bodies, zero credentials/tokens, zero absolute machine paths, zero raw env variables).
-- [ ] Expose diagnostics in machine-readable format compatible with JSON consumers (`--json` or structured report).
-- [ ] Cover normal, degraded, fallback, rejected, and error execution paths with comprehensive automated tests.
-- [ ] Dogfood on GitHub PR, verify 0 blocking findings, squash-merge to `main`.
+## Status: ALL_INCREMENTS_COMPLETE — All Roadmap Increments Completed & Verified
 
-### Future Capabilities (Post-Increment 22 Roadmap)
+All increments planned in `docs/roadmap.md` (Phases 1 through 7, plus Increments 13 through 22) have been fully implemented, verified test-first with `npm test` (838 tests across 158 suites), synchronized at version `0.2.0`, dogfood-reviewed on GitHub PRs, and merged into `main`.
+
+### Future Opportunities (Backlog)
 - [ ] Backlog: SARIF 2.1.0 report export for GitHub Code Scanning integration
 
 ---
 
 ## Completed Increments
+- [x] **Increment 22 / PR #40: Safe Verbose Review Diagnostics & Execution Telemetry**
+  - [x] Implemented telemetry collector module in `src/diagnostics.js` (`createDiagnosticsCollector`, `measurePhase`, `startPhase`, `endPhase`, `formatDiagnosticReport`, `formatDiagnosticsJson`).
+  - [x] Strict data redaction guarantees: `sanitizeTelemetry`, `redactSensitiveString` eliminating tokens, secrets, raw prompt/diff bodies, and developer machine paths.
+  - [x] Integrated telemetry into `runReview` (`src/reviewer.js`) and `runSelfReview` (`src/self-review.js`), attaching diagnostic report on `--verbose`.
+  - [x] Added `--verbose` (`-V`) and `--json` flag support to `scripts/dogfood-review.mjs`, `scripts/dogfood-pr.mjs`, `scripts/self-review.mjs`, and `src/cli.js`.
+  - [x] Propagated `--verbose` in `/gem-review` comment command dispatcher and GitHub Action (`src/ci.js`, `action.yml`, `scripts/ci-action.mjs`).
+  - [x] Added MCP tools `gem_pr_review_diagnostics` and `pr_review_diagnostics` in `server/index.js`.
+  - [x] Added 36 unit tests across `tests/diagnostics.test.mjs`, `tests/ci.test.mjs`, `tests/dogfood.test.mjs`, `tests/mcp-server.test.mjs`, `tests/reviewer.test.mjs`, `tests/self-review.test.mjs`, and `tests/skills.test.mjs` (838 total tests passing across 158 suites).
+  - [x] Dogfood-reviewed on PR #40 with 0 blocking findings and merged into `main` (commit `921e211`).
 - [x] **Increment 21 / PR #39: Auto-Generated PR Architecture Summary & Mermaid Sequence Diagrams**
   - [x] Implemented PR architecture impact analyzer in `src/architecture.js` (`analyzeArchitecture`, `extractComponentsAndInteractions`, `synthesizeWalkthrough`, `formatArchitectureSummary`).
   - [x] Implemented Mermaid diagram generators (`generateMermaidSequenceDiagram`, `generateMermaidComponentDiagram`) with strict syntax and label sanitization (`sanitizeMermaidLabel`, `sanitizeMermaidId`).
