@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
       - uses: xpepper/pr-review-gemini@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

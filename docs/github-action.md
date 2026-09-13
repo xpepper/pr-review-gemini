@@ -40,6 +40,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
 
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@main
