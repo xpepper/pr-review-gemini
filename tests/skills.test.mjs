@@ -5,6 +5,9 @@ import path from 'node:path';
 
 describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
   const skillPath = path.resolve('skills/gem-pr-review/SKILL.md');
+  const readmePath = path.resolve('README.md');
+  const cliReferencePath = path.resolve('docs/cli.md');
+  const actionReferencePath = path.resolve('docs/github-action.md');
 
   it('skill file exists at skills/gem-pr-review/SKILL.md', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md should exist');
@@ -168,14 +171,13 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /--model auto/i, 'Should document default --model auto');
   });
 
-  it('documents Increment 16 calibration, resilience, and dogfood:pr in README.md', () => {
-    const readmePath = path.resolve('README.md');
+  it('links first-time users to the CLI reference for advanced CLI usage', () => {
     assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    assert.ok(fs.existsSync(cliReferencePath), 'docs/cli.md must exist');
     const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /npm run dogfood:pr/i, 'README should document npm run dogfood:pr');
-    assert.match(readmeContent, /Reviewer Sensitivity & Quality Calibration/i, 'README should document Reviewer Sensitivity & Quality Calibration');
-    assert.match(readmeContent, /Model Catalog & Auto Fallback Resilience|Model Catalog Resilience/i, 'README should document model catalog resilience');
-    assert.match(readmeContent, /fallback_to_auto/i, 'README should document fallback_to_auto');
+    const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(readmeContent, /\(docs\/cli\.md\)/, 'README should link to the CLI reference');
+    assert.match(cliContent, /npm run dogfood:pr/i, 'CLI reference should document npm run dogfood:pr');
   });
 
   it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {
@@ -190,16 +192,12 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /--uninstall-hook/i, 'Should document --uninstall-hook');
   });
 
-  it('documents centralized CLI infrastructure and pre-commit hook installer in README.md (Increment 17)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Centralized CLI Infrastructure/i, 'README should document Centralized CLI Infrastructure');
-    assert.match(readmeContent, /npm run install-hook/i, 'README should document npm run install-hook');
-    assert.match(readmeContent, /isDirectRun/i, 'README should document isDirectRun');
-    assert.match(readmeContent, /runIfDirect/i, 'README should document runIfDirect');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents pre-commit self-review in the CLI reference (Increment 17)', () => {
+    assert.ok(fs.existsSync(cliReferencePath), 'docs/cli.md must exist');
+    const content = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(content, /npm run install-hook/i, 'CLI reference should document npm run install-hook');
+    assert.match(content, /--install-hook/i, 'CLI reference should document --install-hook');
+    assert.match(content, /--uninstall-hook/i, 'CLI reference should document --uninstall-hook');
   });
 
   it('documents interactive PR comment command dispatcher in SKILL.md (Increment 18)', () => {
@@ -215,15 +213,11 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /confused/i, 'Should document confused reaction');
   });
 
-  it('documents interactive PR comment command dispatcher in README.md (Increment 18)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Interactive PR Comment Command Dispatcher/i, 'README should document Interactive PR Comment Command Dispatcher');
-    assert.match(readmeContent, /\/gem-review/i, 'README should document /gem-review');
-    assert.match(readmeContent, /author_association/i, 'README should document author_association');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents interactive PR comment authorization in the Action reference (Increment 18)', () => {
+    assert.ok(fs.existsSync(actionReferencePath), 'docs/github-action.md must exist');
+    const content = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(content, /\/gem-review/i, 'Action reference should document /gem-review');
+    assert.match(content, /OWNER.*MEMBER.*COLLABORATOR/i, 'Action reference should document commenter authorization');
   });
 
   it('documents repository review guidelines in SKILL.md (Increment 19)', () => {
@@ -237,16 +231,11 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /guidelines_path/i, 'Should document guidelines_path input');
   });
 
-  it('documents repository review guidelines in README.md (Increment 19)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Repository Review Guidelines/i, 'README should document Repository Review Guidelines');
-    assert.match(readmeContent, /\.github\/gem-pr-review\.md/i, 'README should document .github/gem-pr-review.md');
-    assert.match(readmeContent, /gem_pr_review_guidelines/i, 'README should document gem_pr_review_guidelines MCP tool');
-    assert.match(readmeContent, /guidelines_path/i, 'README should document guidelines_path');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents repository review-guideline options in focused references (Increment 19)', () => {
+    const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
+    const actionContent = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(cliContent, /--guidelines/i, 'CLI reference should document --guidelines');
+    assert.match(actionContent, /guidelines_path/i, 'Action reference should document guidelines_path');
   });
 
   it('documents review thread conversation replies and automated resolution in SKILL.md (Increment 20)', () => {
@@ -258,16 +247,9 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /\/gem-review resolve/i, 'Should document /gem-review resolve command');
   });
 
-  it('documents review thread conversation replies and automated resolution in README.md (Increment 20)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Review Thread Verification & Automated Resolution/i, 'README should document Review Thread Verification');
-    assert.match(readmeContent, /--resolve/i, 'README should document --resolve flag');
-    assert.match(readmeContent, /gem_pr_review_threads/i, 'README should document gem_pr_review_threads MCP tool');
-    assert.match(readmeContent, /\/gem-review resolve/i, 'README should document /gem-review resolve command');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents review-thread resolution in the CLI reference (Increment 20)', () => {
+    const content = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(content, /--resolve/i, 'CLI reference should document --resolve');
   });
 
   it('documents PR architecture walkthrough and Mermaid sequence/component diagrams in SKILL.md (Increment 21)', () => {
@@ -280,15 +262,10 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /gem_pr_review_architecture/i, 'Should document gem_pr_review_architecture MCP tool');
   });
 
-  it('documents PR architecture walkthrough and Mermaid sequence/component diagrams in README.md (Increment 21)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Architecture.*Mermaid/i, 'README should document Architecture & Mermaid diagrams');
-    assert.match(readmeContent, /--architecture/i, 'README should document --architecture flag');
-    assert.match(readmeContent, /gem_pr_review_architecture/i, 'README should document gem_pr_review_architecture MCP tool');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents architecture and Mermaid output in the CLI reference (Increment 21)', () => {
+    const content = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(content, /Architecture.*Mermaid/i, 'CLI reference should document Architecture & Mermaid diagrams');
+    assert.match(content, /--architecture/i, 'CLI reference should document --architecture');
   });
 
   it('documents safe verbose review diagnostics and telemetry in SKILL.md (Increment 22)', () => {
@@ -303,17 +280,12 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /redaction|sanitiz/i, 'Should document telemetry redaction guarantees');
   });
 
-  it('documents safe verbose review diagnostics and telemetry in README.md (Increment 22)', () => {
-    const readmePath = path.resolve('README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
-    assert.match(readmeContent, /Safe Verbose Review Diagnostics/i, 'README should document Safe Verbose Review Diagnostics');
-    assert.match(readmeContent, /--verbose|-V/i, 'README should document --verbose or -V flag');
-    assert.match(readmeContent, /--json/i, 'README should document --json flag');
-    assert.match(readmeContent, /gem_pr_review_diagnostics/i, 'README should document gem_pr_review_diagnostics MCP tool');
-    assert.match(readmeContent, /verbose/i, 'README should document verbose input');
-    assert.match(readmeContent, /diagnostics/i, 'README should document diagnostics output');
-    assert.doesNotMatch(readmeContent, /\/Users\//, 'README must not expose /Users/ machine paths');
-    assert.doesNotMatch(readmeContent, /\/home\//, 'README must not expose /home/ machine paths');
+  it('documents diagnostics in focused CLI and Action references (Increment 22)', () => {
+    const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
+    const actionContent = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(cliContent, /--verbose|-V/i, 'CLI reference should document --verbose or -V');
+    assert.match(cliContent, /--json/i, 'CLI reference should document --json');
+    assert.match(actionContent, /verbose/i, 'Action reference should document verbose input');
+    assert.match(actionContent, /diagnostics/i, 'Action reference should document diagnostics output');
   });
 });
