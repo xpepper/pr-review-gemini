@@ -55,7 +55,10 @@ jobs:
 
 The `pull-requests: write` permission allows reviews and inline comments.
 `issues: write` is required only for the optional `/gem-review` issue-comment
-workflow and its reaction/reply lifecycle.
+workflow and its reaction/reply lifecycle. The workflow condition only routes
+matching comments to the Action; before it performs review work, the Action
+host-gates the commenter to an `OWNER`, `MEMBER`, or `COLLABORATOR`, unless the
+commenter is explicitly allowlisted.
 
 ## Inputs
 
