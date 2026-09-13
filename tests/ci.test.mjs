@@ -1691,7 +1691,7 @@ index 1111111..2222222 100644
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-review['"]\)/);
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
       assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
-      assert.match(content, /uses:\s*actions\/checkout@v4/);
+      assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
