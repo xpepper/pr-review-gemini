@@ -211,12 +211,12 @@ GitHub surfaces the notification:
 > *(referencing the GitHub Action UI prompt banner displayed on repositories containing root `action.yml`)*
 
 ### Marketplace Publication Checklist & Prerequisites
-- [x] Composite Action manifest at repository root (`action.yml`) with descriptive name, description, branding (icon: `check-circle`, color: `purple`), inputs, and outputs.
+- [x] Composite Action manifest at repository root (`action.yml`) with descriptive name, description, branding (icon: `check-circle`, color: `blue`), inputs, and outputs.
 - [x] Node.js 20+ zero-dependency runtime leveraging `@github/copilot-sdk` and GitHub CLI (`gh`).
 - [x] Automated release workflow (`.github/workflows/release.yml`) triggered on `v*` tags with manifest synchronization validation.
-- [ ] Draft a release in GitHub repository UI targeting tag `v0.1.0` (or next release tag).
+- [x] Published GitHub Release `v0.3.2` with manifest synchronization and test-suite verification.
+- [ ] Start the Marketplace publication flow from the GitHub repository release UI for the current release or a subsequent release.
 - [ ] Check the checkbox *"Publish this Action to the GitHub Marketplace"* in the release draft modal.
 - [ ] Confirm primary category (`Code quality`) and optional secondary category (`Continuous integration`).
 - [ ] Publish release to make `xpepper/pr-review-gemini` discoverable across the GitHub Actions Marketplace.
-
 
