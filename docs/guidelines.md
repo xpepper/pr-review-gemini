@@ -55,16 +55,20 @@ Prefer additive schema changes over in-place rewrites.
 - Files are read up to 64 KB by default (`guidelines.max_bytes`; hard
   ceiling 512 KB). Larger files are truncated and the prompt carries an
   explicit truncation warning.
-- Each lens gets at most 24 KB of guideline text, with the lens-specific
-  section guaranteed the majority of that budget.
+- Each lens gets at most 24 KB of guideline text. When that budget is
+  exceeded, up to half of it is reserved for the lens-specific section,
+  global rules fill the remainder, and a truncation warning is appended.
 
 ## Trust and safety
 
-- Custom paths must be `.md`/`.markdown`/`.txt` files inside the
-  repository, located under `.github/` or exactly matching the configured
-  `guidelines.path`. Sensitive patterns (`.env`, `.git`, SSH keys,
+- Custom guideline paths must be `.md`/`.markdown`/`.txt` files within
+  the repository root: traversal segments, hidden paths (outside
+  `.github/`), and sensitive patterns (`.env`, `.git`, SSH keys,
   `.pem`/`.key`-style extensions, credential/secret/token/password names)
-  are rejected.
+  are rejected, and symlinks must stay confined within the repository.
+  The MCP inspection tool is stricter still: its custom `path` argument
+  must reside under `.github/` or exactly match the configured
+  `guidelines.path`.
 - Paths are always reported repository-relative — never as machine paths.
 - Guideline content is injected as untrusted text: it cannot override the
   reviewer's core safety policies, and guideline markers cannot spoof the
