@@ -647,9 +647,6 @@ export const MCP_TOOLS = [
 ];
 
 /**
- * Creates an MCP message handler implementing the JSON-RPC 2.0 protocol.
- */
-/**
  * Parses the required expectedHeadSha argument shared by the publish tools.
  * Returns the trimmed SHA, or an empty string when absent/blank.
  */
@@ -677,6 +674,9 @@ function missingExpectedHeadShaResponse(id, text) {
   };
 }
 
+/**
+ * Creates an MCP message handler implementing the JSON-RPC 2.0 protocol.
+ */
 export function createMcpHandler(options = {}) {
   const {
     getPrDiffFn = getPrDiff,

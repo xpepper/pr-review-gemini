@@ -45,6 +45,10 @@ it is stored, printed, or published:
 
 - Prompt and diff bodies, environments, headers, and authorization
   material are dropped entirely (blocklisted keys).
+- Secret-named keys (`token`, `secret`, password forms, `credential`,
+  api-key forms, …) are dropped at any depth, regardless of their
+  values — so untrusted objects cannot smuggle credentials through
+  key names.
 - Token patterns (`ghp_…`, `gho_…`, `github_pat_…`, `Bearer …`) are
   replaced with `[REDACTED_TOKEN]`; secret-like key/value pairs become
   `[REDACTED]`.

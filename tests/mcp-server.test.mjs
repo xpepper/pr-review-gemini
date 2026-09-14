@@ -1458,6 +1458,7 @@ index 0000000..1111111 100644
           truncated: false,
         },
         env: { GITHUB_TOKEN: 'gho_abcdefghijklmnopqrstuvwxyz' },
+        apiKey: 'plainsecretvalue',
       };
 
       const mdRes = await handler.handleMessage({
@@ -1486,6 +1487,7 @@ index 0000000..1111111 100644
       assert.equal(jsonRes.id, 106);
       const parsedJson = JSON.parse(jsonRes.result.content[0].text);
       assert.equal(parsedJson.env, undefined, 'forbidden telemetry keys must be dropped');
+      assert.equal(parsedJson.apiKey, undefined, 'secret-named keys must be dropped');
       assert.equal(parsedJson.phases.diffFetch.durationMs, 20);
       const raw = JSON.stringify(parsedJson);
       assert.doesNotMatch(raw, /ghp_|gho_/, 'json output must redact token patterns');

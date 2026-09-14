@@ -249,6 +249,27 @@ describe('Diagnostics Collector & Redaction (Increment 22)', () => {
       assert.ok(str.includes('[REDACTED_TOKEN]') || str.includes('[REDACTED]'));
     });
 
+    it('drops secret-named keys at any depth regardless of their values', () => {
+      const input = {
+        model: 'auto',
+        apiKey: 'plainvaluewithnopattern',
+        GITHUB_TOKEN: 'also_plain',
+        clientSecret: 12345,
+        nested: {
+          Authorization: 'weird-value',
+          durationMs: 42,
+        },
+        list: [{ accessToken: 'zzz' }],
+      };
+
+      const sanitized = sanitizeTelemetry(input);
+      const str = JSON.stringify(sanitized);
+
+      assert.equal(sanitized.model, 'auto');
+      assert.equal(sanitized.nested.durationMs, 42);
+      assert.doesNotMatch(str, /apiKey|GITHUB_TOKEN|clientSecret|Authorization|accessToken/);
+    });
+
     it('never emits prompt bodies or raw diff contents', () => {
       const collector = createDiagnosticsCollector();
 

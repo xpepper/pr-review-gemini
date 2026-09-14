@@ -33,6 +33,14 @@ const FORBIDDEN_TELEMETRY_KEYS = new Set([
 ]);
 
 /**
+ * Key names that signal sensitive material regardless of their values.
+ * Applied on top of the exact-match forbidden set so secret-named keys
+ * from untrusted (caller-supplied) telemetry objects are dropped too.
+ */
+const SENSITIVE_KEY_NAME_PATTERN =
+  /(token|secret|passw(or)?d|passwd|passphrase|credential|api[-_]?key|private[-_]?key|access[-_]?key|authorization|cookie)/i;
+
+/**
  * Sensitive token patterns to redact.
  */
 const TOKEN_PATTERNS = [
@@ -153,7 +161,7 @@ export function sanitizeTelemetry(data, options = {}) {
   if (typeof data === 'object') {
     const sanitized = {};
     for (const [key, value] of Object.entries(data)) {
-      if (FORBIDDEN_TELEMETRY_KEYS.has(key)) {
+      if (FORBIDDEN_TELEMETRY_KEYS.has(key) || SENSITIVE_KEY_NAME_PATTERN.test(key)) {
         continue;
       }
       sanitized[key] = sanitizeTelemetry(value, options);
