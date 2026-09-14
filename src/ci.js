@@ -424,6 +424,7 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @param {object} params.ciEnv
  * @param {object} [params.verificationResult]
  * @param {object} [params.documentationConsistency]
+ * @param {object} [params.lensExecution] - Result of evaluateLensExecution
  * @returns {string}
  */
 export function formatCiSummary({
@@ -986,6 +987,8 @@ export function isVerificationPassed(verificationResult) {
  * @param {object} [params.qualityGateResult={}]
  * @param {object} [params.ciEnv={}]
  * @param {object} [params.verificationResult]
+ * @param {object} [params.diagnostics]
+ * @param {object} [params.lensExecution] - Result of evaluateLensExecution
  * @returns {string}
  */
 export function formatCompletionReply({
