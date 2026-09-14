@@ -19,13 +19,16 @@
 
 * **In flight**: PR [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
   (`fix/ci-lens-degradation`), fail-closed lens execution. Branch suite:
-  886 tests across 161 suites, 0 failures.
+  887 tests across 161 suites, 0 failures. Hosted run `34890081003` confirms
+  the intended failure now reports `spawn copilot ENOENT` in both the log and
+  escaped `::error` annotation.
 
 ## Next Actions
 
 1. Review and merge PR #57. **Its own Gem PR Review check fails by design**
-   (runs 34876005049, 34876397332: `Cannot publish review: All 5 specialist
-   review subagent(s) failed`, with a titled `::error` annotation), because
+   (run `34890081003`: `Cannot publish review: All 5 specialist review
+   subagent(s) failed` plus sanitized cause `spawn copilot ENOENT`, with a
+   titled `::error` annotation), because
    GitHub-hosted runners have no Copilot CLI. After merge, that check fails on
    every PR until the CLI is provisioned. Owner decision (agreed 2026-09-14):
    fail closed on total lens failure, warn on partial failure, provisioning as

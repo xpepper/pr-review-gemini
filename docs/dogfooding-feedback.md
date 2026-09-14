@@ -220,3 +220,42 @@ CLI on the review runner.
 **Evidence:** [PR #57](https://github.com/xpepper/pr-review-gemini/pull/57),
 commits `60aebb4`, `b872f74`, and `2ea7a08`, and the regression tests in
 `tests/subagents.test.mjs` and `tests/ci.test.mjs`.
+
+## 2026-09-14 — PR #57 publish-failure diagnostics follow-up
+
+### PR / context
+
+- **PR:** [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
+- **Review:** `npm run dogfood:pr 57`, balanced local dry-run after commit
+  `067b2f8`.
+
+### What Gem PR Review did
+
+Reported three findings: two duplicate P1s that the configured Copilot CLI path
+is ignored by the fallback runner, and one P2 questioning lens-execution result
+validation.
+
+### What was useful
+
+The CLI-path finding remains valid and pre-existing. PR #60 contains the fix and
+must be retargeted to `main` after #57 merges.
+
+### What was incorrect, missing, noisy, or confusing
+
+- The two CLI-path findings describe the same root cause and should have been
+  deduplicated.
+- The lens-classification P2 was already validated non-actionable: the result is
+  assembled in-process by the dispatcher, with one error per planned lens.
+- No finding challenged the new sanitized-cause propagation or found a defect
+  in it.
+
+### Recommended follow-up
+
+Merge #57, retarget #60, then provision and authenticate the Copilot CLI in a
+separate PR after the owner chooses the repository secret and fork policy.
+
+**Priority:** next
+
+**Evidence:** hosted workflow run `34890081003` shows the intended fail-closed
+result with `spawn copilot ENOENT` in both the log and GitHub error annotation;
+887 tests across 161 suites passed.

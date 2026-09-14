@@ -54,8 +54,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
     instead of returning an empty review; the Action fails the job with a
     titled `::error` annotation when every lens fails (dry-run and publish),
     warns with `::warning` on partial failure, and the step summary and
-    `/gem-review` completion reply report the failure. Documented in
-    `docs/github-action.md` and pinned by a docs-consistency assertion.
+    `/gem-review` completion reply report the failure. Publish aborts include
+    only explicitly sanitized, deduplicated lens causes in the CI log and
+    escaped `::error` annotation (verified by hosted run `34890081003`).
+    Documented in `docs/github-action.md` and pinned by a docs-consistency
+    assertion.
   - Backlog (owner decision): provision the Copilot CLI on the review runner
     with a Copilot-entitled repository secret. Until then the repository's
     own Gem PR Review check fails by design.

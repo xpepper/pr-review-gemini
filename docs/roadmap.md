@@ -245,7 +245,10 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - CLI failure messages report the exit code or errno and one sanitized
     stderr line instead of `execFile`'s message, which embeds the review
     prompt (untrusted diff content); found by the PR #57 dogfood review.
-  - All changes test-first (886 tests across 161 suites passing); documented
+    Publish aborts now surface only those explicitly marked sanitized causes
+    in the CI log and workflow-command-escaped error annotation; hosted run
+    `34890081003` confirmed `spawn copilot ENOENT` is visible in both.
+  - All changes test-first (887 tests across 161 suites passing); documented
     in `docs/github-action.md` and pinned by a docs-consistency assertion.
     Verified on real GitHub-hosted runs of PR #57, whose own review check now
     fails by design until the Copilot CLI is provisioned on the runner.
