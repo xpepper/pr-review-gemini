@@ -8,6 +8,7 @@ import {
   parseEventPayload,
   resolveCiEnvironment,
   evaluateCiQualityGate,
+  evaluateLensExecution,
   writeGitHubStepOutputs,
   formatCiSummary,
   parseCommentCommand,
@@ -489,6 +490,51 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.equal(result.verdict, 'PASS');
       assert.equal(result.blockingCount, 0);
       assert.equal(result.totalFindings, 0);
+    });
+  });
+
+  describe('evaluateLensExecution', () => {
+    const plan = [{ lensId: 'correctness' }, { lensId: 'security' }];
+
+    it('reports ok when no planned lens errored', () => {
+      const result = evaluateLensExecution({ subagentPlan: plan, errors: [] });
+
+      assert.equal(result.status, 'ok');
+      assert.equal(result.failedCount, 0);
+      assert.equal(result.totalCount, 2);
+      assert.deepEqual(result.failedLenses, []);
+    });
+
+    it('reports partial when only some planned lenses errored', () => {
+      const result = evaluateLensExecution({
+        subagentPlan: plan,
+        errors: [{ lensId: 'security', error: new Error('quota exceeded') }],
+      });
+
+      assert.equal(result.status, 'partial');
+      assert.equal(result.failedCount, 1);
+      assert.deepEqual(result.failedLenses, ['security']);
+    });
+
+    it('reports failed when every planned lens errored', () => {
+      const result = evaluateLensExecution({
+        subagentPlan: plan,
+        errors: [
+          { lensId: 'correctness', error: new Error('spawn copilot ENOENT') },
+          { lensId: 'security', error: new Error('spawn copilot ENOENT') },
+        ],
+      });
+
+      assert.equal(result.status, 'failed');
+      assert.equal(result.failedCount, 2);
+      assert.deepEqual(result.failedLenses, ['correctness', 'security']);
+    });
+
+    it('reports ok when the review planned no lenses', () => {
+      const result = evaluateLensExecution({});
+
+      assert.equal(result.status, 'ok');
+      assert.equal(result.totalCount, 0);
     });
   });
 
@@ -1671,6 +1717,76 @@ index 1111111..2222222 100644
       } finally {
         fs.unlinkSync(tmpEvent);
       }
+    });
+  });
+
+  describe('lens execution degradation', () => {
+    const codeDiff = `diff --git a/src/sample.js b/src/sample.js
+index 1111111..2222222 100644
+--- a/src/sample.js
++++ b/src/sample.js
+@@ -1 +1 @@
+-const a = 1;
++const a = 2;
+`;
+    const emptyReview = '<<<PR_REVIEW_JSON>>>[]<<<END_PR_REVIEW_JSON>>>';
+
+    const capturingIo = () => {
+      const lines = [];
+      const push = (msg) => lines.push(String(msg));
+      return { lines, io: { log: push, error: push, warn: push } };
+    };
+
+    it('fails CI in dry-run when every review lens fails to execute', async () => {
+      const tmpOut = path.join(os.tmpdir(), `gh-out-lens-fail-${Date.now()}.txt`);
+      const { lines, io } = capturingIo();
+
+      try {
+        const result = await runCiAction({
+          prNumber: 43,
+          action: 'dry-run',
+          mock: true,
+          diffText: codeDiff,
+          runnerFn: async () => {
+            throw new Error('Copilot CLI execution failed: spawn copilot ENOENT');
+          },
+        }, { GITHUB_OUTPUT: tmpOut }, io);
+
+        assert.equal(result.exitCode, 1);
+        assert.equal(result.lensExecution.status, 'failed');
+        assert.match(fs.readFileSync(tmpOut, 'utf8'), /verdict=FAIL/);
+        assert.ok(
+          lines.some((l) => /^::error title=Gem PR Review::All \d+ review lens\(es\) failed to execute/.test(l)),
+          'emits an error annotation for total lens failure'
+        );
+      } finally {
+        fs.rmSync(tmpOut, { force: true });
+      }
+    });
+
+    it('warns without failing CI when only some review lenses fail to execute', async () => {
+      const { lines, io } = capturingIo();
+
+      const result = await runCiAction({
+        prNumber: 44,
+        action: 'dry-run',
+        mock: true,
+        diffText: codeDiff,
+        runnerFn: async ({ lens }) => {
+          if (lens?.id === 'security') {
+            throw new Error('quota exceeded');
+          }
+          return emptyReview;
+        },
+      }, {}, io);
+
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.lensExecution.status, 'partial');
+      assert.deepEqual(result.lensExecution.failedLenses, ['security']);
+      assert.ok(
+        lines.some((l) => /^::warning title=Gem PR Review::1 of \d+ review lens\(es\) failed to execute: security/.test(l)),
+        'emits a warning annotation for partial lens failure'
+      );
     });
   });
 });

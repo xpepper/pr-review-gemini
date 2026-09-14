@@ -360,6 +360,30 @@ export function evaluateCiQualityGate(findings = [], options = {}) {
 }
 
 /**
+ * Classifies how completely the planned review lenses executed.
+ *
+ * A lens that errored produced no findings, so a zero-finding review whose
+ * lenses all failed must not be read as a clean pass.
+ *
+ * @param {object} [reviewResult={}]
+ * @param {Array<{lensId: string}>} [reviewResult.subagentPlan]
+ * @param {Array<{lensId: string}>} [reviewResult.errors]
+ * @returns {{ status: 'ok'|'partial'|'failed', totalCount: number, failedCount: number, failedLenses: string[] }}
+ */
+export function evaluateLensExecution(reviewResult = {}) {
+  const totalCount = Array.isArray(reviewResult.subagentPlan) ? reviewResult.subagentPlan.length : 0;
+  const failedLenses = Array.isArray(reviewResult.errors) ? reviewResult.errors.map((e) => e.lensId) : [];
+  const failedCount = failedLenses.length;
+
+  let status = 'ok';
+  if (failedCount > 0) {
+    status = failedCount >= totalCount ? 'failed' : 'partial';
+  }
+
+  return { status, totalCount, failedCount, failedLenses };
+}
+
+/**
  * Writes outputs to GITHUB_OUTPUT file adhering to GitHub Actions multiline syntax.
  *
  * @param {Record<string, any>} outputs
