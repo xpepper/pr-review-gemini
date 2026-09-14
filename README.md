@@ -36,8 +36,9 @@ During local development, load the repository without installing:
 copilot --plugin-dir .
 ```
 
-The specialist lenses run on the Copilot CLI runtime via your Copilot
-subscription, and GitHub access uses an authenticated `gh`. For other
+The plugin needs Node.js 20 or later (the MCP server runs on `node`), an
+authenticated `gh` for GitHub access, and the Copilot CLI runtime via your
+Copilot subscription for the specialist lenses. For other
 harnesses, exposed MCP tools, and configuration, see the
 [plugin reference](docs/plugin.md).
 
