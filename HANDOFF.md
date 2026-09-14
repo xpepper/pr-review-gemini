@@ -3,57 +3,40 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **Current Branch**: `docs/reference-pages` (branched from `main` at
-  `b9fa42a`, the PR #52 squash merge).
-* **`main`**: PRs #51 (`d57c701`, plugin-first docs + marketplace entry)
-  and #52 (`b9fa42a`, post-#51 state sweep and plugin reference polish)
-  are merged. Both were dogfood-reviewed by this repository's own tool
-  with 0 findings.
-* **Test Suite**: `npm test` green — 860 tests across 159 suites, 0
-  failures (docs-consistency checks in `tests/skills.test.mjs` now cover
-  `README.md`, `docs/plugin.md`, `docs/installation.md`, and the six new
-  reference pages).
+* **`main`**: PRs #52 (`b9fa42a`, post-#51 state sweep and plugin reference
+  polish) and #53 (`690ba55`, focused reference pages) are merged. PR #53's
+  dogfood review by this repository's own tool surfaced 8 findings; all were
+  validated against the code and fixed before the squash merge.
+* **Test Suite**: `npm test` green — 860 tests across 159 suites, 0 failures
+  (docs-consistency checks in `tests/skills.test.mjs` cover `README.md`,
+  `docs/plugin.md`, `docs/installation.md`, and the six reference pages).
 * **Manifests**: `npm run version:check` verified synchronized at `0.3.3`.
 * **Release**: `v0.3.3` is the latest tag; its GitHub Release is published.
+  Eight commits have landed on `main` since that tag, including the `feat(ci)`
+  PR #47, so `npm run bump auto` computes the next release as `v0.4.0`
+  (minor).
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-    lists `gem-pr-review` v0.3.3 (ref-pinned). **Fully verified
-    end-to-end on 2026-09-14**, including the interactive skill path:
+    lists `gem-pr-review` v0.3.3 (ref-pinned). **Fully verified end-to-end on
+    2026-09-14**, including the interactive skill path:
     `copilot --allow-all-tools -p "/gem-pr-review 52"` ran the
     marketplace-installed skill, executed a balanced 5-lens review, and
     published a host-gated 0-finding review to PR #52.
 
-## Work on This Branch (`docs/reference-pages`)
-
-Documentation-only increment (no code changes; version stays `0.3.3`):
-
-* Six new focused, code-verified reference pages: `docs/mcp-tools.md`,
-  `docs/custom-roles.md`, `docs/guidelines.md`, `docs/diagnostics.md`,
-  `docs/verification.md`, `docs/release.md`.
-* Marketplace-maintenance paragraph moved from `docs/plugin.md` into
-  `docs/release.md` (plugin.md links there).
-* Cross-links from `README.md` (Documentation section), `docs/plugin.md`,
-  `docs/cli.md`, and `docs/github-action.md`.
-* Seven docs-consistency assertions in `tests/skills.test.mjs`, each
-  written red-first against the missing page, then green.
-* Design record: `docs/superpowers/specs/2026-09-14-reference-pages-design.md`
-  and `docs/superpowers/plans/2026-09-14-reference-pages.md` (facts were
-  extracted from the implementation by three read-only agents before
-  writing).
-
 ## Next Actions
 
-1. Open the PR for this branch against `main`, dogfood-review it with
-   this repository's own tool (CI Action plus, optionally, a
-   `/gem-pr-review <PR>` marketplace-plugin run), independently validate
-   every finding against the code before fixing, then squash-merge.
-2. At the next release, follow `docs/release.md`: bump with
-   `npm run release`, dispatch the release workflow for the new tag, and
-   update the marketplace entry's `version` and `ref` pin in
-   `xpepper/copilot-plugins`.
-3. Remaining post-MVP items live in [`TODO.md`](TODO.md): dogfood the
-   reviewer on real pull requests; SARIF export stays deferred.
+1. Cut release `v0.4.0` following [`docs/release.md`](docs/release.md): run
+   `npm run release` on `main`, push `main` and the tag, dispatch the release
+   workflow for the new tag (publishing is dispatch-only), then update the
+   `gem-pr-review` entry's `version` and `ref` pin in
+   [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins).
+2. Host-gate hardening candidates in [`TODO.md`](TODO.md) (pre-validated
+   against the code): require/enforce `expectedHeadSha` on publish tools;
+   validate a caller-supplied verify `headSha` against the PR's current head;
+   re-sanitize caller-supplied `diagnostics` in the MCP handler.
+3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
+   deferred.
 
 ## Environment Notes
 
@@ -63,6 +46,9 @@ Documentation-only increment (no code changes; version stays `0.3.3`):
 * Never run `copilot plugin install/uninstall` while an interactive
   `copilot` session is open — it silently corrupts install records.
 * Non-interactive skill runs need `copilot --allow-all-tools -p "<slash command>"`.
+* `npm` silently swallows `--dry-run` (it is an npm config flag): use
+  `npm run bump -- auto --dry-run` or call `scripts/bump-version.mjs`
+  directly to preview a bump without writing manifests.
 * Sibling project (not this repo): reinstalling
   `z-pr-review@xpepper-copilot-plugins` requires the `v0.2.5` tag to land
   in `xpepper/pr-review-glm` first.
