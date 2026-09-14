@@ -598,10 +598,11 @@ describe('CI Event Payload & Environment Resolution', () => {
       const nodeStep = content.indexOf('- name: Set up Node.js for Copilot CLI');
       const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
       const reviewStep = content.indexOf('- name: Run Gem PR Review');
+      const cleanupStep = content.indexOf('- name: Clean up GitHub Copilot CLI');
 
       assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*true/);
       assert.ok(authStep >= 0 && authStep < nodeStep, 'authentication must fail closed before setup');
-      assert.ok(nodeStep < installStep && installStep < reviewStep, 'bootstrap must precede review execution');
+      assert.ok(nodeStep < installStep && installStep < reviewStep && reviewStep < cleanupStep, 'bootstrap and cleanup must surround review execution');
       assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
       assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
       assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
@@ -612,10 +613,18 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(installStep, reviewStep), /npm ci --prefix "\$install_root"/);
       assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
       assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
+      assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
+      assert.match(content.slice(installStep, reviewStep), /echo "GEM_PR_REVIEW_COPILOT_ROOT=\$install_root" >> "\$GITHUB_ENV"/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+      assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
+      assert.match(content.slice(cleanupStep), /cleanup_root="\$\{GEM_PR_REVIEW_COPILOT_ROOT:-\}"/);
+      assert.match(content.slice(cleanupStep), /canonical_root=.*pwd -P/);
+      assert.match(content.slice(cleanupStep), /dirname "\$canonical_root"/);
+      assert.match(content.slice(cleanupStep), /gem-pr-review-copilot\.\*/);
+      assert.match(content.slice(cleanupStep), /rm -rf -- "\$canonical_root"/);
 
       const lockfilePath = path.resolve('.github/copilot-cli/package-lock.json');
       assert.equal(fs.existsSync(lockfilePath), true, 'Copilot CLI lockfile must be committed');

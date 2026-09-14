@@ -89,6 +89,7 @@ runs:
         node-version: '22'
 
     - name: Install GitHub Copilot CLI
+      id: install_copilot
       shell: bash
       env:
         COPILOT_GITHUB_TOKEN: ''
@@ -96,7 +97,10 @@ runs:
         GITHUB_TOKEN: ''
       run: |
         set -euo pipefail
+        echo "GEM_PR_REVIEW_COPILOT_ROOT=" >> "$GITHUB_ENV"
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
+        : > "$install_root/.gem-pr-review-copilot-owned"
+        echo "GEM_PR_REVIEW_COPILOT_ROOT=$install_root" >> "$GITHUB_ENV"
         cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
         cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
         npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
@@ -120,3 +124,32 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         node "${{ github.action_path }}/scripts/ci-action.mjs"
+
+    - name: Clean up GitHub Copilot CLI
+      if: ${{ always() && steps.install_copilot.outcome != 'skipped' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        cleanup_root="${GEM_PR_REVIEW_COPILOT_ROOT:-}"
+        if [ -z "$cleanup_root" ]; then
+          exit 0
+        fi
+        runner_temp="$(cd "${RUNNER_TEMP:-/tmp}" && pwd -P)"
+        canonical_root="$(cd "$cleanup_root" && pwd -P)"
+        if [ "$(dirname "$canonical_root")" != "$runner_temp" ]; then
+          echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
+          exit 1
+        fi
+        case "$(basename "$canonical_root")" in
+          gem-pr-review-copilot.*)
+            ;;
+          *)
+            echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
+            exit 1
+            ;;
+        esac
+        if [ ! -f "$canonical_root/.gem-pr-review-copilot-owned" ]; then
+          echo "::error title=Gem PR Review::Copilot CLI install ownership marker is missing."
+          exit 1
+        fi
+        rm -rf -- "$canonical_root"
