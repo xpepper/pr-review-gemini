@@ -204,6 +204,8 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Reordered `docs/installation.md` to present the plugin install path first, with cross-links between `README.md`, `docs/installation.md`, and `docs/plugin.md`.
   - Marketplace entry in [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins) listing `gem-pr-review` via cross-repo source `{"repo": "xpepper/pr-review-gemini", "path": ".", "ref": "v0.3.3"}`; root-source path `"."` verified and install confirmed with `copilot plugin install gem-pr-review@xpepper-copilot-plugins`.
   - Docs-consistency test additions in `tests/skills.test.mjs` covering the README plugin identity, the plugin-reference link, and the `docs/plugin.md` contract (851 tests passing across 159 suites with 0 failures).
+  - Merged via PR #51 (squash commit `d57c701`, 2026-09-14) after two dogfooding review rounds that fixed 10 findings.
+  - Follow-up polish (2026-09-14): named the registered `pr_review_*` MCP tool aliases in `docs/plugin.md`, aligned the `docs/installation.md` intro enumeration with the plugin-first page order, and recorded both contracts as docs-consistency assertions in `tests/skills.test.mjs`.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
