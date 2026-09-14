@@ -599,12 +599,11 @@ describe('CI Event Payload & Environment Resolution', () => {
       const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
       const reviewStep = content.indexOf('- name: Run Gem PR Review');
 
-      assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*false/);
+      assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*true/);
       assert.ok(authStep >= 0 && authStep < nodeStep, 'authentication must fail closed before setup');
       assert.ok(nodeStep < installStep && installStep < reviewStep, 'bootstrap must precede review execution');
-      assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*\|\|\s*env\.COPILOT_GITHUB_TOKEN\s*}}/);
-      assert.match(content.slice(authStep, nodeStep), /COPILOT_TOKEN_SUPPLIED:\s*\${{\s*inputs\.copilot_token\s*!=\s*''\s*}}/);
-      assert.match(content.slice(authStep, nodeStep), /::warning title=Gem PR Review::COPILOT_GITHUB_TOKEN step environment is deprecated; pass the copilot_token input\./);
+      assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+      assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
       assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
       assert.match(content.slice(nodeStep, installStep), /node-version:\s*['"]22['"]/);
       assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
@@ -614,7 +613,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
-      assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*\|\|\s*env\.COPILOT_GITHUB_TOKEN\s*}}/);
+      assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
     });
   });
 

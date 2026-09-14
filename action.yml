@@ -12,7 +12,7 @@ inputs:
     default: '${{ github.token }}'
   copilot_token:
     description: 'User-owned fine-grained PAT with the Copilot Requests account permission'
-    required: false
+    required: true
   pr_number:
     description: 'Pull request number to review (auto-detected from GITHUB_EVENT_PATH if omitted)'
     required: false
@@ -72,15 +72,11 @@ runs:
     - name: Require Copilot authentication
       shell: bash
       env:
-        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token || env.COPILOT_GITHUB_TOKEN }}
-        COPILOT_TOKEN_SUPPLIED: ${{ inputs.copilot_token != '' }}
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token }}
       run: |
         if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
           echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
           exit 1
-        fi
-        if [ "$COPILOT_TOKEN_SUPPLIED" != "true" ]; then
-          echo "::warning title=Gem PR Review::COPILOT_GITHUB_TOKEN step environment is deprecated; pass the copilot_token input."
         fi
 
     - name: Set up Node.js for Copilot CLI
@@ -104,7 +100,7 @@ runs:
       id: review
       shell: bash
       env:
-        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token || env.COPILOT_GITHUB_TOKEN }}
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
         INPUT_MODE: ${{ inputs.mode }}
