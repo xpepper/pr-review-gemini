@@ -84,9 +84,11 @@ Most knobs are shared across shapes; the exceptions are noted inline:
   (high-reasoning correctness focus); `--incremental` re-reviews only new
   commits.
 - **Dry-run vs publish:** inspect findings first, then submit the host-gated
-  review — optionally publishing cached findings without re-running inference.
+  review. Cached publication (`--publish-cached`) is plugin and CLI, not an
+  Action input.
 - **Finding selection:** publish all, filter by severity or index
-  (`--select p0,p1`), or choose interactively.
+  (`--select p0,p1`), or choose interactively (interactive selection is
+  plugin and CLI, not an Action input).
 - **Thread lifecycle** (plugin and CLI, not an Action input): verify and
   resolve addressed review threads (`--resolve`).
 - **Architecture walkthroughs** (plugin and CLI, not an Action input):
