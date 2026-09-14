@@ -1889,7 +1889,9 @@ index 1111111..2222222 100644
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
       assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
       assert.match(content, /uses:\s*actions\/github-script@v8/);
+      assert.match(content, /context\.payload\.pull_request\.base\.sha/);
       assert.match(content, /github\.rest\.pulls\.get/);
+      assert.match(content, /return pull\.base\.sha/);
       assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
       assert.match(content, /uses:\s*actions\/setup-node@v6/);

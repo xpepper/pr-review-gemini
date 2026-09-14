@@ -49,13 +49,13 @@ jobs:
           result-encoding: string
           script: |
             if (context.eventName === 'pull_request') {
-              return context.payload.pull_request.base.ref;
+              return context.payload.pull_request.base.sha;
             }
             const { data: pull } = await github.rest.pulls.get({
               ...context.repo,
               pull_number: context.issue.number,
             });
-            return pull.base.ref;
+            return pull.base.sha;
 
       - name: Checkout repository
         uses: actions/checkout@v7
