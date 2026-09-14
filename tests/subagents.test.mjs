@@ -1042,6 +1042,29 @@ Thinking: Analyzing diff for security vulnerabilities...
         /Copilot CLI execution failed: spawn copilot ENOENT/
       );
     });
+
+    it('does not echo the prompt or multi-line stderr when the copilot CLI exits with an error', async () => {
+      const prompt = 'Review this diff\n::error title=Injected::from the diff';
+      const exitError = Object.assign(
+        new Error(`Command failed: copilot -s -p ${prompt} --no-color\nfirst stderr line\nrate limit exceeded`),
+        { code: 1, signal: null, stderr: 'first stderr line\nrate limit exceeded\n' }
+      );
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async () => {
+          throw exitError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt, model: 'gpt-4o' }),
+        (err) => {
+          assert.equal(err.message, 'Copilot CLI execution failed: exit code 1: rate limit exceeded');
+          assert.equal(err.cause, exitError);
+          return true;
+        }
+      );
+    });
   });
 
   describe('buildSdkReaderTools & Host-Supervised Tools', () => {

@@ -706,6 +706,28 @@ export async function dispatchSubagentsParallel({
 }
 
 /**
+ * Summarizes a Copilot CLI execFile failure without echoing its command line.
+ *
+ * execFile's error message embeds every argument, including the review prompt
+ * (untrusted diff content), so it must not reach logs or review bodies.
+ *
+ * @param {Error & { code?: string|number, signal?: string, stderr?: string }} err
+ * @returns {string}
+ */
+function describeCliFailure(err) {
+  if (typeof err?.code === 'string') {
+    return `spawn copilot ${err.code}`;
+  }
+  const status = err?.signal ? `signal ${err.signal}` : `exit code ${err?.code ?? 'unknown'}`;
+  const stderrTail = String(err?.stderr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .pop();
+  return stderrTail ? `${status}: ${stderrTail.slice(0, 200)}` : status;
+}
+
+/**
  * Creates a subagent runner function supporting Copilot SDK, CLI fallback, or mock mode.
  *
  * @param {Object} options
@@ -815,7 +837,7 @@ export async function createSubagentRunner(options = {}) {
       return stdout;
     } catch (err) {
       // Fail closed: an empty string would be parsed as a clean lens with zero findings.
-      throw new Error(`Copilot CLI execution failed: ${err.message}`, { cause: err });
+      throw new Error(`Copilot CLI execution failed: ${describeCliFailure(err)}`, { cause: err });
     }
   };
 }
