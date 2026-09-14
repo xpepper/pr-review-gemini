@@ -96,9 +96,10 @@ For compatibility, the Action temporarily accepts an explicitly set
 never falls back to `GH_TOKEN` or `GITHUB_TOKEN` for Copilot authentication.
 The Action exposes the selected credential as
 `COPILOT_GITHUB_TOKEN` only to its authentication guard and review process;
-setup and installation never receive the credential. `COPILOT_GITHUB_TOKEN`
-has precedence over `GH_TOKEN` and `GITHUB_TOKEN`. Classic personal access
-tokens are not supported.
+setup and installation never receive the credential. The dedicated variable
+keeps Copilot authentication separate from the GitHub API credentials in
+`GH_TOKEN` and `GITHUB_TOKEN`; the authentication guard prevents fallback to
+either. Classic personal access tokens are not supported.
 
 See GitHub's official documentation for
 [installation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)

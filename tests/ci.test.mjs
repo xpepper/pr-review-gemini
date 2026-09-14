@@ -1920,7 +1920,10 @@ index 1111111..2222222 100644
       assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
       assert.match(content, /id:\s*action-contract/);
+      assert.match(content, /if \[ ! -f action\.yml \]/);
+      assert.match(content, /if \[ -f \.github\/gem-pr-review-action-bootstrap-v1 \]/);
       assert.match(content, /legacy_bootstrap=true/);
+      assert.equal(fs.readFileSync(path.resolve('.github/gem-pr-review-action-bootstrap-v1'), 'utf8').trim(), '1');
       assert.match(content, /uses:\s*actions\/setup-node@v6/);
       assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
       assert.match(content, /if:\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'true'/);

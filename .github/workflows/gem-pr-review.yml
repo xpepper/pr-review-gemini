@@ -52,7 +52,11 @@ jobs:
         id: action-contract
         shell: bash
         run: |
-          if grep -Eq '^  copilot_token:' action.yml; then
+          if [ ! -f action.yml ]; then
+            echo "::error title=Gem PR Review::Trusted-base action.yml is unavailable."
+            exit 1
+          fi
+          if [ -f .github/gem-pr-review-action-bootstrap-v1 ]; then
             echo "legacy_bootstrap=false" >> "$GITHUB_OUTPUT"
           else
             echo "legacy_bootstrap=true" >> "$GITHUB_OUTPUT"
