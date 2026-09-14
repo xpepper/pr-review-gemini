@@ -218,7 +218,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
 
 ## Post-MVP Roadmap
 
-The MVP increments (0–22) are complete. Release `v0.3.3` is published and the
+The MVP increments (0–22) are complete. Release `v0.4.0` is published and the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live in the Code quality and Continuous integration categories.
 
@@ -254,6 +254,6 @@ With the completion of Increment 13 (Reusable GitHub Action manifest `action.yml
 - [x] Composite Action manifest at repository root (`action.yml`) with descriptive name, description, branding (icon: `check-circle`, color: `blue`), inputs, and outputs.
 - [x] Node.js 20+ zero-dependency runtime leveraging `@github/copilot-sdk` and GitHub CLI (`gh`).
 - [x] Automated release workflow (`.github/workflows/release.yml`) triggered on `v*` tags with manifest synchronization validation.
-- [x] Published GitHub Release `v0.3.3` with manifest synchronization and test-suite verification.
+- [x] Published GitHub Release `v0.4.0` with manifest synchronization and test-suite verification.
 - [x] Published the Action on GitHub Marketplace.
 - [x] Confirmed the Code quality and Continuous integration Marketplace categories.
