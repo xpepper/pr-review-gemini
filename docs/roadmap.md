@@ -229,6 +229,23 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     reference pages (`docs/mcp-tools.md`, `docs/verification.md`,
     `docs/diagnostics.md`) and the skill publish example updated and pinned by
     red-first docs-consistency assertions in `tests/skills.test.mjs`.
+- [ ] **Post-MVP Increment (2026-09-14): Fail-Closed Lens Execution (PR #57, in review)**
+  - Evidence: CI review runs for PRs #52 through #56 logged `spawn copilot
+    ENOENT` once per lens and still passed `fail_on: P1` with zero findings,
+    because the CLI fallback runner returned an empty string on any
+    execution error and the quality gate counted only findings.
+  - `createSubagentRunner` (`src/subagents.js`) throws `Copilot CLI execution
+    failed: <cause>`, so failed lenses reach the dispatcher as failures and
+    local self-review fails closed too.
+  - `evaluateLensExecution` (`src/ci.js`) classifies lens execution as `ok`,
+    `partial`, or `failed`; `scripts/ci-action.mjs` fails the job with a
+    titled `::error` annotation on total failure (dry-run and publish) and
+    emits `::warning` on partial failure; `formatCiSummary` and
+    `formatCompletionReply` report the failure.
+  - All changes test-first (884 tests across 161 suites passing); documented
+    in `docs/github-action.md` and pinned by a docs-consistency assertion.
+    Verified on real GitHub-hosted runs of PR #57, whose own review check now
+    fails by design until the Copilot CLI is provisioned on the runner.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
