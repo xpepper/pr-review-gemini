@@ -34,9 +34,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
   `plugin.md` alias-sentence wording and `installation.md` intro shape
   enumeration order (the README marketplace install half and the "full flag
   tables" wording shipped with PR #51 itself).
-- [ ] Continue the documentation information architecture with focused MCP,
+- [x] Continue the documentation information architecture with focused MCP,
   custom-role, repository-guideline, diagnostics, verification, and release
-  reference pages.
+  reference pages (`docs/mcp-tools.md`, `docs/custom-roles.md`,
+  `docs/guidelines.md`, `docs/diagnostics.md`, `docs/verification.md`,
+  `docs/release.md`; branch `docs/reference-pages`).
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
 - [x] Add a host-controlled documentation consistency check after the verified
