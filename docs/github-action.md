@@ -183,6 +183,10 @@ The Action keeps the repository checkout on the trusted base branch and obtains
 the pull request diff through GitHub APIs. It therefore does not check out or
 execute untrusted PR-head code by default.
 
+The starter workflow derives its legacy-versus-modern bootstrap path by
+parsing the trusted base `action.yml` contract, so a partial rollback cannot
+silently select a path that does not match the Action implementation.
+
 Optional detached-worktree verification is maintainer initiated. In CI it is
 limited to same-repository branches and canonical safe profiles (`test`,
 `build`, and `lint`); it fails closed for forks or origin-check errors. Custom
