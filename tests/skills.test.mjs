@@ -253,6 +253,20 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /override the standard/i, 'Should document lens override by id');
   });
 
+  it('documents repository review guidelines in the focused guidelines reference', () => {
+    const guidelinesPath = path.resolve('docs/guidelines.md');
+    assert.ok(fs.existsSync(guidelinesPath), 'docs/guidelines.md must exist');
+    const content = fs.readFileSync(guidelinesPath, 'utf8');
+    assert.match(content, /\.github\/gem-pr-review\.md/, 'Should document the default guidelines file');
+    assert.match(content, /\.github\/review-instructions\.md/, 'Should document the fallback filename');
+    assert.match(content, /## Lens:/, 'Should document Lens section routing');
+    assert.match(content, /## Role:/, 'Should document Role section routing');
+    assert.match(content, /64 KB/, 'Should document the size cap');
+    assert.match(content, /gem_pr_review_guidelines/, 'Should document the inspection tool');
+    assert.match(content, /--guidelines/, 'Should document the CLI flag');
+    assert.match(content, /guidelines_path/, 'Should document the Action input');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
