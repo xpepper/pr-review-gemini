@@ -390,17 +390,16 @@ The local dogfood run reported one P1 and one P2.
   the intended security boundary. The rollout marker deliberately selects the
   legacy bootstrap for this PR, then selects Action-owned bootstrap once the
   marker lands on `main`.
-- The repeated ambient-state finding is a known migration trade-off, not an
-  unexamined secret source: new workflows pass `copilot_token`; only an
-  explicitly supplied `COPILOT_GITHUB_TOKEN` step environment is accepted
-  temporarily, with a deprecation warning. `GH_TOKEN` and `GITHUB_TOKEN` are
-  never accepted as Copilot credentials by the Action guard.
+- The repeated ambient-state finding was valid. An explicit opt-in still left
+  credential resolution dependent on caller environment scope, so the fallback
+  was removed. The new contract requires `copilot_token`; no caller ambient
+  token can satisfy the guard.
 
 ### Recommended follow-up
 
 Merge #64, publish the next immutable release, update the temporary
-commit-pinned examples to that tag, and remove the deprecated step-environment fallback in a
-future breaking release.
+commit-pinned examples to that tag, and call out the required `copilot_token`
+input in the release migration notes.
 
 **Priority:** now
 

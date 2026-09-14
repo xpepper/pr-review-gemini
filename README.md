@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-      - uses: xpepper/pr-review-gemini@42cfe1a8dd8a72b91d2ab31f0babdd6f59a31f98
+      - uses: xpepper/pr-review-gemini@831f1ad04757dcb6848e5d3b50d92f5ef9562f57
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           copilot_token: ${{ secrets.COPILOT_TOKEN }}

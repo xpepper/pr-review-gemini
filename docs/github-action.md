@@ -63,7 +63,7 @@ jobs:
           ref: ${{ steps.base.outputs.result }}
 
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@42cfe1a8dd8a72b91d2ab31f0babdd6f59a31f98
+        uses: xpepper/pr-review-gemini@831f1ad04757dcb6848e5d3b50d92f5ef9562f57
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           copilot_token: ${{ secrets.COPILOT_TOKEN }}
@@ -90,11 +90,10 @@ documented npm path, and discovers the resulting `copilot` binary through
 
 For non-interactive CI authentication, create the `COPILOT_TOKEN` repository
 secret as a user-owned fine-grained personal access token with the **Copilot
-Requests** account permission, then pass it through the `copilot_token` input.
-For compatibility, the Action temporarily accepts an explicitly set
-`COPILOT_GITHUB_TOKEN` step environment and emits a deprecation warning; it
-never falls back to `GH_TOKEN` or `GITHUB_TOKEN` for Copilot authentication.
-The Action exposes the selected credential as
+Requests** account permission, then pass it through the required
+`copilot_token` input. Ambient credentials cannot satisfy the guard: the Action
+never falls back to `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` from
+the caller environment. The Action exposes the input credential as
 `COPILOT_GITHUB_TOKEN` only to its authentication guard and review process;
 setup and installation never receive the credential. The dedicated variable
 keeps Copilot authentication separate from the GitHub API credentials in
@@ -115,7 +114,7 @@ reporting an unreviewed success.
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `github_token` | Token used to authenticate GitHub API calls and post reviews. | No | `${{ github.token }}` |
-| `copilot_token` | User-owned fine-grained PAT with **Copilot Requests** permission; exposed only as `COPILOT_GITHUB_TOKEN` during authentication and review. Required for new workflows; the deprecated step-environment fallback is temporary. | No | None |
+| `copilot_token` | User-owned fine-grained PAT with **Copilot Requests** permission; exposed only as `COPILOT_GITHUB_TOKEN` during authentication and review. | Yes | None |
 | `pr_number` | Pull request number; read from `GITHUB_EVENT_PATH` when omitted. | No | Auto-detected |
 | `mode` | Review mode: `quick`, `balanced`, `full`, or `deep`. | No | `balanced` |
 | `fail_on` | Severity that fails the job: `P0`, `P1`, `P2`, `P3`, or `none`. | No | `none` |

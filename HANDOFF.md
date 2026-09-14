@@ -12,7 +12,7 @@
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
     remains at `version 0.4.0` / `ref v0.4.0`.
-* **Docs examples** pin runtime commit `42cfe1a` while PR #64's Action contract
+* **Docs examples** pin runtime commit `831f1ad` while PR #64's Action contract
   is unreleased; switch them to the next immutable tag during release preparation.
 * **In flight**: PR [#64](https://github.com/xpepper/pr-review-gemini/pull/64)
   (`feat/action-bootstrap-copilot-cli`) makes the composite Action own Node.js
@@ -20,10 +20,9 @@
   fail-closed forks and lenses, host-gated mutations, sanitized diagnostics,
   and workflow-command escaping.
 * **Hosted evidence**: run `34899128103` completed successfully with all five
-  real lenses and zero execution errors. The one P2 finding on the deprecated
-  ambient `COPILOT_GITHUB_TOKEN` compatibility path was validated as an
-  intentional temporary migration trade-off; new workflows use
-  `copilot_token`.
+  real lenses and zero execution errors. A later repeated finding on ambient
+  credential coupling was validated and fixed by removing that fallback;
+  callers must pass `copilot_token` explicitly.
 * **Post-#62 main run**: requested run `34896350107` completed with its sole job
   skipped (`issue_comment` on `main`), so it did not validate lens execution.
 
@@ -31,8 +30,9 @@
 
 1. Review and merge PR #64, then publish the next release and replace the
    temporary commit-pinned documentation references with its immutable tag.
-2. Remove the deprecated Action-step `COPILOT_GITHUB_TOKEN` fallback in a future
-   breaking release; new workflows must use `copilot_token`.
+2. Treat the required `copilot_token` input as part of the next release's
+   migration notes; `v0.4.0` workflows that supplied only an Action-step
+   `COPILOT_GITHUB_TOKEN` must update.
 3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 

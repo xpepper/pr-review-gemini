@@ -67,8 +67,8 @@ is live, and the Action is listed in Code quality and Continuous integration.
     a genuine zero-finding result.
   - In review (PR #64 / issue #63, test-first): move Node.js 22 and pinned
     Copilot CLI `1.0.83` bootstrap into the composite Action; add the explicit
-    `copilot_token` input while temporarily warning on the previous
-    `COPILOT_GITHUB_TOKEN` step-environment contract; scrub all GitHub token
+    required `copilot_token` input with no ambient credential fallback; scrub
+    all GitHub token
     variables from setup/install; and retain immutable trusted-base execution.
     The repository's self-hosting workflow uses a versioned base marker only
     during rollout, so downstream examples no longer duplicate bootstrap.

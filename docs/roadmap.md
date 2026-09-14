@@ -274,7 +274,8 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     `action.yml`, eliminating bootstrap duplication from consumer workflows.
   - Accept `copilot_token`, expose it only as `COPILOT_GITHUB_TOKEN` during the
     authentication guard and review, and clear all GitHub credential variables
-    from setup/install steps. Missing secrets and fork runs still fail closed.
+    from setup/install steps. Ambient credentials cannot satisfy the Action
+    contract; missing secrets and fork runs still fail closed.
   - Preserve the trusted-base checkout. A versioned marker lets this repository
     provision the old base Action only during rollout without executing the PR
     head with the credential.
