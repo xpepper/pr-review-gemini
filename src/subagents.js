@@ -716,6 +716,7 @@ export async function dispatchSubagentsParallel({
  * @param {Object} [options.copilotClient] - Injected CopilotClient instance
  * @param {string} [options.copilotCliPath] - Explicit path to Copilot CLI binary
  * @param {string} [options.copilotSdkPath] - Explicit path to Copilot SDK package
+ * @param {Function} [options.execFileFn] - Promisified execFile used to invoke the Copilot CLI
  * @returns {Promise<Function>}
  */
 export async function createSubagentRunner(options = {}) {
@@ -726,6 +727,7 @@ export async function createSubagentRunner(options = {}) {
     copilotClient,
     copilotCliPath = process.env.COPILOT_CLI_PATH,
     copilotSdkPath = process.env.COPILOT_SDK_PATH,
+    execFileFn = execFileAsync,
   } = options;
 
   if (mock) {
@@ -806,14 +808,14 @@ export async function createSubagentRunner(options = {}) {
     }
 
     try {
-      const { stdout } = await execFileAsync('copilot', cliArgs, {
+      const { stdout } = await execFileFn('copilot', cliArgs, {
         cwd,
         maxBuffer: 10 * 1024 * 1024,
       });
       return stdout;
     } catch (err) {
-      console.error(`Copilot CLI execution warning: ${err.message}`);
-      return '';
+      // Fail closed: an empty string would be parsed as a clean lens with zero findings.
+      throw new Error(`Copilot CLI execution failed: ${err.message}`, { cause: err });
     }
   };
 }

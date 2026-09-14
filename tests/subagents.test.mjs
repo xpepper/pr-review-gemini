@@ -1009,6 +1009,39 @@ Thinking: Analyzing diff for security vulnerabilities...
       assert.ok(createdSessionOptions);
       assert.deepEqual(createdSessionOptions.tools, dummyTools);
     });
+
+    it('invokes the copilot CLI with the prompt and model when no SDK is configured', async () => {
+      const calls = [];
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async (command, args) => {
+          calls.push({ command, args });
+          return { stdout: 'review output' };
+        },
+      });
+
+      const output = await runner({ prompt: 'Review this diff', model: 'gpt-4o' });
+
+      assert.equal(output, 'review output');
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].command, 'copilot');
+      assert.deepEqual(calls[0].args, ['-s', '-p', 'Review this diff', '--no-color', '--model', 'gpt-4o']);
+    });
+
+    it('rejects when the copilot CLI cannot be executed instead of reporting an empty review', async () => {
+      const spawnError = Object.assign(new Error('spawn copilot ENOENT'), { code: 'ENOENT' });
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async () => {
+          throw spawnError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt: 'Review this diff', model: 'gpt-4o' }),
+        /Copilot CLI execution failed: spawn copilot ENOENT/
+      );
+    });
   });
 
   describe('buildSdkReaderTools & Host-Supervised Tools', () => {
