@@ -8,7 +8,7 @@
 * **Release**: `v0.4.0` is tagged and its GitHub Release is published
   (dispatch-only publish; verify job green). Minor bump — the `feat(ci)`
   PR #47 landed since `v0.3.3`. All four manifests synchronized at `0.4.0`.
-* **Test Suite**: `npm test` green — 871 tests across 159 suites, 0 failures.
+* **Test Suite**: `npm test` green — 892 tests across 161 suites, 0 failures.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
@@ -21,19 +21,23 @@
   (`e96d977`), fail-closed lens execution. Hosted run `34890340990` confirmed
   the intended failure reports `spawn copilot ENOENT` in both the log and
   escaped `::error` annotation.
-* **In flight**: PR [#60](https://github.com/xpepper/pr-review-gemini/pull/60)
-  (`fix/cli-path-fallback`, base `main`), the CLI fallback honors
-  `COPILOT_CLI_PATH`. Branch suite: 891 tests, 0 failures.
+* **Landed**: PR [#60](https://github.com/xpepper/pr-review-gemini/pull/60)
+  (`ed5ab3e`), the CLI fallback honors `COPILOT_CLI_PATH`.
+* **In flight**: PR [#62](https://github.com/xpepper/pr-review-gemini/pull/62)
+  (`fix/provision-ci-copilot-runner`), pinned Copilot CLI provisioning and
+  non-interactive authentication. Hosted run `34894342377` is green: all five
+  lenses executed with zero execution errors and a genuine zero-finding result.
+* **Recovery note**: local `push.default=upstream` redirected the first feature
+  push to `main`; recovery PR #61 reverted it without rewriting history, then
+  #62 was recreated and pushed with an explicit refspec. Net content on `main`
+  remains unchanged pending #62.
 
 ## Next Actions
 
-1. Review and merge PR #60. **Its own Gem PR Review check fails by design**
-   because the GitHub-hosted runner still has no Copilot CLI.
-2. Provision the Copilot CLI on the review runner after the owner chooses the
-   Copilot-entitled repository secret name and fork-PR policy. PR #60 lets the
-   workflow point at a provisioned binary through `COPILOT_CLI_PATH` without
-   the SDK.
-3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
+1. Review and merge PR #62. The owner selected repository secret
+   `COPILOT_TOKEN` and accepted explicit fail-closed fork runs. The latest
+   hosted review is green and exercised real lenses.
+2. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 
 ## Recently Landed

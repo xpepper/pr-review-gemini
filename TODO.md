@@ -49,7 +49,7 @@ is live, and the Action is listed in Code quality and Continuous integration.
     the PR's current head before creating the detached worktree; and the MCP
     diagnostics handler re-sanitizes caller-supplied telemetry objects before
     formatting. Docs updated and pinned by docs-consistency assertions.
-  - In review (CI review degradation, PR #57, test-first): validated against
+  - Completed (CI review degradation, PR #57, test-first): validated against
     workflow runs for PRs #52 through #56. The CLI fallback runner now throws
     instead of returning an empty review; the Action fails the job with a
     titled `::error` annotation when every lens fails (dry-run and publish),
@@ -59,10 +59,13 @@ is live, and the Action is listed in Code quality and Continuous integration.
     escaped `::error` annotation (verified by hosted run `34890081003`).
     Documented in `docs/github-action.md` and pinned by a docs-consistency
     assertion.
-  - Backlog (owner decision): provision the Copilot CLI on the review runner
-    with a Copilot-entitled repository secret. Until then the repository's
-    own Gem PR Review check fails by design.
-  - In review (PR #60, stacked on #57, test-first): the CLI fallback runner
+  - In review (PR #62, owner-approved): provision the hosted runner with
+    pinned Copilot CLI `1.0.83`, map repository secret `COPILOT_TOKEN` to
+    `COPILOT_GITHUB_TOKEN`, fail fork runs early and closed when the secret is
+    unavailable, and execute action code from the immutable PR base commit.
+    Hosted run `34894342377` executed all lenses with zero execution errors and
+    a genuine zero-finding result.
+  - Completed (PR #60, test-first): the CLI fallback runner
     honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
     name only the binary's base name), and `docs/plugin.md` documents the two
     variables independently. Recorded, not actioned: a self-review P2 to

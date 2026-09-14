@@ -229,7 +229,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     reference pages (`docs/mcp-tools.md`, `docs/verification.md`,
     `docs/diagnostics.md`) and the skill publish example updated and pinned by
     red-first docs-consistency assertions in `tests/skills.test.mjs`.
-- [ ] **Post-MVP Increment (2026-09-14): Fail-Closed Lens Execution (PR #57, in review)**
+- [x] **Post-MVP Increment (2026-09-14): Fail-Closed Lens Execution (PR #57)**
   - Evidence: CI review runs for PRs #52 through #56 logged `spawn copilot
     ENOENT` once per lens and still passed `fail_on: P1` with zero findings,
     because the CLI fallback runner returned an empty string on any
@@ -252,14 +252,23 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     in `docs/github-action.md` and pinned by a docs-consistency assertion.
     Verified on real GitHub-hosted runs of PR #57, whose own review check now
     fails by design until the Copilot CLI is provisioned on the runner.
-- [ ] **Post-MVP Increment (2026-09-14): `COPILOT_CLI_PATH` in the CLI Fallback (PR #60, stacked on #57, in review)**
+- [x] **Post-MVP Increment (2026-09-14): `COPILOT_CLI_PATH` in the CLI Fallback (PR #60)**
   - The CLI fallback runner (`src/subagents.js`) runs
     `path.resolve(COPILOT_CLI_PATH)` when set and `copilot` from `PATH`
     otherwise; previously the variable only took effect together with
     `COPILOT_SDK_PATH`. Spawn failures report only the binary's base name.
   - `docs/plugin.md` documents the variables independently, pinned by a
-    docs-consistency assertion. Test-first; 890 tests passing.
+    docs-consistency assertion. Test-first; 891 tests passing after rebase.
   - Prerequisite for provisioning the Copilot CLI on the review runner.
+- [ ] **Post-MVP Increment (2026-09-14): Provision Hosted Review Lenses (PR #62, in review)**
+  - Resolve and check out the immutable PR base commit so the Copilot token is
+    never exposed to pull-request code, including comment-triggered reviews.
+  - Require the owner-selected `COPILOT_TOKEN`; fork runs without repository
+    secrets fail early and closed with an explicit annotation.
+  - Install pinned `@github/copilot@1.0.83` through GitHub's documented npm path
+    on Node.js 22 and authenticate via `COPILOT_GITHUB_TOKEN`.
+  - Test-first; 892 tests passing. Hosted run `34894342377` executed all five
+    real lenses without execution errors and passed with zero findings.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
