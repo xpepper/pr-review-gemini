@@ -721,7 +721,12 @@ function describeCliFailure(err) {
   const status = err?.signal ? `signal ${err.signal}` : `exit code ${err?.code ?? 'unknown'}`;
   const stderrTail = String(err?.stderr || '')
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) =>
+      line
+        .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+    )
     .filter(Boolean)
     .pop();
   return stderrTail ? `${status}: ${stderrTail.slice(0, 200)}` : status;
