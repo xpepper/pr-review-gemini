@@ -395,6 +395,39 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
       assert.equal(worktreeAdded, false, 'no worktree may be created for a stale caller-supplied head');
     });
 
+    it('fails closed when the PR current head cannot be resolved', async () => {
+      const emptyGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({});
+        }
+        return '';
+      };
+
+      let worktreeAdded = false;
+      const mockGit = async (args) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          worktreeAdded = true;
+        }
+        return '';
+      };
+
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'caller_supplied_head',
+            execGhFn: emptyGh,
+            execGitFn: mockGit,
+            spawnFn: () => {
+              throw new Error('verification command must not spawn when the PR head is unresolvable');
+            },
+          }),
+        /Unable to resolve current PR head for PR #42/
+      );
+
+      assert.equal(worktreeAdded, false, 'no worktree may be created when the PR head is unresolvable');
+    });
+
     it('verifies against the supplied headSha when it matches the PR current head', async () => {
       const mockGh = async (args) => {
         if (args[0] === 'pr' && args[1] === 'view') {

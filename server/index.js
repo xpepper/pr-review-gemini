@@ -649,6 +649,34 @@ export const MCP_TOOLS = [
 /**
  * Creates an MCP message handler implementing the JSON-RPC 2.0 protocol.
  */
+/**
+ * Parses the required expectedHeadSha argument shared by the publish tools.
+ * Returns the trimmed SHA, or an empty string when absent/blank.
+ */
+function parseExpectedHeadSha(args) {
+  return typeof args?.expectedHeadSha === 'string' ? args.expectedHeadSha.trim() : '';
+}
+
+/**
+ * Builds the fail-closed JSON-RPC error envelope for publish calls that
+ * omitted expectedHeadSha.
+ */
+function missingExpectedHeadShaResponse(id, text) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    result: {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text,
+        },
+      ],
+    },
+  };
+}
+
 export function createMcpHandler(options = {}) {
   const {
     getPrDiffFn = getPrDiff,
@@ -883,21 +911,12 @@ export function createMcpHandler(options = {}) {
             }
 
             if (toolName === 'gem_pr_review_publish' || toolName === 'pr_review_publish') {
-              const expectedHeadSha = typeof args.expectedHeadSha === 'string' ? args.expectedHeadSha.trim() : '';
+              const expectedHeadSha = parseExpectedHeadSha(args);
               if (!expectedHeadSha) {
-                return {
-                  jsonrpc: '2.0',
+                return missingExpectedHeadShaResponse(
                   id,
-                  result: {
-                    isError: true,
-                    content: [
-                      {
-                        type: 'text',
-                        text: 'expectedHeadSha is required for publishing: pass the PR head SHA the findings were reviewed against so the host can reject stale reviews.',
-                      },
-                    ],
-                  },
-                };
+                  'expectedHeadSha is required for publishing: pass the PR head SHA the findings were reviewed against so the host can reject stale reviews.'
+                );
               }
 
               const pubResult = await publishReviewFn({
@@ -927,21 +946,12 @@ export function createMcpHandler(options = {}) {
               toolName === 'gem_pr_review_publish_cached' ||
               toolName === 'pr_review_publish_cached'
             ) {
-              const expectedHeadSha = typeof args.expectedHeadSha === 'string' ? args.expectedHeadSha.trim() : '';
+              const expectedHeadSha = parseExpectedHeadSha(args);
               if (!expectedHeadSha) {
-                return {
-                  jsonrpc: '2.0',
+                return missingExpectedHeadShaResponse(
                   id,
-                  result: {
-                    isError: true,
-                    content: [
-                      {
-                        type: 'text',
-                        text: 'expectedHeadSha is required for publishing a cached review: pass the head SHA the review was cached for so the host can verify freshness before publishing.',
-                      },
-                    ],
-                  },
-                };
+                  'expectedHeadSha is required for publishing a cached review: pass the head SHA the review was cached for so the host can verify freshness before publishing.'
+                );
               }
 
               const pubCachedResult = await publishCachedReviewFn({

@@ -367,7 +367,10 @@ export async function runVerification({
   if (prNumber) {
     const stdout = await execGhFn(['pr', 'view', String(prNumber), '--json', 'headRefOid'], { cwd: repoPath });
     const currentHeadSha = String(JSON.parse(stdout).headRefOid || '').trim();
-    if (targetHeadSha && currentHeadSha && targetHeadSha !== currentHeadSha) {
+    if (!currentHeadSha) {
+      throw new Error(`Unable to resolve current PR head for PR #${prNumber}; refusing to verify an unconfirmed commit.`);
+    }
+    if (targetHeadSha && targetHeadSha !== currentHeadSha) {
       throw new Error(
         `Head SHA mismatch for PR #${prNumber}: expected ${targetHeadSha}, but PR head is ${currentHeadSha}. PR has been updated; rerun verification.`
       );
