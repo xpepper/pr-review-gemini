@@ -210,6 +210,35 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /`pr_review_diagnostics`/, 'Should name the pr_review_diagnostics alias');
   });
 
+  it('documents the MCP tool inventory in the focused MCP tools reference', () => {
+    const mcpToolsPath = path.resolve('docs/mcp-tools.md');
+    assert.ok(fs.existsSync(mcpToolsPath), 'docs/mcp-tools.md must exist');
+    const content = fs.readFileSync(mcpToolsPath, 'utf8');
+    for (const tool of [
+      'gem_pr_review_subagents',
+      'gem_pr_review_diff',
+      'gem_pr_review_diff_read',
+      'gem_pr_review_publish',
+      'gem_pr_review_publish_cached',
+      'gem_pr_review_prior',
+      'gem_pr_review_threads',
+      'gem_pr_review_architecture',
+      'gem_pr_review_verify',
+      'gem_self_review',
+      'gem_pr_review_guidelines',
+      'gem_pr_review_diagnostics',
+    ]) {
+      assert.ok(content.includes(`\`${tool}\``), `MCP reference should document ${tool}`);
+    }
+    assert.ok(content.includes('`pr_review_threads`'), 'Should note the registered prefix aliases');
+    assert.ok(content.includes('`gem_pr_review_self`'), 'Should note the gem_pr_review_self alias');
+    assert.ok(content.includes('`pr_review_diff`'), 'Should document the dispatcher-only aliases');
+    assert.match(content, /16 reads/, 'Should document the diff_read read cap');
+    assert.match(content, /640 KB/, 'Should document the diff_read byte budget');
+    assert.match(content, /50 inline comments/i, 'Should document the inline comment cap');
+    assert.match(content, /host-gated/i, 'Should document host-gated publishing');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
