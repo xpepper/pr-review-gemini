@@ -123,3 +123,10 @@ node scripts/self-review.mjs --staged --fail-on P1
 
 Self-review returns `PASS` only when no finding meets its configured blocking
 threshold. It works from the local worktree and makes no remote GitHub mutation.
+
+## Further reference
+
+- [Diagnostics reference](diagnostics.md) — what `--verbose` / `--json`
+  telemetry contains and its redaction guarantees.
+- [Verification reference](verification.md) — detached-worktree
+  verification profiles and gated approval.

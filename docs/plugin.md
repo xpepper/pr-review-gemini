@@ -88,15 +88,20 @@ registered under short aliases: `pr_review_threads`,
 `pr_review_architecture`, `pr_review_guidelines`, and
 `pr_review_diagnostics`.
 
+Full inventory, parameters, aliases, and safety guarantees live in the
+[MCP tools reference](mcp-tools.md).
+
 ## Configuration and tweaks
 
 - **Custom roles:** define `custom_roles` (with optional `model` and
   `reasoningEffort` per role), `replace_standard_roles`, and `enabled_roles`
   in `.github/gem-pr-review.json` (repository) or
   `~/.copilot/gem-pr-review.json` (user). CLI mirrors: `--role`,
-  `--replace-standard-roles`.
+  `--replace-standard-roles`. Full schema and examples: the
+  [custom roles reference](custom-roles.md).
 - **Repository guidelines:** `.github/gem-pr-review.md` by default, override
-  with `--guidelines <path>`.
+  with `--guidelines <path>`. Routing, limits, and safety: the
+  [guidelines reference](guidelines.md).
 - **Model resilience:** when a configured model is unavailable (quota or
   capacity), the engine falls back through the model catalog to `auto`.
 

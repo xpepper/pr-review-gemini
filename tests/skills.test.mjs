@@ -311,6 +311,22 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(pluginContent, /release\.md/, 'plugin.md should link to the release reference');
   });
 
+  it('cross-links the focused reference pages from the landing and shape pages', () => {
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    for (const page of ['mcp-tools', 'custom-roles', 'guidelines', 'diagnostics', 'verification', 'release']) {
+      assert.ok(readmeContent.includes(`docs/${page}.md`), `README should link docs/${page}.md`);
+    }
+    const pluginContent = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(pluginContent, /mcp-tools\.md/, 'plugin.md should link the MCP tools reference');
+    assert.match(pluginContent, /custom-roles\.md/, 'plugin.md should link the roles reference');
+    assert.match(pluginContent, /guidelines\.md/, 'plugin.md should link the guidelines reference');
+    const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(cliContent, /diagnostics\.md/, 'cli.md should link the diagnostics reference');
+    assert.match(cliContent, /verification\.md/, 'cli.md should link the verification reference');
+    const actionContent = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(actionContent, /verification\.md/, 'github-action.md should link the verification reference');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');

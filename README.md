@@ -126,6 +126,12 @@ and safe-profile gates.
 
 - [Installation and quick starts](docs/installation.md)
 - [Plugin reference](docs/plugin.md)
+- [MCP tools reference](docs/mcp-tools.md)
+- [Custom roles reference](docs/custom-roles.md)
+- [Guidelines reference](docs/guidelines.md)
+- [Diagnostics reference](docs/diagnostics.md)
+- [Verification reference](docs/verification.md)
+- [Release reference](docs/release.md)
 - [GitHub Action reference](docs/github-action.md)
 - [CLI reference](docs/cli.md)
 - [Dogfooding feedback process](docs/dogfooding-feedback.md)
