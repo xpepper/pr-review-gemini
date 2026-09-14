@@ -71,8 +71,8 @@ naturally or as flags in the underlying commands:
 | Tool | Purpose |
 | --- | --- |
 | `gem_pr_review_subagents` | Run the parallel specialist-lens review (mode, roles, custom roles, dry-run/publish). |
-| `gem_pr_review_diff` | Fetch PR diff metadata with file-backed paging. |
-| `gem_pr_review_diff_read` | Read diff ranges by file, offset, or line. |
+| `gem_pr_review_diff` | Fetch PR diff metadata and file manifest. |
+| `gem_pr_review_diff_read` | Read diff pages and ranges by file, offset, or line (file-backed paging). |
 | `gem_pr_review_publish` | Submit the host-gated review. |
 | `gem_pr_review_publish_cached` | Publish cached findings without re-running inference. |
 | `gem_pr_review_prior` | Prior findings for incremental re-reviews. |
