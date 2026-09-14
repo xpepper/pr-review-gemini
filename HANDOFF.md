@@ -17,16 +17,27 @@
 * **Docs examples** (`README.md`, `docs/installation.md`,
   `docs/github-action.md`) pin `@v0.4.0`, matching the latest tag.
 
+* **In flight**: PR [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
+  (`fix/ci-lens-degradation`), fail-closed lens execution. Branch suite:
+  887 tests across 161 suites, 0 failures. Hosted run `34890081003` confirms
+  the intended failure now reports `spawn copilot ENOENT` in both the log and
+  escaped `::error` annotation.
+
 ## Next Actions
 
-1. CI review degradation (evidence-backed): every recent PR review run
-   on GitHub-hosted runners logs `spawn copilot ENOENT` once per lens
-   (runs for PRs #52–#55), so the model lenses silently no-op and CI
-   passes on the docs-consistency path alone. Real review gating currently
-   happens via the local pre-commit self-review and the marketplace
-   `/gem-pr-review <PR>` run. Fix candidate: fail or annotate loudly when
-   lens execution degrades, or provision `copilot` on the runner.
-2. Continue dogfooding the reviewer on real pull requests; SARIF export stays
+1. Review and merge PR #57. **Its own Gem PR Review check fails by design**
+   (run `34890081003`: `Cannot publish review: All 5 specialist review
+   subagent(s) failed` plus sanitized cause `spawn copilot ENOENT`, with a
+   titled `::error` annotation), because
+   GitHub-hosted runners have no Copilot CLI. After merge, that check fails on
+   every PR until the CLI is provisioned. Owner decision (agreed 2026-09-14):
+   fail closed on total lens failure, warn on partial failure, provisioning as
+   a separate item.
+2. Provision the Copilot CLI on the review runner. Needs a Copilot-entitled
+   token stored as a repository secret (owner decision). Prerequisite worth
+   doing first: make the CLI fallback runner honor `COPILOT_CLI_PATH` (today
+   only the SDK path reads it; found by the PR #57 dogfood review, pre-existing).
+3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 
 ## Recently Landed

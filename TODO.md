@@ -49,13 +49,32 @@ is live, and the Action is listed in Code quality and Continuous integration.
     the PR's current head before creating the detached worktree; and the MCP
     diagnostics handler re-sanitizes caller-supplied telemetry objects before
     formatting. Docs updated and pinned by docs-consistency assertions.
-  - Backlog (CI review degradation, validated against workflow runs for PRs
-    #52, #53, and #54): the CI Action's model lenses silently no-op on
-    GitHub-hosted runners (`spawn copilot ENOENT`, once per lens) while the
-    run still reports "0 findings across all evaluated lenses" and passes on
-    the docs-consistency path alone. Fix candidate: fail or annotate loudly
-    on lens-execution degradation, or provision the `copilot` CLI on the
-    runner.
+  - In review (CI review degradation, PR #57, test-first): validated against
+    workflow runs for PRs #52 through #56. The CLI fallback runner now throws
+    instead of returning an empty review; the Action fails the job with a
+    titled `::error` annotation when every lens fails (dry-run and publish),
+    warns with `::warning` on partial failure, and the step summary and
+    `/gem-review` completion reply report the failure. Publish aborts include
+    only explicitly sanitized, deduplicated lens causes in the CI log and
+    escaped `::error` annotation (verified by hosted run `34890081003`).
+    Documented in `docs/github-action.md` and pinned by a docs-consistency
+    assertion.
+  - Backlog (owner decision): provision the Copilot CLI on the review runner
+    with a Copilot-entitled repository secret. Until then the repository's
+    own Gem PR Review check fails by design.
+  - Backlog (PR #57 dogfood finding, pre-existing): the CLI fallback runner
+    ignores `COPILOT_CLI_PATH` and always spawns `copilot` from `PATH`; honor
+    the configured path before provisioning the runner.
+  - Recorded, not actioned (PR #57 self-review P3): each formatter recomputes
+    `lensExecution?.status !== 'failed'`, matching the existing
+    documentation-consistency and verification pattern.
+  - Fixed in PR #57 (dogfood P1): CLI failure messages no longer echo the
+    review prompt; they report the exit code or errno and one stderr line with
+    terminal escapes and control characters stripped.
+  - Recorded, not actioned (PR #57): the P2 that `evaluateLensExecution`
+    trusts unvalidated error entries (errors are produced in-process by the
+    dispatcher) and the P2 on non-CSI escape residue (only printable text
+    remains once control characters are removed).
 - [x] Add a host-controlled documentation consistency check after the verified
   PR #46 false negative: select `tests/skills.test.mjs` only for documentation
   changes, skip untrusted or PR-modified tests, and block on a selected failure.

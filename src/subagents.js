@@ -706,6 +706,33 @@ export async function dispatchSubagentsParallel({
 }
 
 /**
+ * Summarizes a Copilot CLI execFile failure without echoing its command line.
+ *
+ * execFile's error message embeds every argument, including the review prompt
+ * (untrusted diff content), so it must not reach logs or review bodies.
+ *
+ * @param {Error & { code?: string|number, signal?: string, stderr?: string }} err
+ * @returns {string}
+ */
+function describeCliFailure(err) {
+  if (typeof err?.code === 'string') {
+    return `spawn copilot ${err.code}`;
+  }
+  const status = err?.signal ? `signal ${err.signal}` : `exit code ${err?.code ?? 'unknown'}`;
+  const stderrTail = String(err?.stderr || '')
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .trim()
+    )
+    .filter(Boolean)
+    .pop();
+  return stderrTail ? `${status}: ${stderrTail.slice(0, 200)}` : status;
+}
+
+/**
  * Creates a subagent runner function supporting Copilot SDK, CLI fallback, or mock mode.
  *
  * @param {Object} options
@@ -716,6 +743,7 @@ export async function dispatchSubagentsParallel({
  * @param {Object} [options.copilotClient] - Injected CopilotClient instance
  * @param {string} [options.copilotCliPath] - Explicit path to Copilot CLI binary
  * @param {string} [options.copilotSdkPath] - Explicit path to Copilot SDK package
+ * @param {Function} [options.execFileFn] - Promisified execFile used to invoke the Copilot CLI
  * @returns {Promise<Function>}
  */
 export async function createSubagentRunner(options = {}) {
@@ -726,6 +754,7 @@ export async function createSubagentRunner(options = {}) {
     copilotClient,
     copilotCliPath = process.env.COPILOT_CLI_PATH,
     copilotSdkPath = process.env.COPILOT_SDK_PATH,
+    execFileFn = execFileAsync,
   } = options;
 
   if (mock) {
@@ -806,14 +835,17 @@ export async function createSubagentRunner(options = {}) {
     }
 
     try {
-      const { stdout } = await execFileAsync('copilot', cliArgs, {
+      const { stdout } = await execFileFn('copilot', cliArgs, {
         cwd,
         maxBuffer: 10 * 1024 * 1024,
       });
       return stdout;
     } catch (err) {
-      console.error(`Copilot CLI execution warning: ${err.message}`);
-      return '';
+      // Fail closed: an empty string would be parsed as a clean lens with zero findings.
+      const message = `Copilot CLI execution failed: ${describeCliFailure(err)}`;
+      const cliError = new Error(message, { cause: err });
+      cliError.sanitizedMessage = message;
+      throw cliError;
     }
   };
 }

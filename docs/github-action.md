@@ -113,6 +113,16 @@ introduced diff hunks and revalidates prior findings as `resolved`, `still
 open`, or `obsolete`. Set `fail_on: P1` to fail the job when it finds P0 or P1
 defects; branch protection can then require that check before merging.
 
+## Lens execution failures
+
+Review lenses run through the Copilot CLI, which must be installed and able to
+authenticate on the runner; the `ubuntu-latest` hosted runner does not include
+it. If every review lens fails to execute (for example `spawn copilot ENOENT`),
+no review was performed, so the Action fails the job with verdict `FAIL` and an
+error annotation instead of reporting zero findings. This applies to `dry-run`
+as well as `publish`. When only some lenses fail, the review summary lists them
+and the Action emits a warning annotation without failing the job.
+
 ## Trusted-base execution boundary
 
 The Action keeps the repository checkout on the trusted base branch and obtains

@@ -10,6 +10,7 @@ import { execFile } from 'node:child_process';
 import {
   resolveCiEnvironment,
   evaluateCiQualityGate,
+  evaluateLensExecution,
   writeGitHubStepOutputs,
   formatCiSummary,
   addCommentReaction,
@@ -62,6 +63,16 @@ index 1111111..2222222 100644
    return 42;
  }
 `;
+
+/**
+ * Escapes message data for GitHub Actions workflow commands (::error::, ::warning::).
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeWorkflowCommandData(value) {
+  return String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+}
 
 /**
  * Executes CI Action workflow.
@@ -526,7 +537,10 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
     const verificationPassed = isVerificationPassed(verificationResult);
     const documentationConsistencyPassed = documentationConsistency.status !== 'failed';
-    const overallSuccess = qualityGate.passed && verificationPassed && documentationConsistencyPassed;
+    const lensExecution = evaluateLensExecution(reviewResult);
+    const lensExecutionPassed = lensExecution.status !== 'failed';
+    const overallSuccess =
+      qualityGate.passed && verificationPassed && documentationConsistencyPassed && lensExecutionPassed;
 
     // Write GitHub Action Step outputs
     writeGitHubStepOutputs(
@@ -550,6 +564,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         ciEnv,
         verificationResult,
         documentationConsistency,
+        lensExecution,
       });
       try {
         fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${ciSummary}\n`, 'utf8');
@@ -572,6 +587,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         ciEnv,
         verificationResult,
         diagnostics: reviewResult.diagnostics,
+        lensExecution,
       });
       await safePostComment(completionReply);
     }
@@ -579,6 +595,21 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     io.log('\n────────────────────────────────────────────────────────');
     io.log(reviewResult.summary);
     io.log('────────────────────────────────────────────────────────\n');
+
+    const failedLensList = lensExecution.failedLenses.join(', ');
+    if (lensExecution.status === 'failed') {
+      io.log(
+        `::error title=Gem PR Review::${escapeWorkflowCommandData(
+          `All ${lensExecution.totalCount} review lens(es) failed to execute (${failedLensList}); no review was performed. Check that the Copilot CLI is installed and authenticated on the runner.`
+        )}`
+      );
+    } else if (lensExecution.status === 'partial') {
+      io.log(
+        `::warning title=Gem PR Review::${escapeWorkflowCommandData(
+          `${lensExecution.failedCount} of ${lensExecution.totalCount} review lens(es) failed to execute: ${failedLensList}`
+        )}`
+      );
+    }
 
     if (!overallSuccess) {
       if (!qualityGate.passed) {
@@ -594,9 +625,13 @@ export async function runCiAction(options = {}, env = process.env, io = console)
       if (!documentationConsistencyPassed) {
         io.error('❌ Documentation consistency check failed.');
       }
+      if (!lensExecutionPassed) {
+        io.error('❌ Review lens execution failed: no lens produced a review.');
+      }
       return {
         exitCode: 1,
         qualityGate,
+        lensExecution,
         reviewResult,
         verificationResult,
         documentationConsistency,
@@ -608,6 +643,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
     return {
       exitCode: 0,
       qualityGate,
+      lensExecution,
       reviewResult,
       verificationResult,
       documentationConsistency,
@@ -620,6 +656,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
     const errorMsg = `CI Review execution failed: ${err.message}`;
     io.error(`\n❌ ${errorMsg}`);
+    io.log(`::error title=Gem PR Review::${escapeWorkflowCommandData(errorMsg)}`);
     writeGitHubStepOutputs(
       {
         verdict: 'FAIL',

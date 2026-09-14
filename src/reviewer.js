@@ -1321,6 +1321,7 @@ export async function runReview({
     const gLine = formatGuidelinesSummaryLine(activeGuidelines);
     const guidelinesLine = gLine ? `${gLine}\n` : '';
     const allSubagentsFailed = plan.length > 0 && subagentErrors.length >= plan.length;
+    const lensFailureMessage = ({ error }) => error?.sanitizedMessage || 'Lens execution failed';
     let summary;
     if (allSubagentsFailed) {
       summary = `## PR Review Summary (gem-pr-review v${PLUGIN_VERSION}, Mode: \`${modeLabel}\`)
@@ -1330,7 +1331,7 @@ export async function runReview({
 - **Status**: ❌ **Execution Failed**
 ${guidelinesLine}${isLarge ? `- **Diff Transport**: 📦 File-backed transport active (${(diffTransport.byteSize / 1024).toFixed(1)} KB exceeds 200 KB threshold)\n` : ''}
 > ⚠️ **All specialist review subagents encountered execution errors during analysis.**
-${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${e.error}`).join('\n')}
+${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${lensFailureMessage(e)}`).join('\n')}
 
 Review was aborted and cannot approve the PR.`;
     } else {
@@ -1343,7 +1344,7 @@ ${guidelinesLine}${isLarge ? `- **Diff Transport**: 📦 File-backed transport a
 ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified across all evaluated lenses.**' : 'Findings have been analyzed and anchored to unified diff hunks below.'}`;
 
       if (subagentErrors.length > 0) {
-        summary += `\n\n> ⚠️ **Partial Execution Errors Encountered**:\n${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${e.error}`).join('\n')}`;
+        summary += `\n\n> ⚠️ **Partial Execution Errors Encountered**:\n${subagentErrors.map((e) => `- **${roleNameById.get(e.lensId) || e.lensId}**: ${lensFailureMessage(e)}`).join('\n')}`;
       }
     }
 
@@ -1422,8 +1423,16 @@ ${deduplicated.length === 0 ? '✅ **No defects or blocking issues identified ac
 
     if (publish && !dryRun) {
       if (allSubagentsFailed) {
+        const failureCauses = [
+          ...new Set(
+            subagentErrors
+              .map(lensFailureMessage)
+              .filter((message) => message !== 'Lens execution failed')
+          ),
+        ];
+        const causeSummary = failureCauses.length > 0 ? ` Causes: ${failureCauses.join('; ')}` : '';
         throw new Error(
-          `Cannot publish review: All ${plan.length} specialist review subagent(s) failed with execution errors.`
+          `Cannot publish review: All ${plan.length} specialist review subagent(s) failed with execution errors.${causeSummary}`
         );
       }
 

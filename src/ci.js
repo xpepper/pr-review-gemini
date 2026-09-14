@@ -360,6 +360,30 @@ export function evaluateCiQualityGate(findings = [], options = {}) {
 }
 
 /**
+ * Classifies how completely the planned review lenses executed.
+ *
+ * A lens that errored produced no findings, so a zero-finding review whose
+ * lenses all failed must not be read as a clean pass.
+ *
+ * @param {object} [reviewResult={}]
+ * @param {Array<{lensId: string}>} [reviewResult.subagentPlan]
+ * @param {Array<{lensId: string}>} [reviewResult.errors]
+ * @returns {{ status: 'ok'|'partial'|'failed', totalCount: number, failedCount: number, failedLenses: string[] }}
+ */
+export function evaluateLensExecution(reviewResult = {}) {
+  const totalCount = Array.isArray(reviewResult.subagentPlan) ? reviewResult.subagentPlan.length : 0;
+  const failedLenses = Array.isArray(reviewResult.errors) ? reviewResult.errors.map((e) => e.lensId) : [];
+  const failedCount = failedLenses.length;
+
+  let status = 'ok';
+  if (failedCount > 0) {
+    status = failedCount >= totalCount ? 'failed' : 'partial';
+  }
+
+  return { status, totalCount, failedCount, failedLenses };
+}
+
+/**
  * Writes outputs to GITHUB_OUTPUT file adhering to GitHub Actions multiline syntax.
  *
  * @param {Record<string, any>} outputs
@@ -400,6 +424,7 @@ export function writeGitHubStepOutputs(outputs = {}, options = {}) {
  * @param {object} params.ciEnv
  * @param {object} [params.verificationResult]
  * @param {object} [params.documentationConsistency]
+ * @param {object} [params.lensExecution] - Result of evaluateLensExecution
  * @returns {string}
  */
 export function formatCiSummary({
@@ -408,13 +433,17 @@ export function formatCiSummary({
   ciEnv,
   verificationResult = null,
   documentationConsistency = null,
+  lensExecution = null,
 }) {
   const vPassed = isVerificationPassed(verificationResult);
   const documentationConsistencyPassed = documentationConsistency?.status !== 'failed';
-  const isPass = qualityGateResult.passed && vPassed && documentationConsistencyPassed;
+  const lensExecutionPassed = lensExecution?.status !== 'failed';
+  const isPass = qualityGateResult.passed && vPassed && documentationConsistencyPassed && lensExecutionPassed;
   let banner;
   if (isPass) {
     banner = '✅ AI Code Review Passed';
+  } else if (!lensExecutionPassed) {
+    banner = '❌ AI Code Review Lenses Failed to Execute';
   } else if (!documentationConsistencyPassed && qualityGateResult.passed && vPassed) {
     banner = '❌ Documentation Consistency Check Failed';
   } else if (!qualityGateResult.passed && !vPassed) {
@@ -438,6 +467,11 @@ export function formatCiSummary({
   }
   if (documentationConsistency) {
     lines.push(`- **Documentation Consistency Check**: \`${documentationConsistency.status.toUpperCase()}\``);
+  }
+  if (lensExecution && lensExecution.status !== 'ok') {
+    lines.push(
+      `- **Lens Execution**: \`${lensExecution.status.toUpperCase()}\` (${lensExecution.failedCount} of ${lensExecution.totalCount} lenses failed)`
+    );
   }
   lines.push('');
 
@@ -953,6 +987,8 @@ export function isVerificationPassed(verificationResult) {
  * @param {object} [params.qualityGateResult={}]
  * @param {object} [params.ciEnv={}]
  * @param {object} [params.verificationResult]
+ * @param {object} [params.diagnostics]
+ * @param {object} [params.lensExecution] - Result of evaluateLensExecution
  * @returns {string}
  */
 export function formatCompletionReply({
@@ -960,10 +996,12 @@ export function formatCompletionReply({
   ciEnv = {},
   verificationResult = null,
   diagnostics = null,
+  lensExecution = null,
 } = {}) {
   const verificationPassed = isVerificationPassed(verificationResult);
   const qualityGatePassed = qualityGateResult.passed !== false;
-  const passed = qualityGatePassed && verificationPassed;
+  const lensExecutionPassed = lensExecution?.status !== 'failed';
+  const passed = qualityGatePassed && verificationPassed && lensExecutionPassed;
   const icon = passed ? '✅' : '❌';
   const verdict = passed ? (qualityGateResult.verdict || 'PASS') : 'FAIL';
   const findings = qualityGateResult.totalFindings ?? 0;
@@ -985,6 +1023,8 @@ export function formatCompletionReply({
 
   const reason = passed
     ? 'Passed'
+    : !lensExecutionPassed
+    ? 'Review lenses failed to execute'
     : !qualityGatePassed
     ? 'Failed quality gate'
     : 'Failed verification';

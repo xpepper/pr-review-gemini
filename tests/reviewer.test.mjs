@@ -2093,6 +2093,30 @@ index 1111111..2222222 100644
       );
     });
 
+    it('does not expose unmarked lens errors in the review summary', async () => {
+      const diffText = `diff --git a/src/index.js b/src/index.js
+index 1111111..2222222 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1 +1 @@
+-const a = 1;
++const a = 2;
+`;
+
+      const result = await runReview({
+        prNumber: 315,
+        diffText,
+        mode: 'quick',
+        runnerFn: async () => {
+          throw new Error('raw provider failure containing untrusted prompt content');
+        },
+        dryRun: true,
+      });
+
+      assert.match(result.summary, /Lens execution failed/);
+      assert.doesNotMatch(result.summary, /raw provider failure containing untrusted prompt content/);
+    });
+
     it('evaluates active review threads and includes thread resolution in review summary (Increment 20)', async () => {
       const diffText = `diff --git a/src/auth.js b/src/auth.js
 index 1111111..2222222 100644

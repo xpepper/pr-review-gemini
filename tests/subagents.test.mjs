@@ -1009,6 +1009,85 @@ Thinking: Analyzing diff for security vulnerabilities...
       assert.ok(createdSessionOptions);
       assert.deepEqual(createdSessionOptions.tools, dummyTools);
     });
+
+    it('invokes the copilot CLI with the prompt and model when no SDK is configured', async () => {
+      const calls = [];
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async (command, args) => {
+          calls.push({ command, args });
+          return { stdout: 'review output' };
+        },
+      });
+
+      const output = await runner({ prompt: 'Review this diff', model: 'gpt-4o' });
+
+      assert.equal(output, 'review output');
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].command, 'copilot');
+      assert.deepEqual(calls[0].args, ['-s', '-p', 'Review this diff', '--no-color', '--model', 'gpt-4o']);
+    });
+
+    it('rejects when the copilot CLI cannot be executed instead of reporting an empty review', async () => {
+      const spawnError = Object.assign(new Error('spawn copilot ENOENT'), { code: 'ENOENT' });
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async () => {
+          throw spawnError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt: 'Review this diff', model: 'gpt-4o' }),
+        /Copilot CLI execution failed: spawn copilot ENOENT/
+      );
+    });
+
+    it('does not echo the prompt or multi-line stderr when the copilot CLI exits with an error', async () => {
+      const prompt = 'Review this diff\n::error title=Injected::from the diff';
+      const exitError = Object.assign(
+        new Error(`Command failed: copilot -s -p ${prompt} --no-color\nfirst stderr line\nrate limit exceeded`),
+        { code: 1, signal: null, stderr: 'first stderr line\nrate limit exceeded\n' }
+      );
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async () => {
+          throw exitError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt, model: 'gpt-4o' }),
+        (err) => {
+          assert.equal(err.message, 'Copilot CLI execution failed: exit code 1: rate limit exceeded');
+          assert.equal(err.sanitizedMessage, err.message);
+          assert.equal(err.cause, exitError);
+          return true;
+        }
+      );
+    });
+
+    it('strips terminal escapes and control characters from the reported stderr line', async () => {
+      const exitError = Object.assign(new Error('Command failed: copilot -s -p prompt'), {
+        code: 2,
+        signal: null,
+        stderr: '\u001b[31mquota\u0007 exceeded\u001b[0m\n',
+      });
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        execFileFn: async () => {
+          throw exitError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt: 'prompt', model: 'gpt-4o' }),
+        (err) => {
+          assert.equal(err.message, 'Copilot CLI execution failed: exit code 2: quota exceeded');
+          return true;
+        }
+      );
+    });
   });
 
   describe('buildSdkReaderTools & Host-Supervised Tools', () => {
