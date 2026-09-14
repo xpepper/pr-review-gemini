@@ -97,8 +97,8 @@ Most knobs are shared across shapes; the exceptions are noted inline:
 - **Model resilience:** automatic catalog fallback when a model is
   unavailable.
 
-Full flag tables per shape: [plugin](docs/plugin.md),
-[Action](docs/github-action.md), [CLI](docs/cli.md).
+Per-shape details: [plugin](docs/plugin.md), [Action inputs](docs/github-action.md),
+[CLI flags](docs/cli.md).
 
 ## Safety model
 
