@@ -1788,6 +1788,28 @@ index 1111111..2222222 100644
         'emits a warning annotation for partial lens failure'
       );
     });
+
+    it('emits an error annotation when publishing aborts because every lens failed', async () => {
+      const { lines, io } = capturingIo();
+
+      const result = await runCiAction({
+        prNumber: 45,
+        action: 'publish',
+        mock: true,
+        diffText: codeDiff,
+        runnerFn: async () => {
+          throw new Error('Copilot CLI execution failed: spawn copilot ENOENT');
+        },
+      }, {}, io);
+
+      assert.equal(result.exitCode, 1);
+      assert.ok(
+        lines.some((l) =>
+          /^::error title=Gem PR Review::CI Review execution failed: Cannot publish review: All \d+ specialist review subagent\(s\) failed/.test(l)
+        ),
+        'emits an error annotation when the review aborts'
+      );
+    });
   });
 });
 

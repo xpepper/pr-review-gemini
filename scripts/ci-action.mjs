@@ -654,6 +654,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
 
     const errorMsg = `CI Review execution failed: ${err.message}`;
     io.error(`\n❌ ${errorMsg}`);
+    io.log(`::error title=Gem PR Review::${escapeWorkflowCommandData(errorMsg)}`);
     writeGitHubStepOutputs(
       {
         verdict: 'FAIL',
