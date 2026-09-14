@@ -394,6 +394,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /only some lenses fail[\s\S]{0,200}warning annotation/i, 'Action reference should document partial lens failure warnings');
   });
 
+  it('documents hosted-runner Copilot CLI authentication and fork behavior', () => {
+    const content = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(content, /COPILOT_TOKEN[\s\S]{0,200}Copilot Requests/i);
+    assert.match(content, /COPILOT_GITHUB_TOKEN/);
+    assert.match(content, /secrets are not passed[\s\S]{0,200}forks/i);
+    assert.match(content, /forks[\s\S]{0,200}fail closed/i);
+  });
+
   it('documents COPILOT_CLI_PATH and COPILOT_SDK_PATH independently in the plugin reference', () => {
     const content = fs.readFileSync(path.resolve('docs/plugin.md'), 'utf8');
     assert.match(content, /`COPILOT_CLI_PATH`[\s\S]{0,80}specific Copilot CLI binary/, 'plugin.md should state COPILOT_CLI_PATH alone selects the CLI binary');

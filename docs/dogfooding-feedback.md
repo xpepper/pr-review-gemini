@@ -293,3 +293,55 @@ Merge #60 and use `COPILOT_CLI_PATH` when provisioning the hosted runner.
 
 **Evidence:** 891 tests across 161 suites passed after the rebase; hosted run
 `34890571858` failed closed as expected because provisioning is not yet wired.
+
+## 2026-09-14 — PR #62 hosted Copilot CLI provisioning
+
+### PR / context
+
+- **PR:** [#62](https://github.com/xpepper/pr-review-gemini/pull/62)
+- **Reviews:** real hosted incremental reviews plus `npm run dogfood:pr 62`
+  balanced local dry-run.
+
+### What Gem PR Review did
+
+The first provisioned hosted run proved that all five lenses executed, then
+reported a P0 token-exposure defect because the local composite action was
+running from the pull-request checkout. Later rounds reported missing fork-auth
+prevalidation, incorrect issue-comment base checkout, a mutable base-ref race,
+and several duplication and runtime assumptions.
+
+### What was useful
+
+- The P0 was valid. The workflow now resolves and checks out the trusted base
+  before giving the composite action the Copilot token.
+- The fork-auth finding led to an explicit early fail-closed precondition; this
+  preserves the owner's decision not to skip fork runs.
+- The issue-comment finding from both hosted and local dogfood was valid. The
+  workflow queries the PR base for comment events instead of assuming the
+  default branch.
+- The mutable-ref P2 was valid. Both event paths now check out the immutable
+  base commit SHA.
+
+### What was incorrect, missing, noisy, or confusing
+
+- The Docker-runtime P1 was false: `action.yml` is a composite action, and the
+  hosted run itself proved the runner-installed CLI was available.
+- The invalid-token P2 proposed `copilot auth status`, which is not in the
+  official command reference. A bad token still fails closed during real lens
+  execution; the early guard intentionally checks secret availability.
+- The repeated bootstrap/docs findings are maintenance advisories. Keeping the
+  complete reference workflow executable and matching the live workflow is
+  intentional and pinned by tests.
+
+### Recommended follow-up
+
+Merge #62. Keep the pinned Copilot CLI version current in both the live workflow
+and documented template.
+
+**Priority:** now
+
+**Evidence:** runs `34892385230`, `34892736130`, `34893065161`, and
+`34894095418` exercised real lenses and drove the fixes. Final run
+`34894342377` installed and authenticated Copilot CLI, executed all five lenses
+with no execution errors, and passed the P1 gate with a genuine zero-finding
+summary. The full suite passes 892 tests across 161 suites.

@@ -1888,7 +1888,18 @@ index 1111111..2222222 100644
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-review['"]\)/);
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
       assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
+      assert.match(content, /uses:\s*actions\/github-script@v8/);
+      assert.match(content, /context\.payload\.pull_request\.base\.sha/);
+      assert.match(content, /github\.rest\.pulls\.get/);
+      assert.match(content, /return pull\.base\.sha/);
       assert.match(content, /uses:\s*actions\/checkout@v7/);
+      assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
+      assert.match(content, /uses:\s*actions\/setup-node@v6/);
+      assert.match(content, /node-version:\s*['"]22['"]/);
+      assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
+      assert.match(content, /COPILOT_GITHUB_TOKEN:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+      assert.match(content, /if \[ -z "\$COPILOT_GITHUB_TOKEN" \]/);
+      assert.match(content, /::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed\./);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
