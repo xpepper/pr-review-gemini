@@ -1889,6 +1889,7 @@ index 1111111..2222222 100644
       assert.match(content, /contains\(github\.event\.comment\.body,\s*['"]\/gem-pr-review['"]\)/);
       assert.doesNotMatch(content, /gh pr checkout/, 'Must not check out untrusted PR head to avoid pwn request vulnerability');
       assert.match(content, /uses:\s*actions\/checkout@v7/);
+      assert.match(content, /ref:\s*\${{\s*github\.event\.pull_request\.base\.ref\s*\|\|\s*github\.event\.repository\.default_branch\s*}}/);
       assert.match(content, /uses:\s*actions\/setup-node@v6/);
       assert.match(content, /node-version:\s*['"]22['"]/);
       assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
