@@ -104,6 +104,11 @@ See GitHub's official documentation for
 [installation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 and [authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli).
 
+This required input is the intentional breaking Action-contract change for
+`v1.0.0`. Workflows pinned to `v0.4.0` that configured only an Action-step
+`COPILOT_GITHUB_TOKEN` must migrate by passing the same repository secret as
+`copilot_token` when updating to `v1.0.0`.
+
 Repository secrets are not passed to `pull_request` workflows triggered from
 forks. By owner decision, those runs remain enabled and fail closed at an
 explicit authentication precondition before installation or review rather than

@@ -5,8 +5,9 @@
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
 * **`main`**: PR #62 is merged at `559c42e`, preserving immutable trusted-base
   checkout while provisioning the hosted runner for real Copilot lenses.
-* **Release**: `v0.4.0` remains the latest tag and published GitHub Release; all
-  four manifests are synchronized at `0.4.0`.
+* **Release**: `v0.4.0` remains the latest published tag. PR #64 bumps all four
+  manifests to `1.0.0` because its required `copilot_token` input intentionally
+  breaks the prior Action environment-only contract; the tag is not published.
 * **Test Suite**: `npm test` green — 893 tests across 161 suites, 0 failures.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
@@ -28,10 +29,10 @@
 
 ## Next Actions
 
-1. Review and merge PR #64, then publish the next release and replace the
-   temporary commit-pinned documentation references with its immutable tag.
-2. Treat the required `copilot_token` input as part of the next release's
-   migration notes; `v0.4.0` workflows that supplied only an Action-step
+1. Review and merge PR #64, then publish `v1.0.0` and replace the temporary
+   commit-pinned documentation references with that immutable tag.
+2. Include the required `copilot_token` migration in the release notes;
+   `v0.4.0` workflows that supplied only an Action-step
    `COPILOT_GITHUB_TOKEN` must update.
 3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.

@@ -403,6 +403,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /@github\/copilot@1\.0\.83/);
     assert.match(content, /COPILOT_TOKEN[\s\S]{0,200}Copilot Requests/i);
     assert.match(content, /`copilot_token` input/);
+    assert.match(content, /breaking Action-contract change[\s\S]{0,100}`v1\.0\.0`/i);
     assert.match(content, /COPILOT_GITHUB_TOKEN/);
     assert.match(content, /docs\.github\.com\/en\/copilot\/how-tos\/copilot-cli\/set-up-copilot-cli\/install-copilot-cli/);
     assert.match(content, /docs\.github\.com\/en\/copilot\/how-tos\/copilot-cli\/set-up-copilot-cli\/authenticate-copilot-cli/);

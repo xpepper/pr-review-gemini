@@ -393,13 +393,14 @@ The local dogfood run reported one P1 and one P2.
 - The repeated ambient-state finding was valid. An explicit opt-in still left
   credential resolution dependent on caller environment scope, so the fallback
   was removed. The new contract requires `copilot_token`; no caller ambient
-  token can satisfy the guard.
+  token can satisfy the guard. Because that breaks the `v0.4.0` Action contract,
+  all manifests were bumped to `1.0.0` and the migration is documented.
 
 ### Recommended follow-up
 
 Merge #64, publish the next immutable release, update the temporary
-commit-pinned examples to that tag, and call out the required `copilot_token`
-input in the release migration notes.
+commit-pinned examples to the `v1.0.0` tag, and call out the required
+`copilot_token` input in the release migration notes.
 
 **Priority:** now
 
