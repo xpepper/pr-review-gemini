@@ -1,5 +1,13 @@
 # Plugin-First Documentation Implementation Plan
 
+> **Status: COMPLETED 2026-09-14 — archival record, do not execute.**
+> All 7 tasks were executed and reviewed; the work is in PR
+> [#51](https://github.com/xpepper/pr-review-gemini/pull/51) on branch
+> `docs/plugin-first-docs`. Note: the marketplace repository
+> `xpepper/copilot-plugins` NOW EXISTS (created by the owner in parallel
+> during Task 5 and verified live), superseding the plan's assumption that it
+> must be created. Current state lives in `HANDOFF.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the README lead with the tool's Agent Plugins 1.0 plugin identity (with the GitHub Action as an equal, complementary shape), add a deep plugin reference, and publish a verified Copilot CLI marketplace entry in `xpepper/copilot-plugins`.
