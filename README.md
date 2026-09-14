@@ -77,7 +77,7 @@ comment trigger and concurrency controls, see the complete
 
 ## Driving a review
 
-The same knobs are available in every shape:
+Most knobs are shared across shapes; the exceptions are noted inline:
 
 - **Modes:** `quick` (3 lenses), `balanced` (default, 5), `full` (6), `deep`
   (high-reasoning correctness focus); `--incremental` re-reviews only new
@@ -86,10 +86,10 @@ The same knobs are available in every shape:
   review — optionally publishing cached findings without re-running inference.
 - **Finding selection:** publish all, filter by severity or index
   (`--select p0,p1`), or choose interactively.
-- **Thread lifecycle:** verify and resolve addressed review threads
-  (`--resolve`).
-- **Architecture walkthroughs:** Mermaid sequence and component diagrams
-  (`--architecture`).
+- **Thread lifecycle** (plugin and CLI, not an Action input): verify and
+  resolve addressed review threads (`--resolve`).
+- **Architecture walkthroughs** (plugin and CLI, not an Action input):
+  Mermaid sequence and component diagrams (`--architecture`).
 - **Custom reviewer roles:** per-repository or per-user role definitions with
   per-role model and reasoning effort.
 - **Repository guidelines:** `.github/gem-pr-review.md` conventions applied to
