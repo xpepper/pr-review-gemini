@@ -46,8 +46,18 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
 
+      - name: Set up Node.js for Copilot CLI
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install GitHub Copilot CLI
+        run: npm install --global @github/copilot@1.0.83
+
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@v0.4.0
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
@@ -63,6 +73,25 @@ matching comments to the Action using a substring check; command parsing and
 authorization happen inside the Action. Before it performs review work, the
 Action host-gates the commenter to an `OWNER`, `MEMBER`, or `COLLABORATOR`,
 unless the commenter is explicitly allowlisted.
+
+## Copilot CLI provisioning and authentication
+
+The workflow follows GitHub's documented npm installation path, using its
+required Node.js 22 runtime and pinning the currently verified package release,
+then discovers the resulting `copilot` binary through `PATH`. For
+non-interactive CI authentication, create the `COPILOT_TOKEN` repository secret
+as a user-owned fine-grained personal access token with the **Copilot Requests**
+account permission. The workflow maps that secret to `COPILOT_GITHUB_TOKEN`,
+which has precedence over `GH_TOKEN` and `GITHUB_TOKEN`. Classic personal access
+tokens are not supported.
+
+See GitHub's official documentation for
+[installation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
+and [authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli).
+
+Repository secrets are not passed to `pull_request` workflows triggered from
+forks. By owner decision, those runs remain enabled and fail closed rather than
+reporting an unreviewed success.
 
 ## Inputs
 
@@ -116,8 +145,9 @@ defects; branch protection can then require that check before merging.
 ## Lens execution failures
 
 Review lenses run through the Copilot CLI, which must be installed and able to
-authenticate on the runner; the `ubuntu-latest` hosted runner does not include
-it. If every review lens fails to execute (for example `spawn copilot ENOENT`),
+authenticate on the runner. The starter workflow provisions it because the
+`ubuntu-latest` image does not include it. If every review lens fails to execute
+(for example `spawn copilot ENOENT`),
 no review was performed, so the Action fails the job with verdict `FAIL` and an
 error annotation instead of reporting zero findings. This applies to `dry-run`
 as well as `publish`. When only some lenses fail, the review summary lists them

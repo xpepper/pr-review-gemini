@@ -30,8 +30,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Set up Node.js for Copilot CLI
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install GitHub Copilot CLI
+        run: npm install --global @github/copilot@1.0.83
+
       - name: Run Gem PR Review
         uses: ./
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
