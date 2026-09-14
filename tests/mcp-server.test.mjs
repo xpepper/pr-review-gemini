@@ -362,6 +362,89 @@ index 1111111..2222222 100644
       assert.deepEqual(publishCachedCalledWith.selectedIndices, [0]);
     });
 
+    it('requires expectedHeadSha on gem_pr_review_publish and pr_review_publish', async () => {
+      let publishCalled = false;
+      const handler = createMcpHandler({
+        publishReviewFn: async () => {
+          publishCalled = true;
+          return { published: true };
+        },
+      });
+
+      const missing = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 210,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_publish',
+          arguments: { prNumber: 42, findings: [] },
+        },
+      });
+      assert.equal(missing.id, 210);
+      assert.equal(missing.result?.isError, true);
+      assert.match(missing.result.content[0].text, /expectedHeadSha is required/i);
+
+      const blank = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 211,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_publish',
+          arguments: { prNumber: 42, findings: [], expectedHeadSha: '   ' },
+        },
+      });
+      assert.equal(blank.result?.isError, true);
+      assert.match(blank.result.content[0].text, /expectedHeadSha is required/i);
+
+      assert.equal(publishCalled, false, 'publishReviewFn must not run without expectedHeadSha');
+    });
+
+    it('requires expectedHeadSha on gem_pr_review_publish_cached', async () => {
+      let publishCachedCalled = false;
+      const handler = createMcpHandler({
+        publishCachedReviewFn: async () => {
+          publishCachedCalled = true;
+          return { published: true };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 212,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_publish_cached',
+          arguments: { prNumber: 77 },
+        },
+      });
+
+      assert.equal(response.id, 212);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /expectedHeadSha is required/i);
+      assert.equal(publishCachedCalled, false, 'publishCachedReviewFn must not run without expectedHeadSha');
+    });
+
+    it('marks expectedHeadSha as required in publish tool schemas', async () => {
+      const handler = createMcpHandler();
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 213,
+        method: 'tools/list',
+      });
+
+      const publishTool = response.result.tools.find((t) => t.name === 'gem_pr_review_publish');
+      assert.ok(
+        publishTool.inputSchema.required.includes('expectedHeadSha'),
+        'gem_pr_review_publish schema must require expectedHeadSha'
+      );
+
+      const publishCachedTool = response.result.tools.find((t) => t.name === 'gem_pr_review_publish_cached');
+      assert.ok(
+        publishCachedTool.inputSchema.required.includes('expectedHeadSha'),
+        'gem_pr_review_publish_cached schema must require expectedHeadSha'
+      );
+    });
+
     it('handles tools/call for gem_self_review and returns fail-closed result', async () => {
       let runSelfReviewArgs = null;
       const handler = createMcpHandler({

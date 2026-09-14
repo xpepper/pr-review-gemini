@@ -276,11 +276,13 @@ To avoid shell escape errors, rate-limiting, and broken markdown formatting (e.g
 
 ### 1. Primary Method: MCP Tool or CLI Runner (Recommended)
 - **Via MCP Server Tool**:
-  If the `gem_pr_review_publish` (or `pr_review_publish`) tool is available, invoke it directly with structured JSON:
+  If the `gem_pr_review_publish` (or `pr_review_publish`) tool is available, invoke it directly with structured JSON.
+  `expectedHeadSha` is required: pass the current PR head SHA (from the diff fetch step) so the host rejects stale reviews:
   ```json
   {
     "prNumber": 123,
     "findings": [...],
+    "expectedHeadSha": "abcdef1234567890",
     "reviewBody": "### 🟡 Changes recommended\n\nSummary text..."
   }
   ```
