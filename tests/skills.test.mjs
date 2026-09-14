@@ -198,6 +198,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /\/gem-pr-review /, 'Plugin reference should document skill invocation');
     assert.match(content, /gem_pr_review_subagents/, 'Plugin reference should document MCP tools');
     assert.match(content, /marketplace add xpepper\/copilot-plugins/, 'Plugin reference should document marketplace install');
+    assert.match(content, /copilot plugin install gem-pr-review@xpepper-copilot-plugins/, 'Plugin reference should document the marketplace install command');
   });
 
   it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {
