@@ -386,9 +386,8 @@ export async function runVerification({
           `Head SHA mismatch for PR #${prNumber}: expected ${targetHeadSha}, but PR head is ${currentHeadSha}. PR has been updated; rerun verification.`
         );
       }
-      targetHeadSha = currentHeadSha;
     }
-    targetHeadSha = targetHeadSha || currentHeadSha;
+    targetHeadSha = currentHeadSha;
   }
 
   if (!targetHeadSha) {
