@@ -97,10 +97,9 @@ runs:
         GITHUB_TOKEN: ''
       run: |
         set -euo pipefail
-        echo "GEM_PR_REVIEW_COPILOT_ROOT=" >> "$GITHUB_ENV"
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
         : > "$install_root/.gem-pr-review-copilot-owned"
-        echo "GEM_PR_REVIEW_COPILOT_ROOT=$install_root" >> "$GITHUB_ENV"
+        echo "install_root=$install_root" >> "$GITHUB_OUTPUT"
         cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
         cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
         npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
@@ -128,9 +127,11 @@ runs:
     - name: Clean up GitHub Copilot CLI
       if: ${{ always() && steps.install_copilot.outcome != 'skipped' }}
       shell: bash
+      env:
+        COPILOT_INSTALL_ROOT: ${{ steps.install_copilot.outputs.install_root }}
       run: |
         set -euo pipefail
-        cleanup_root="${GEM_PR_REVIEW_COPILOT_ROOT:-}"
+        cleanup_root="${COPILOT_INSTALL_ROOT:-}"
         if [ -z "$cleanup_root" ]; then
           exit 0
         fi

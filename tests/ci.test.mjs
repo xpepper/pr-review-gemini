@@ -614,13 +614,14 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
       assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
       assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
-      assert.match(content.slice(installStep, reviewStep), /echo "GEM_PR_REVIEW_COPILOT_ROOT=\$install_root" >> "\$GITHUB_ENV"/);
+      assert.match(content.slice(installStep, reviewStep), /echo "install_root=\$install_root" >> "\$GITHUB_OUTPUT"/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
       assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
-      assert.match(content.slice(cleanupStep), /cleanup_root="\$\{GEM_PR_REVIEW_COPILOT_ROOT:-\}"/);
+      assert.match(content.slice(cleanupStep), /COPILOT_INSTALL_ROOT:\s*\$\{\{\s*steps\.install_copilot\.outputs\.install_root\s*\}\}/);
+      assert.match(content.slice(cleanupStep), /cleanup_root="\$\{COPILOT_INSTALL_ROOT:-\}"/);
       assert.match(content.slice(cleanupStep), /canonical_root=.*pwd -P/);
       assert.match(content.slice(cleanupStep), /dirname "\$canonical_root"/);
       assert.match(content.slice(cleanupStep), /gem-pr-review-copilot\.\*/);
