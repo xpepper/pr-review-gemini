@@ -48,8 +48,41 @@ jobs:
         with:
           ref: ${{ steps.base.outputs.result }}
 
+      - name: Detect trusted-base Action contract
+        id: action-contract
+        shell: bash
+        run: |
+          if grep -Eq '^  copilot_token:' action.yml; then
+            echo "legacy_bootstrap=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "legacy_bootstrap=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require legacy Copilot authentication
+        if: steps.action-contract.outputs.legacy_bootstrap == 'true'
+        shell: bash
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+        run: |
+          if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+            echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
+            exit 1
+          fi
+
+      - name: Set up Node.js for legacy base Action
+        if: steps.action-contract.outputs.legacy_bootstrap == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install GitHub Copilot CLI for legacy base Action
+        if: steps.action-contract.outputs.legacy_bootstrap == 'true'
+        run: npm install --global @github/copilot@1.0.83
+
       - name: Run Gem PR Review
         uses: ./
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ steps.action-contract.outputs.legacy_bootstrap == 'true' && secrets.COPILOT_TOKEN || '' }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           copilot_token: ${{ secrets.COPILOT_TOKEN }}

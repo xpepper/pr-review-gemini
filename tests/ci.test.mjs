@@ -1919,10 +1919,13 @@ index 1111111..2222222 100644
       assert.match(content, /return pull\.base\.sha/);
       assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
-      assert.doesNotMatch(content, /uses:\s*actions\/setup-node@v6/, 'The composite Action must own Node setup');
-      assert.doesNotMatch(content, /npm install --global @github\/copilot/, 'The composite Action must own CLI installation');
+      assert.match(content, /id:\s*action-contract/);
+      assert.match(content, /legacy_bootstrap=true/);
+      assert.match(content, /uses:\s*actions\/setup-node@v6/);
+      assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
+      assert.match(content, /if:\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'true'/);
       assert.match(content, /copilot_token:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
-      assert.doesNotMatch(content, /COPILOT_GITHUB_TOKEN/, 'The workflow must not expose the credential outside the Action');
+      assert.match(content, /COPILOT_GITHUB_TOKEN:\s*\${{\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'true' && secrets\.COPILOT_TOKEN \|\| ''\s*}}/);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
