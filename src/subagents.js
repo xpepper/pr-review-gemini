@@ -842,7 +842,10 @@ export async function createSubagentRunner(options = {}) {
       return stdout;
     } catch (err) {
       // Fail closed: an empty string would be parsed as a clean lens with zero findings.
-      throw new Error(`Copilot CLI execution failed: ${describeCliFailure(err)}`, { cause: err });
+      const message = `Copilot CLI execution failed: ${describeCliFailure(err)}`;
+      const cliError = new Error(message, { cause: err });
+      cliError.sanitizedMessage = message;
+      throw cliError;
     }
   };
 }

@@ -1060,6 +1060,7 @@ Thinking: Analyzing diff for security vulnerabilities...
         () => runner({ prompt, model: 'gpt-4o' }),
         (err) => {
           assert.equal(err.message, 'Copilot CLI execution failed: exit code 1: rate limit exceeded');
+          assert.equal(err.sanitizedMessage, err.message);
           assert.equal(err.cause, exitError);
           return true;
         }

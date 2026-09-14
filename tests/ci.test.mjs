@@ -1797,18 +1797,30 @@ index 1111111..2222222 100644
         action: 'publish',
         mock: true,
         diffText: codeDiff,
-        runnerFn: async () => {
-          throw new Error('Copilot CLI execution failed: spawn copilot ENOENT');
+        runnerFn: async ({ lens }) => {
+          if (lens?.id === 'security') {
+            throw new Error('raw provider failure containing untrusted prompt content');
+          }
+          const error = new Error('Copilot CLI execution failed: spawn copilot ENOENT');
+          error.sanitizedMessage = error.message;
+          throw error;
         },
       }, {}, io);
 
       assert.equal(result.exitCode, 1);
       assert.ok(
         lines.some((l) =>
-          /^::error title=Gem PR Review::CI Review execution failed: Cannot publish review: All \d+ specialist review subagent\(s\) failed/.test(l)
+          /❌ CI Review execution failed: Cannot publish review: All \d+ specialist review subagent\(s\) failed.*spawn copilot ENOENT/s.test(l)
         ),
-        'emits an error annotation when the review aborts'
+        'logs the sanitized lens failure cause when publishing aborts'
       );
+      assert.ok(
+        lines.some((l) =>
+          /^::error title=Gem PR Review::CI Review execution failed: Cannot publish review: All \d+ specialist review subagent\(s\) failed.*spawn copilot ENOENT/.test(l)
+        ),
+        'includes the sanitized lens failure cause in the error annotation'
+      );
+      assert.doesNotMatch(lines.join('\n'), /raw provider failure containing untrusted prompt content/);
     });
 
     it('does not write a passing step summary when every lens fails to execute', async () => {
