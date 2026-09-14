@@ -281,6 +281,21 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /machine paths/i, 'Should document machine path redaction');
   });
 
+  it('documents verification and gated approval in the focused verification reference', () => {
+    const verificationPath = path.resolve('docs/verification.md');
+    assert.ok(fs.existsSync(verificationPath), 'docs/verification.md must exist');
+    const content = fs.readFileSync(verificationPath, 'utf8');
+    assert.match(content, /`test`/, 'Should document the test profile');
+    assert.match(content, /`build`/, 'Should document the build profile');
+    assert.match(content, /`lint`/, 'Should document the lint profile');
+    assert.match(content, /verificationProfiles/, 'Should document custom profiles');
+    assert.match(content, /enableCustomCiProfiles/, 'Should document the CI opt-in');
+    assert.match(content, /fork/i, 'Should document fork fail-closed behavior');
+    assert.match(content, /approveMaxPriorityLevel/, 'Should document gated approval');
+    assert.match(content, /gem_pr_review_verify/, 'Should document the verify MCP tool');
+    assert.match(content, /--verify/, 'Should document the comment flag');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
