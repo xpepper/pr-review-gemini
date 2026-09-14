@@ -127,3 +127,46 @@ verdict or confidence presentation needs product changes.
 **Evidence:** [PR #44](https://github.com/xpepper/pr-review-gemini/pull/44),
 [merged workflow change](https://github.com/xpepper/pr-review-gemini/commit/e5bbd6c7421fc5fcd0fce5266b5faba272124738),
 and [successful `v0.3.3` tag verification](https://github.com/xpepper/pr-review-gemini/actions/runs/34752179219).
+
+### PR / context
+
+- **PR:** CI review runs for PRs #52 through #56 on GitHub-hosted runners, and
+  the local pre-commit self-review of the fix branch `fix/ci-lens-degradation`.
+- **Review:** `gem-pr-review v0.4.0` in balanced mode; CI summaries reported
+  "No defects or blocking issues identified across all evaluated lenses".
+
+### What Gem PR Review did
+
+Every CI run logged `spawn copilot ENOENT` once per lens and still passed the
+`fail_on: P1` gate with zero findings. On the fix commit, the local self-review
+passed with one P2 advisory: wrapping the CLI error would hide structured
+fields (`code`, `status`, `response`) from the retry classifiers.
+
+### What was useful
+
+The pre-commit self-review ran all five lenses locally and flagged a plausible
+contract concern on the exact changed line.
+
+### What was incorrect, missing, noisy, or confusing
+
+The CI zero-finding results were not reviews: the CLI fallback runner swallowed
+the spawn error and returned an empty string, which parsed as a clean lens, and
+the quality gate counted only findings. Validated in `src/subagents.js` and the
+run log for PR #56. The P2 advisory was validated false for the CLI path: an
+`execFile` error carries no `status` or `response`, its `code` is a process exit
+code (0 to 255) or an errno string such as `ENOENT`, none of which the
+classifiers treat as retriable, and quota text arrives through stderr inside
+the preserved message.
+
+### Recommended follow-up
+
+Implemented: the CLI runner now throws, so failed lenses are recorded as
+failures; the Action fails the job when every lens fails (including `dry-run`)
+and warns when only some fail. Provisioning the Copilot CLI on the runner stays
+a separate owner decision because it needs a Copilot-entitled secret.
+
+**Priority:** now
+
+**Evidence:** [PR #56 review run](https://github.com/xpepper/pr-review-gemini/actions/runs/34873447020)
+(five `spawn copilot ENOENT` lines followed by a passing gate) and the
+regression tests in `tests/subagents.test.mjs` and `tests/ci.test.mjs`.

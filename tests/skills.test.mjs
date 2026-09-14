@@ -386,6 +386,14 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /OWNER.*MEMBER.*COLLABORATOR/i, 'Action reference should document commenter authorization');
   });
 
+  it('documents that total lens execution failure fails the Action', () => {
+    const content = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(content, /^## Lens execution failures$/m, 'Action reference should have a lens execution failures section');
+    assert.match(content, /every review lens fails to execute[\s\S]{0,400}fails the job/i, 'Action reference should state that total lens failure fails the job');
+    assert.match(content, /dry-run/, 'Action reference should state the failure applies to dry-run');
+    assert.match(content, /only some lenses fail[\s\S]{0,200}warning annotation/i, 'Action reference should document partial lens failure warnings');
+  });
+
   it('documents repository review guidelines in SKILL.md (Increment 19)', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
