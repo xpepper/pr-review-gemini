@@ -239,6 +239,20 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /host-gated/i, 'Should document host-gated publishing');
   });
 
+  it('documents custom review roles in the focused roles reference', () => {
+    const rolesPath = path.resolve('docs/custom-roles.md');
+    assert.ok(fs.existsSync(rolesPath), 'docs/custom-roles.md must exist');
+    const content = fs.readFileSync(rolesPath, 'utf8');
+    for (const key of ['`custom_roles`', '`replace_standard_roles`', '`enabled_roles`', '`prompt`', '`reasoningEffort`', '`fallbacks`']) {
+      assert.ok(content.includes(key), `Roles reference should document ${key}`);
+    }
+    assert.match(content, /--role/, 'Should document the --role flag');
+    assert.match(content, /--replace-standard-roles/, 'Should document --replace-standard-roles');
+    assert.match(content, /\.github\/gem-pr-review\.json/, 'Should document the project config file');
+    assert.match(content, /~\/\.copilot\/gem-pr-review\.json/, 'Should document the user config file');
+    assert.match(content, /override the standard/i, 'Should document lens override by id');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
