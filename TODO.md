@@ -8,7 +8,7 @@
 
 ## Status: MVP Complete — Post-MVP Polish & Dogfooding
 
-All MVP increments (0–22) are complete. Release `v0.3.3` is published, the
+All MVP increments (0–22) are complete. Release `v0.4.0` is published, the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live, and the Action is listed in Code quality and Continuous integration.
 
@@ -49,6 +49,13 @@ is live, and the Action is listed in Code quality and Continuous integration.
     the PR's current head; re-sanitize caller-supplied `diagnostics` in the
     MCP handler. (PR #53 addressed these by documenting the actual
     opt-in/as-is behavior; the code changes are a separate increment.)
+  - Backlog (CI review degradation, validated against workflow runs for PRs
+    #52, #53, and #54): the CI Action's model lenses silently no-op on
+    GitHub-hosted runners (`spawn copilot ENOENT`, once per lens) while the
+    run still reports "0 findings across all evaluated lenses" and passes on
+    the docs-consistency path alone. Fix candidate: fail or annotate loudly
+    on lens-execution degradation, or provision the `copilot` CLI on the
+    runner.
 - [x] Add a host-controlled documentation consistency check after the verified
   PR #46 false negative: select `tests/skills.test.mjs` only for documentation
   changes, skip untrusted or PR-modified tests, and block on a selected failure.

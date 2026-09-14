@@ -3,38 +3,33 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **`main`**: PRs #52 (`b9fa42a`, post-#51 state sweep and plugin reference
-  polish) and #53 (`690ba55`, focused reference pages) are merged. PR #53's
-  dogfood review by this repository's own tool surfaced 8 findings; all were
-  validated against the code and fixed before the squash merge.
-* **Test Suite**: `npm test` green — 860 tests across 159 suites, 0 failures
-  (docs-consistency checks in `tests/skills.test.mjs` cover `README.md`,
-  `docs/plugin.md`, `docs/installation.md`, and the six reference pages).
-* **Manifests**: `npm run version:check` verified synchronized at `0.3.3`.
-* **Release**: `v0.3.3` is the latest tag; its GitHub Release is published.
-  Eight commits have landed on `main` since that tag, including the `feat(ci)`
-  PR #47, so `npm run bump auto` computes the next release as `v0.4.0`
-  (minor).
+* **`main`**: PR #54 (`546865e`, post-#53 state sweep) is merged, followed by
+  the release commit `3c636d4` (`chore(release): v0.4.0`).
+* **Release**: `v0.4.0` is tagged and its GitHub Release is published
+  (dispatch-only publish; verify job green). Minor bump — the `feat(ci)`
+  PR #47 landed since `v0.3.3`. All four manifests synchronized at `0.4.0`.
+* **Test Suite**: `npm test` green — 860 tests across 159 suites, 0 failures.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-    lists `gem-pr-review` v0.3.3 (ref-pinned). **Fully verified end-to-end on
-    2026-09-14**, including the interactive skill path:
-    `copilot --allow-all-tools -p "/gem-pr-review 52"` ran the
-    marketplace-installed skill, executed a balanced 5-lens review, and
-    published a host-gated 0-finding review to PR #52.
+    entry bumped to `version 0.4.0` / `ref v0.4.0` (commit `d0a471e`). The
+    CLI's marketplace index was verified current against the bumped entry.
+* **Docs examples** (`README.md`, `docs/installation.md`,
+  `docs/github-action.md`) pin `@v0.4.0`, matching the latest tag.
 
 ## Next Actions
 
-1. Cut release `v0.4.0` following [`docs/release.md`](docs/release.md): run
-   `npm run release` on `main`, push `main` and the tag, dispatch the release
-   workflow for the new tag (publishing is dispatch-only), then update the
-   `gem-pr-review` entry's `version` and `ref` pin in
-   [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins).
-2. Host-gate hardening candidates in [`TODO.md`](TODO.md) (pre-validated
+1. Host-gate hardening candidates in [`TODO.md`](TODO.md) (pre-validated
    against the code): require/enforce `expectedHeadSha` on publish tools;
    validate a caller-supplied verify `headSha` against the PR's current head;
    re-sanitize caller-supplied `diagnostics` in the MCP handler.
+2. CI review degradation (new, evidence-backed): every recent PR review run
+   on GitHub-hosted runners logs `spawn copilot ENOENT` once per lens
+   (runs for PRs #52, #53, #54), so the model lenses silently no-op and CI
+   passes on the docs-consistency path alone. Real review gating currently
+   happens via the local pre-commit self-review and the marketplace
+   `/gem-pr-review <PR>` run. Fix candidate: fail or annotate loudly when
+   lens execution degrades, or provision `copilot` on the runner.
 3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 
@@ -49,9 +44,11 @@
 * `npm` silently swallows `--dry-run` (it is an npm config flag): use
   `npm run bump -- auto --dry-run` or call `scripts/bump-version.mjs`
   directly to preview a bump without writing manifests.
-* Sibling project (not this repo): reinstalling
-  `z-pr-review@xpepper-copilot-plugins` requires the `v0.2.5` tag to land
-  in `xpepper/pr-review-glm` first.
+* After a marketplace version/ref bump, a local `copilot plugin install` may
+  keep serving the previously resolved ref for a while (the CLI's index cache
+  updates but plugin-source resolution lags — same behavior the 2026-09-13
+  z-pr-review ref-pinning probes documented). Fresh machines resolve the new
+  tag; that is why marketplace entries are bumped at release time.
 
 ## Where the History Lives
 

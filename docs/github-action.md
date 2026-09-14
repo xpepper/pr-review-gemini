@@ -47,7 +47,7 @@ jobs:
           ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
 
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@v0.3.3
+        uses: xpepper/pr-review-gemini@v0.4.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           mode: balanced
