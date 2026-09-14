@@ -296,6 +296,21 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /--verify/, 'Should document the comment flag');
   });
 
+  it('documents release and marketplace maintenance in the focused release reference', () => {
+    const releasePath = path.resolve('docs/release.md');
+    assert.ok(fs.existsSync(releasePath), 'docs/release.md must exist');
+    const content = fs.readFileSync(releasePath, 'utf8');
+    assert.match(content, /npm run version:check/, 'Should document version:check');
+    assert.match(content, /npm run bump/, 'Should document bump');
+    assert.match(content, /npm run release/, 'Should document release');
+    assert.match(content, /skills\/gem-pr-review\/SKILL\.md/, 'Should list all four synchronized manifests');
+    assert.match(content, /workflow_dispatch/, 'Should document the dispatch-only publish');
+    assert.match(content, /xpepper\/copilot-plugins/, 'Should document the plugin marketplace update');
+    assert.match(content, /`ref`/, 'Should document the ref pin bump');
+    const pluginContent = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(pluginContent, /release\.md/, 'plugin.md should link to the release reference');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');

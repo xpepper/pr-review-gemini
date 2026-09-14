@@ -107,7 +107,5 @@ The plugin, the [GitHub Action](github-action.md), and the
 model. They are complementary: use the plugin interactively from your
 harness, the Action in CI, and the CLI for scripting and dry runs.
 
-Marketplace maintenance: at release time, update the `gem-pr-review` entry's
-`version` and its `ref` pin to the released tag in the
-[`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-marketplace manifest.
+Release and marketplace maintenance steps live in the
+[release reference](release.md).
