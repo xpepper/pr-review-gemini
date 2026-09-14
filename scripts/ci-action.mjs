@@ -564,6 +564,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         ciEnv,
         verificationResult,
         documentationConsistency,
+        lensExecution,
       });
       try {
         fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${ciSummary}\n`, 'utf8');
@@ -586,6 +587,7 @@ export async function runCiAction(options = {}, env = process.env, io = console)
         ciEnv,
         verificationResult,
         diagnostics: reviewResult.diagnostics,
+        lensExecution,
       });
       await safePostComment(completionReply);
     }

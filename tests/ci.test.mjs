@@ -1810,6 +1810,53 @@ index 1111111..2222222 100644
         'emits an error annotation when the review aborts'
       );
     });
+
+    it('does not write a passing step summary when every lens fails to execute', async () => {
+      const tmpSummary = path.join(os.tmpdir(), `gh-summary-lens-fail-${Date.now()}.md`);
+
+      try {
+        const result = await runCiAction({
+          prNumber: 46,
+          action: 'dry-run',
+          mock: true,
+          diffText: codeDiff,
+          runnerFn: async () => {
+            throw new Error('Copilot CLI execution failed: spawn copilot ENOENT');
+          },
+        }, { GITHUB_STEP_SUMMARY: tmpSummary }, silentIo);
+
+        assert.equal(result.exitCode, 1);
+        const stepSummary = fs.readFileSync(tmpSummary, 'utf8');
+        assert.match(stepSummary, /^## ❌ AI Code Review Lenses Failed to Execute$/m);
+        assert.match(stepSummary, /\*\*Verdict\*\*: `FAIL`/);
+        assert.match(stepSummary, /\*\*Lens Execution\*\*: `FAILED` \(\d+ of \d+ lenses failed\)/);
+        assert.doesNotMatch(stepSummary, /AI Code Review Passed/);
+      } finally {
+        fs.rmSync(tmpSummary, { force: true });
+      }
+    });
+
+    it('reports a failed completion reply when every lens fails to execute', () => {
+      const reply = formatCompletionReply({
+        qualityGateResult: { passed: true, verdict: 'PASS', totalFindings: 0, blockingCount: 0 },
+        ciEnv: { mode: 'balanced', failOn: 'P1' },
+        lensExecution: { status: 'failed', totalCount: 5, failedCount: 5, failedLenses: [] },
+      });
+
+      assert.match(reply, /❌ \*\*Gem PR Review Complete\*\*/);
+      assert.match(reply, /\*\*Verdict\*\*: `FAIL` \(Review lenses failed to execute\)/);
+    });
+
+    it('keeps a passing completion reply when only some lenses fail', () => {
+      const reply = formatCompletionReply({
+        qualityGateResult: { passed: true, verdict: 'PASS', totalFindings: 0, blockingCount: 0 },
+        ciEnv: { mode: 'balanced', failOn: 'P1' },
+        lensExecution: { status: 'partial', totalCount: 5, failedCount: 1, failedLenses: ['security'] },
+      });
+
+      assert.match(reply, /✅ \*\*Gem PR Review Complete\*\*/);
+      assert.match(reply, /\*\*Verdict\*\*: `PASS` \(Passed\)/);
+    });
   });
 });
 
