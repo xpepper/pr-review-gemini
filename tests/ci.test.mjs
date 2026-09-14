@@ -1954,6 +1954,9 @@ index 1111111..2222222 100644
       assert.match(content, /blank_setup_env\?\(node_step\)/);
       assert.match(content, /blank_setup_env\?\(install_step\)/);
       assert.match(content, /review_step\.dig\('env', 'COPILOT_GITHUB_TOKEN'\)/);
+      assert.match(content, /expression_start = '\$' \+ '\{\{ '/);
+      assert.match(content, /copilot_token_expression = expression_start/);
+      assert.match(content, /github_token_expression = expression_start/);
       assert.match(content, /legacy =/);
       assert.match(content, /!inputs\.key\?\('copilot_token'\)/);
       assert.match(content, /steps\.length == 1/);
