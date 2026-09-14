@@ -8,7 +8,7 @@
 * **Release**: `v0.4.0` is tagged and its GitHub Release is published
   (dispatch-only publish; verify job green). Minor bump — the `feat(ci)`
   PR #47 landed since `v0.3.3`. All four manifests synchronized at `0.4.0`.
-* **Test Suite**: `npm test` green — 860 tests across 159 suites, 0 failures.
+* **Test Suite**: `npm test` green — 871 tests across 159 suites, 0 failures.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
@@ -19,19 +19,29 @@
 
 ## Next Actions
 
-1. Host-gate hardening candidates in [`TODO.md`](TODO.md) (pre-validated
-   against the code): require/enforce `expectedHeadSha` on publish tools;
-   validate a caller-supplied verify `headSha` against the PR's current head;
-   re-sanitize caller-supplied `diagnostics` in the MCP handler.
-2. CI review degradation (new, evidence-backed): every recent PR review run
+1. CI review degradation (evidence-backed): every recent PR review run
    on GitHub-hosted runners logs `spawn copilot ENOENT` once per lens
-   (runs for PRs #52, #53, #54), so the model lenses silently no-op and CI
+   (runs for PRs #52–#55), so the model lenses silently no-op and CI
    passes on the docs-consistency path alone. Real review gating currently
    happens via the local pre-commit self-review and the marketplace
    `/gem-pr-review <PR>` run. Fix candidate: fail or annotate loudly when
    lens execution degrades, or provision `copilot` on the runner.
-3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
+2. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
+
+## Recently Landed
+
+* **PR #56 (host-gate hardening, 2026-09-14)**: `expectedHeadSha` is
+  required and enforced on both MCP publish tools; `runVerification`
+  cross-checks a caller-supplied `headSha` against the PR's current head
+  (abbreviated 7+ char prefixes accepted, unresolvable or mismatched
+  heads fail closed); the MCP diagnostics handler re-sanitizes
+  caller-supplied telemetry, and `sanitizeTelemetry` now drops
+  secret-named keys at any depth. Reference pages and the skill publish
+  example updated and pinned by docs-consistency assertions. Dogfooded
+  over 5 review rounds; the final round's single P2 (pattern dropping
+  legitimate token telemetry fields) was validated false against the
+  collector's 41 snapshot keys (no collisions).
 
 ## Environment Notes
 
