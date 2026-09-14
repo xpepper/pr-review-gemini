@@ -27,8 +27,8 @@ is live, and the Action is listed in Code quality and Continuous integration.
   [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
   Copilot plugin marketplace (root-source path `.`, ref-pinned `v0.3.3`,
   install verified).
-- [ ] Open the PR against `main` for `docs/plugin-first-docs` and land it after
-  review by this tool itself (dogfooding rule).
+- [ ] Land PR [#51](https://github.com/xpepper/pr-review-gemini/pull/51) (`docs/plugin-first-docs`)
+  against `main` after addressing its dogfooding review by this tool itself.
 - [ ] Continue the documentation information architecture with focused MCP,
   custom-role, repository-guideline, diagnostics, verification, and release
   reference pages.

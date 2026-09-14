@@ -43,9 +43,9 @@ Documentation-only increment (no code changes; version stays `0.3.3` everywhere)
 
 ## Next Actions
 
-1. Open the PR against `main` for `docs/plugin-first-docs`. Per the dogfooding
-   rule, the repository's own Action reviews the PR; triage and address its
-   findings, then merge.
+1. PR [#51](https://github.com/xpepper/pr-review-gemini/pull/51) against
+   `main` is open and reviewed by the repository's own Action (dogfooding
+   rule): triage and address its review findings, then merge once approved.
 2. After the PR merges and the next release is tagged, update the marketplace
    entry's version and `ref` in `xpepper/copilot-plugins` to the new `vX.Y.Z`
    tag so plugin installs track the release.
