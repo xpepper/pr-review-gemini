@@ -18,8 +18,9 @@ Copilot subscription, and GitHub access goes through the GitHub CLI (`gh`).
 
 - Node.js >= 20.
 - Authenticated [GitHub CLI](https://cli.github.com/) (`gh auth status`).
-- Copilot CLI on the `PATH` for model inference. Optionally point the engine
-  at a specific runtime with `COPILOT_CLI_PATH` and `COPILOT_SDK_PATH`.
+- Copilot CLI on the `PATH` for model inference. Set `COPILOT_CLI_PATH` to run a
+  specific Copilot CLI binary instead; also set `COPILOT_SDK_PATH` to drive that
+  runtime through the Copilot SDK.
 
 ## Install
 

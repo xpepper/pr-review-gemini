@@ -17,26 +17,22 @@
 * **Docs examples** (`README.md`, `docs/installation.md`,
   `docs/github-action.md`) pin `@v0.4.0`, matching the latest tag.
 
-* **In flight**: PR [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
-  (`fix/ci-lens-degradation`), fail-closed lens execution. Branch suite:
-  887 tests across 161 suites, 0 failures. Hosted run `34890081003` confirms
-  the intended failure now reports `spawn copilot ENOENT` in both the log and
+* **Landed**: PR [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
+  (`e96d977`), fail-closed lens execution. Hosted run `34890340990` confirmed
+  the intended failure reports `spawn copilot ENOENT` in both the log and
   escaped `::error` annotation.
+* **In flight**: PR [#60](https://github.com/xpepper/pr-review-gemini/pull/60)
+  (`fix/cli-path-fallback`, base `main`), the CLI fallback honors
+  `COPILOT_CLI_PATH`. Branch suite: 891 tests, 0 failures.
 
 ## Next Actions
 
-1. Review and merge PR #57. **Its own Gem PR Review check fails by design**
-   (run `34890081003`: `Cannot publish review: All 5 specialist review
-   subagent(s) failed` plus sanitized cause `spawn copilot ENOENT`, with a
-   titled `::error` annotation), because
-   GitHub-hosted runners have no Copilot CLI. After merge, that check fails on
-   every PR until the CLI is provisioned. Owner decision (agreed 2026-09-14):
-   fail closed on total lens failure, warn on partial failure, provisioning as
-   a separate item.
-2. Provision the Copilot CLI on the review runner. Needs a Copilot-entitled
-   token stored as a repository secret (owner decision). Prerequisite worth
-   doing first: make the CLI fallback runner honor `COPILOT_CLI_PATH` (today
-   only the SDK path reads it; found by the PR #57 dogfood review, pre-existing).
+1. Review and merge PR #60. **Its own Gem PR Review check fails by design**
+   because the GitHub-hosted runner still has no Copilot CLI.
+2. Provision the Copilot CLI on the review runner after the owner chooses the
+   Copilot-entitled repository secret name and fork-PR policy. PR #60 lets the
+   workflow point at a provisioned binary through `COPILOT_CLI_PATH` without
+   the SDK.
 3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 

@@ -213,7 +213,8 @@ error wrapping, stderr sanitization, and JSDoc.
 ### Recommended follow-up
 
 Honor `COPILOT_CLI_PATH` in the CLI fallback before provisioning the Copilot
-CLI on the review runner.
+CLI on the review runner. Implemented test-first in
+[PR #60](https://github.com/xpepper/pr-review-gemini/pull/60).
 
 **Priority:** next
 
@@ -237,8 +238,8 @@ validation.
 
 ### What was useful
 
-The CLI-path finding remains valid and pre-existing. PR #60 contains the fix and
-must be retargeted to `main` after #57 merges.
+The CLI-path finding remains valid and pre-existing. PR #60 contains the fix
+and is now based on `main` after #57 merged.
 
 ### What was incorrect, missing, noisy, or confusing
 
@@ -251,11 +252,44 @@ must be retargeted to `main` after #57 merges.
 
 ### Recommended follow-up
 
-Merge #57, retarget #60, then provision and authenticate the Copilot CLI in a
-separate PR after the owner chooses the repository secret and fork policy.
+Merge #60, then provision and authenticate the Copilot CLI in a separate PR
+using the owner-selected secret and fork policy.
 
 **Priority:** next
 
 **Evidence:** hosted workflow run `34890081003` shows the intended fail-closed
 result with `spawn copilot ENOENT` in both the log and GitHub error annotation;
 887 tests across 161 suites passed.
+
+## 2026-09-14 — PR #60 CLI-path fallback after rebase
+
+### PR / context
+
+- **PR:** [#60](https://github.com/xpepper/pr-review-gemini/pull/60), rebased
+  onto `main` after #57 merged.
+- **Review:** `npm run dogfood:pr 60`, balanced local dry-run on `2802dc3`.
+
+### What Gem PR Review did
+
+Reported one P2: resolve a relative `COPILOT_CLI_PATH` against the runner's
+`cwd` rather than the process working directory.
+
+### What was useful
+
+The review focused on the only behavioral change after the stacked branch was
+rebased.
+
+### What was incorrect, missing, noisy, or confusing
+
+The finding was not actionable. The SDK branch already resolves the same
+environment path with `path.resolve(copilotCliPath)`, so the fallback preserves
+that established contract. CI provisioning will supply an absolute path.
+
+### Recommended follow-up
+
+Merge #60 and use `COPILOT_CLI_PATH` when provisioning the hosted runner.
+
+**Priority:** next
+
+**Evidence:** 891 tests across 161 suites passed after the rebase; hosted run
+`34890571858` failed closed as expected because provisioning is not yet wired.

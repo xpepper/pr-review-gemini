@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import {
   DEFAULT_LENS_TIERS,
   resolveLensPlan,
@@ -1014,6 +1015,7 @@ Thinking: Analyzing diff for security vulnerabilities...
       const calls = [];
       const runner = await createSubagentRunner({
         copilotSdkPath: '',
+        copilotCliPath: '',
         execFileFn: async (command, args) => {
           calls.push({ command, args });
           return { stdout: 'review output' };
@@ -1026,6 +1028,66 @@ Thinking: Analyzing diff for security vulnerabilities...
       assert.equal(calls.length, 1);
       assert.equal(calls[0].command, 'copilot');
       assert.deepEqual(calls[0].args, ['-s', '-p', 'Review this diff', '--no-color', '--model', 'gpt-4o']);
+    });
+
+    it('invokes the configured Copilot CLI path when no SDK is configured', async () => {
+      const commands = [];
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        copilotCliPath: 'tools/copilot',
+        execFileFn: async (command) => {
+          commands.push(command);
+          return { stdout: 'review output' };
+        },
+      });
+
+      await runner({ prompt: 'Review this diff', model: 'gpt-4o' });
+
+      assert.deepEqual(commands, [path.resolve('tools/copilot')]);
+    });
+
+    it('reads the Copilot CLI path from COPILOT_CLI_PATH by default', async () => {
+      const original = process.env.COPILOT_CLI_PATH;
+      process.env.COPILOT_CLI_PATH = 'env-tools/copilot';
+      try {
+        const commands = [];
+        const runner = await createSubagentRunner({
+          copilotSdkPath: '',
+          execFileFn: async (command) => {
+            commands.push(command);
+            return { stdout: 'review output' };
+          },
+        });
+
+        await runner({ prompt: 'Review this diff', model: 'gpt-4o' });
+
+        assert.deepEqual(commands, [path.resolve('env-tools/copilot')]);
+      } finally {
+        if (original === undefined) {
+          delete process.env.COPILOT_CLI_PATH;
+        } else {
+          process.env.COPILOT_CLI_PATH = original;
+        }
+      }
+    });
+
+    it('reports only the binary name when a configured Copilot CLI path cannot be spawned', async () => {
+      const spawnError = Object.assign(new Error('spawn /opt/tools/copilot-cli ENOENT'), { code: 'ENOENT' });
+      const runner = await createSubagentRunner({
+        copilotSdkPath: '',
+        copilotCliPath: '/opt/tools/copilot-cli',
+        execFileFn: async () => {
+          throw spawnError;
+        },
+      });
+
+      await assert.rejects(
+        () => runner({ prompt: 'Review this diff', model: 'gpt-4o' }),
+        (err) => {
+          assert.equal(err.message, 'Copilot CLI execution failed: spawn copilot-cli ENOENT');
+          return true;
+        }
+      );
     });
 
     it('rejects when the copilot CLI cannot be executed instead of reporting an empty review', async () => {

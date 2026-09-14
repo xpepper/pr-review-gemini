@@ -62,9 +62,13 @@ is live, and the Action is listed in Code quality and Continuous integration.
   - Backlog (owner decision): provision the Copilot CLI on the review runner
     with a Copilot-entitled repository secret. Until then the repository's
     own Gem PR Review check fails by design.
-  - Backlog (PR #57 dogfood finding, pre-existing): the CLI fallback runner
-    ignores `COPILOT_CLI_PATH` and always spawns `copilot` from `PATH`; honor
-    the configured path before provisioning the runner.
+  - In review (PR #60, stacked on #57, test-first): the CLI fallback runner
+    honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
+    name only the binary's base name), and `docs/plugin.md` documents the two
+    variables independently. Recorded, not actioned: a self-review P2 to
+    resolve relative paths against the runner `cwd` (environment paths resolve
+    against the process directory, matching the SDK branch) and a P2 on the
+    plugin docs wording (the SDK runtime does need both variables).
   - Recorded, not actioned (PR #57 self-review P3): each formatter recomputes
     `lensExecution?.status !== 'failed'`, matching the existing
     documentation-consistency and verification pattern.

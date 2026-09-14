@@ -394,6 +394,12 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /only some lenses fail[\s\S]{0,200}warning annotation/i, 'Action reference should document partial lens failure warnings');
   });
 
+  it('documents COPILOT_CLI_PATH and COPILOT_SDK_PATH independently in the plugin reference', () => {
+    const content = fs.readFileSync(path.resolve('docs/plugin.md'), 'utf8');
+    assert.match(content, /`COPILOT_CLI_PATH`[\s\S]{0,80}specific Copilot CLI binary/, 'plugin.md should state COPILOT_CLI_PATH alone selects the CLI binary');
+    assert.match(content, /`COPILOT_SDK_PATH`[\s\S]{0,80}Copilot SDK/, 'plugin.md should state COPILOT_SDK_PATH enables the SDK runtime');
+  });
+
   it('documents repository review guidelines in SKILL.md (Increment 19)', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');
