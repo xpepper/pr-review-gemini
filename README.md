@@ -16,8 +16,13 @@ Copilot CLI, the verified harness:
 copilot plugin install xpepper/pr-review-gemini
 ```
 
-Alternatively, register xpepper's Copilot plugin marketplace:
-`copilot plugin marketplace add xpepper/copilot-plugins`.
+Alternatively, register xpepper's Copilot plugin marketplace and install from
+it:
+
+```bash
+copilot plugin marketplace add xpepper/copilot-plugins
+copilot plugin install gem-pr-review@xpepper-copilot-plugins
+```
 
 Then start Copilot CLI and invoke the skill on a pull request:
 
