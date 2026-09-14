@@ -83,10 +83,21 @@ jobs:
         if: steps.action-contract.outputs.legacy_bootstrap == 'true'
         run: npm install --global @github/copilot@1.0.83
 
-      - name: Run Gem PR Review
+      - name: Run legacy base Gem PR Review
+        if: steps.action-contract.outputs.legacy_bootstrap == 'true'
         uses: ./
         env:
-          COPILOT_GITHUB_TOKEN: ${{ steps.action-contract.outputs.legacy_bootstrap == 'true' && secrets.COPILOT_TOKEN || '' }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          mode: balanced
+          fail_on: P1
+          incremental: auto
+          action: publish
+
+      - name: Run Gem PR Review
+        if: steps.action-contract.outputs.legacy_bootstrap == 'false'
+        uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           copilot_token: ${{ secrets.COPILOT_TOKEN }}
