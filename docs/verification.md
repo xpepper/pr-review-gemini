@@ -12,7 +12,9 @@ can be backed by executed evidence instead of model claims.
   caller-supplied `headSha` is cross-checked against the PR's current
   head: on mismatch (the PR has moved) verification fails closed rather
   than verifying a stale or arbitrary commit, and a current head that
-  cannot be resolved fails closed too.
+  cannot be resolved fails closed too. An abbreviated SHA is accepted
+  only as a prefix (7+ characters) of the current head; the worktree is
+  always created at the resolved full head SHA.
 - The command runs without a shell (direct spawn) with a scrubbed
   environment (only `PATH`, `HOME`, `TMPDIR`, `NODE_ENV`, `USER`,
   `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_ALL`, `CI` are passed through).
