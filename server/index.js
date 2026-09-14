@@ -20,7 +20,11 @@ import {
 } from '../src/diff.js';
 import { publishReview } from '../src/publish.js';
 import { publishCachedReview, getReviewCache } from '../src/cache.js';
-import { formatDiagnosticReport, formatDiagnosticsJson } from '../src/diagnostics.js';
+import {
+  formatDiagnosticReport,
+  formatDiagnosticsJson,
+  sanitizeTelemetry,
+} from '../src/diagnostics.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
@@ -1455,11 +1459,14 @@ export function createMcpHandler(options = {}) {
               }
 
               const format = (args.format || 'markdown').toLowerCase();
+              // Re-sanitize regardless of source: caller-supplied objects are
+              // untrusted, and cached telemetry gets defense-in-depth.
+              const safeDiagData = sanitizeTelemetry(diagData, { cwd });
               let text;
               if (format === 'json') {
-                text = formatDiagnosticsJson(diagData);
+                text = formatDiagnosticsJson(safeDiagData);
               } else {
-                text = formatDiagnosticReport(diagData);
+                text = formatDiagnosticReport(safeDiagData);
               }
 
               return {

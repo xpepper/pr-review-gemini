@@ -1439,6 +1439,59 @@ index 0000000..1111111 100644
       }
     });
 
+    it('re-sanitizes caller-supplied diagnostics before formatting', async () => {
+      const handler = createMcpHandler();
+      const unsanitized = {
+        phases: { diffFetch: { durationMs: 20, status: 'completed' } },
+        lenses: [
+          {
+            lensId: 'security',
+            name: 'security ghp_abcdefghijklmnopqrstuvwxyz',
+            status: 'completed',
+          },
+        ],
+        guidelines: {
+          found: true,
+          path: '/Users/spy/project/.github/gem-pr-review.md',
+          bytes: 10,
+          untrusted: false,
+          truncated: false,
+        },
+        env: { GITHUB_TOKEN: 'gho_abcdefghijklmnopqrstuvwxyz' },
+      };
+
+      const mdRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 105,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diagnostics',
+          arguments: { diagnostics: unsanitized, format: 'markdown' },
+        },
+      });
+      assert.equal(mdRes.id, 105);
+      const mdText = mdRes.result.content[0].text;
+      assert.doesNotMatch(mdText, /ghp_|gho_/, 'markdown report must redact token patterns');
+      assert.doesNotMatch(mdText, /\/Users\//, 'markdown report must not contain machine paths');
+
+      const jsonRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 106,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_diagnostics',
+          arguments: { diagnostics: unsanitized, format: 'json' },
+        },
+      });
+      assert.equal(jsonRes.id, 106);
+      const parsedJson = JSON.parse(jsonRes.result.content[0].text);
+      assert.equal(parsedJson.env, undefined, 'forbidden telemetry keys must be dropped');
+      assert.equal(parsedJson.phases.diffFetch.durationMs, 20);
+      const raw = JSON.stringify(parsedJson);
+      assert.doesNotMatch(raw, /ghp_|gho_/, 'json output must redact token patterns');
+      assert.doesNotMatch(raw, /\/Users\//, 'json output must not contain machine paths');
+    });
+
     it('passes verbose: true to gem_self_review and includes diagnostics in summary and payload', async () => {
       const handler = createMcpHandler({
         runSelfReviewFn: async (opts) => {
