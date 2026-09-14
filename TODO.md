@@ -65,6 +65,13 @@ is live, and the Action is listed in Code quality and Continuous integration.
   - Recorded, not actioned (PR #57 self-review P3): each formatter recomputes
     `lensExecution?.status !== 'failed'`, matching the existing
     documentation-consistency and verification pattern.
+  - Fixed in PR #57 (dogfood P1): CLI failure messages no longer echo the
+    review prompt; they report the exit code or errno and one stderr line with
+    terminal escapes and control characters stripped.
+  - Recorded, not actioned (PR #57): the P2 that `evaluateLensExecution`
+    trusts unvalidated error entries (errors are produced in-process by the
+    dispatcher) and the P2 on non-CSI escape residue (only printable text
+    remains once control characters are removed).
 - [x] Add a host-controlled documentation consistency check after the verified
   PR #46 false negative: select `tests/skills.test.mjs` only for documentation
   changes, skip untrusted or PR-modified tests, and block on a selected failure.

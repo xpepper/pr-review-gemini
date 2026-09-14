@@ -170,3 +170,53 @@ a separate owner decision because it needs a Copilot-entitled secret.
 **Evidence:** [PR #56 review run](https://github.com/xpepper/pr-review-gemini/actions/runs/34873447020)
 (five `spawn copilot ENOENT` lines followed by a passing gate) and the
 regression tests in `tests/subagents.test.mjs` and `tests/ci.test.mjs`.
+
+### PR / context
+
+- **PR:** [#57](https://github.com/xpepper/pr-review-gemini/pull/57), which makes
+  lens execution fail closed in the CLI runner and the GitHub Action.
+- **Review:** `gem-pr-review v0.4.0` balanced local dry-runs on two heads
+  (`4a7d8d6` and `60aebb4`), plus pre-commit self-reviews on each commit.
+
+### What Gem PR Review did
+
+Round 1 reported two P1 findings: the step summary and completion reply could
+show a passing verdict after total lens failure, and the CLI fallback ignores
+`COPILOT_CLI_PATH`. Round 2 reported a P1 that CLI failure messages echo the
+untrusted prompt, and a P2 that lens execution classification trusts
+unvalidated error entries. Pre-commit self-reviews raised further advisories on
+error wrapping, stderr sanitization, and JSDoc.
+
+### What was useful
+
+- The step summary and completion reply finding was valid and fixed test-first.
+- The prompt echo finding was valid and security-relevant: `execFile` error
+  messages embed the full command line, so the review prompt (untrusted diff
+  content) reached CI stdout, where a line-start `::` sequence is a workflow
+  command, and partial-failure review bodies. A red test reproduced an
+  injected `::error` line. Fixed by reporting the exit code or errno and one
+  trimmed stderr line, with terminal escapes and control characters stripped.
+- The `COPILOT_CLI_PATH` finding was valid but pre-existing and recorded as a
+  follow-up.
+
+### What was incorrect, missing, noisy, or confusing
+
+- The error classification P2 on `src/ci.js` was not actionable: `errors` is
+  produced in-process by the dispatcher, one per planned lens, using the same
+  arithmetic as the reviewer's own all-lenses-failed check.
+- A self-review P2 on non-CSI escape sequences was validated false: once all C0
+  control characters are removed, any residue is printable text that a
+  terminal cannot interpret.
+- Severities ran high: the summary finding was reporting-only while the job
+  still failed, closer to P2 than P1.
+
+### Recommended follow-up
+
+Honor `COPILOT_CLI_PATH` in the CLI fallback before provisioning the Copilot
+CLI on the review runner.
+
+**Priority:** next
+
+**Evidence:** [PR #57](https://github.com/xpepper/pr-review-gemini/pull/57),
+commits `60aebb4`, `b872f74`, and `2ea7a08`, and the regression tests in
+`tests/subagents.test.mjs` and `tests/ci.test.mjs`.

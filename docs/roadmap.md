@@ -242,7 +242,10 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     titled `::error` annotation on total failure (dry-run and publish) and
     emits `::warning` on partial failure; `formatCiSummary` and
     `formatCompletionReply` report the failure.
-  - All changes test-first (884 tests across 161 suites passing); documented
+  - CLI failure messages report the exit code or errno and one sanitized
+    stderr line instead of `execFile`'s message, which embeds the review
+    prompt (untrusted diff content); found by the PR #57 dogfood review.
+  - All changes test-first (886 tests across 161 suites passing); documented
     in `docs/github-action.md` and pinned by a docs-consistency assertion.
     Verified on real GitHub-hosted runs of PR #57, whose own review check now
     fails by design until the Copilot CLI is provisioned on the runner.
