@@ -43,12 +43,12 @@ is live, and the Action is listed in Code quality and Continuous integration.
   code and fixed before merge.
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
-  - Backlog (host-gate hardening candidates surfaced by the PR #53 dogfood
-    review, validated against the code): require/enforce `expectedHeadSha`
-    on publish tools; validate a caller-supplied verify `headSha` against
-    the PR's current head; re-sanitize caller-supplied `diagnostics` in the
-    MCP handler. (PR #53 addressed these by documenting the actual
-    opt-in/as-is behavior; the code changes are a separate increment.)
+  - Completed (host-gate hardening via PR #56, 2026-09-14, test-first):
+    `expectedHeadSha` is required and enforced on both publish tools at the
+    MCP boundary; a caller-supplied verify `headSha` is cross-checked against
+    the PR's current head before creating the detached worktree; and the MCP
+    diagnostics handler re-sanitizes caller-supplied telemetry objects before
+    formatting. Docs updated and pinned by docs-consistency assertions.
   - Backlog (CI review degradation, validated against workflow runs for PRs
     #52, #53, and #54): the CI Action's model lenses silently no-op on
     GitHub-hosted runners (`spawn copilot ENOENT`, once per lens) while the
