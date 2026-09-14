@@ -1,6 +1,6 @@
 # Installation
 
-Gem PR Review is available as a GitHub Action, a Copilot CLI plugin, and a
+Gem PR Review is available as a Copilot CLI plugin, a GitHub Action, and a
 local CLI. It requires Node.js 20 or later. Local PR review also requires an
 authenticated [GitHub CLI](https://cli.github.com/) (`gh auth status`).
 

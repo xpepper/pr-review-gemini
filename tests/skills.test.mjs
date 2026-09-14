@@ -201,6 +201,26 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /copilot plugin install gem-pr-review@xpepper-copilot-plugins/, 'Plugin reference should document the marketplace install command');
   });
 
+  it('names the registered pr_review_ MCP tool aliases in the plugin reference', () => {
+    assert.ok(fs.existsSync(pluginReferencePath), 'docs/plugin.md must exist');
+    const content = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(content, /`pr_review_threads`/, 'Should name the pr_review_threads alias');
+    assert.match(content, /`pr_review_architecture`/, 'Should name the pr_review_architecture alias');
+    assert.match(content, /`pr_review_guidelines`/, 'Should name the pr_review_guidelines alias');
+    assert.match(content, /`pr_review_diagnostics`/, 'Should name the pr_review_diagnostics alias');
+  });
+
+  it('introduces the shapes in plugin-first order in the installation reference', () => {
+    const installationReferencePath = path.resolve('docs/installation.md');
+    assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
+    const content = fs.readFileSync(installationReferencePath, 'utf8').replace(/\s+/g, ' ');
+    assert.match(
+      content,
+      /available as a Copilot CLI plugin, a GitHub Action, and a local CLI/,
+      'Installation intro should enumerate the plugin first, matching the plugin-first page order'
+    );
+  });
+
   it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md must exist');
     const content = fs.readFileSync(skillPath, 'utf8');

@@ -83,8 +83,10 @@ naturally or as flags in the underlying commands:
 | `gem_pr_review_guidelines` | Load repository review guidelines. |
 | `gem_pr_review_diagnostics` | Sanitized execution telemetry. |
 
-Short aliases without the `gem_pr_review_` prefix exist for the thread,
-architecture, guidelines, and diagnostics tools.
+The thread, architecture, guidelines, and diagnostics tools are also
+registered under short aliases: `pr_review_threads`,
+`pr_review_architecture`, `pr_review_guidelines`, and
+`pr_review_diagnostics`.
 
 ## Configuration and tweaks
 
