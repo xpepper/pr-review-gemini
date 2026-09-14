@@ -4,23 +4,6 @@ Gem PR Review is available as a GitHub Action, a Copilot CLI plugin, and a
 local CLI. It requires Node.js 20 or later. Local PR review also requires an
 authenticated [GitHub CLI](https://cli.github.com/) (`gh auth status`).
 
-## GitHub Marketplace and Action
-
-Install from the [Gem PR Review Marketplace page](https://github.com/marketplace/actions/gem-pr-review),
-then add the Action to a repository workflow:
-
-```yaml
-- name: AI PR Code Review
-  uses: xpepper/pr-review-gemini@v0.3.3
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    mode: balanced
-    fail_on: P1
-```
-
-For the complete workflow, permissions, inputs, outputs, and execution
-boundary, see the [GitHub Action reference](github-action.md).
-
 ## Copilot CLI plugin
 
 Install the plugin from GitHub:
@@ -43,6 +26,26 @@ Then invoke the skill from Copilot CLI:
 
 `/gem-pr-review` is deliberately distinct from generic `pr-review` commands so
 it can coexist with other installed tools.
+
+For other Agent Plugins 1.0 harnesses, MCP tools, and configuration, see the
+[plugin reference](plugin.md).
+
+## GitHub Marketplace and Action
+
+Install from the [Gem PR Review Marketplace page](https://github.com/marketplace/actions/gem-pr-review),
+then add the Action to a repository workflow:
+
+```yaml
+- name: AI PR Code Review
+  uses: xpepper/pr-review-gemini@v0.3.3
+  with:
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    mode: balanced
+    fail_on: P1
+```
+
+For the complete workflow, permissions, inputs, outputs, and execution
+boundary, see the [GitHub Action reference](github-action.md).
 
 ## Local CLI quick starts
 

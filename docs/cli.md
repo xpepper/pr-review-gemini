@@ -12,6 +12,10 @@
 The script name `dogfood-review` describes this project's use of the tool; it
 is the same Gem PR Review engine used by the Copilot CLI skill.
 
+The same engine is available as an Agent Plugins 1.0 plugin and a GitHub
+Action; see the [plugin reference](plugin.md) and
+[Action reference](github-action.md).
+
 ## PR review options
 
 ```text

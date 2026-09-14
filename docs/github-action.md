@@ -4,6 +4,9 @@ Gem PR Review is a composite GitHub Action that reviews pull requests with
 parallel specialist lenses. The runner analyzes pull request diffs through the
 GitHub API rather than checking out the PR head by default.
 
+The same engine is available as an Agent Plugins 1.0 plugin and a local CLI;
+see the [plugin reference](plugin.md) and [CLI reference](cli.md).
+
 ## Workflow template
 
 Create `.github/workflows/gem-pr-review.yml`:

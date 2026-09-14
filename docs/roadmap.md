@@ -198,6 +198,12 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - MCP tools `gem_pr_review_diagnostics` and `pr_review_diagnostics` in `server/index.js`.
   - 838 unit and integration tests passing across 158 suites (`tests/diagnostics.test.mjs`).
   - Dogfood-reviewed on GitHub PR #40 with 0 defects and merged to `main` (commit `921e211`).
+- [x] **Post-MVP Increment (2026-09-13): Plugin-First Documentation & Marketplace Entry**
+  - Plugin-first `README.md` leading with the Agent Plugins 1.0 identity and the `copilot plugin install` quick start.
+  - New focused plugin reference `docs/plugin.md` documenting the plugin shape: manifest (`plugin.json`), skill (`/gem-pr-review`), MCP tools (e.g. `gem_pr_review_subagents`), and the Copilot CLI runtime requirement.
+  - Reordered `docs/installation.md` to present the plugin install path first, with cross-links between `README.md`, `docs/installation.md`, and `docs/plugin.md`.
+  - Marketplace entry in [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins) listing `gem-pr-review` via cross-repo source `{"repo": "xpepper/pr-review-gemini", "path": ".", "ref": "v0.3.3"}`; root-source path `"."` verified and install confirmed with `copilot plugin install gem-pr-review@xpepper-copilot-plugins`.
+  - Docs-consistency test additions in `tests/skills.test.mjs` covering the README plugin identity, the plugin-reference link, and the `docs/plugin.md` contract (851 tests passing across 159 suites with 0 failures).
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

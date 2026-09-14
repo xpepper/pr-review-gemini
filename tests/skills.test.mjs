@@ -8,6 +8,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
   const readmePath = path.resolve('README.md');
   const cliReferencePath = path.resolve('docs/cli.md');
   const actionReferencePath = path.resolve('docs/github-action.md');
+  const pluginReferencePath = path.resolve('docs/plugin.md');
 
   it('skill file exists at skills/gem-pr-review/SKILL.md', () => {
     assert.ok(fs.existsSync(skillPath), 'skills/gem-pr-review/SKILL.md should exist');
@@ -178,6 +179,26 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
     assert.match(readmeContent, /\(docs\/cli\.md\)/, 'README should link to the CLI reference');
     assert.match(cliContent, /npm run dogfood:pr/i, 'CLI reference should document npm run dogfood:pr');
+  });
+
+  it('links first-time users to the plugin reference and plugin identity', () => {
+    assert.ok(fs.existsSync(readmePath), 'README.md must exist');
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    assert.match(readmeContent, /\(docs\/plugin\.md\)/, 'README should link to the plugin reference');
+    assert.match(readmeContent, /Agent Plugins 1\.0/, 'README should state the Agent Plugins identity');
+    assert.match(readmeContent, /copilot plugin install/, 'README should show the Copilot plugin install');
+  });
+
+  it('documents the plugin shape in the focused plugin reference', () => {
+    assert.ok(fs.existsSync(pluginReferencePath), 'docs/plugin.md must exist');
+    const content = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(content, /agent-plugins\.org/, 'Plugin reference should link the Agent Plugins spec');
+    assert.match(content, /copilot plugin install/, 'Plugin reference should document install');
+    assert.match(content, /Copilot CLI runtime/, 'Plugin reference should document the runtime requirement');
+    assert.match(content, /\/gem-pr-review /, 'Plugin reference should document skill invocation');
+    assert.match(content, /gem_pr_review_subagents/, 'Plugin reference should document MCP tools');
+    assert.match(content, /marketplace add xpepper\/copilot-plugins/, 'Plugin reference should document marketplace install');
+    assert.match(content, /copilot plugin install gem-pr-review@xpepper-copilot-plugins/, 'Plugin reference should document the marketplace install command');
   });
 
   it('documents centralized CLI infrastructure and pre-commit hook installer in SKILL.md (Increment 17)', () => {
