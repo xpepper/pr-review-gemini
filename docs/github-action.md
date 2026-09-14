@@ -90,6 +90,11 @@ unless the commenter is explicitly allowlisted.
 | `summary` | Markdown review summary. |
 | `diagnostics` | Sanitized execution-telemetry JSON. |
 
+For what the `verbose` input and `diagnostics` output contain, see the
+[diagnostics reference](diagnostics.md). For verification profiles, the
+comment-driven `--verify` flow, and fork fail-closed behavior, see the
+[verification reference](verification.md).
+
 ## Documentation consistency check
 
 When a PR changes `README.md`, `docs/`, or `.github/workflows/`, the Action

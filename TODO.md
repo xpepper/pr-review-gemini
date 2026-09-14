@@ -34,11 +34,19 @@ is live, and the Action is listed in Code quality and Continuous integration.
   `plugin.md` alias-sentence wording and `installation.md` intro shape
   enumeration order (the README marketplace install half and the "full flag
   tables" wording shipped with PR #51 itself).
-- [ ] Continue the documentation information architecture with focused MCP,
+- [x] Continue the documentation information architecture with focused MCP,
   custom-role, repository-guideline, diagnostics, verification, and release
-  reference pages.
+  reference pages (`docs/mcp-tools.md`, `docs/custom-roles.md`,
+  `docs/guidelines.md`, `docs/diagnostics.md`, `docs/verification.md`,
+  `docs/release.md`; branch `docs/reference-pages`).
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
+  - Backlog (host-gate hardening candidates surfaced by the PR #53 dogfood
+    review, validated against the code): require/enforce `expectedHeadSha`
+    on publish tools; validate a caller-supplied verify `headSha` against
+    the PR's current head; re-sanitize caller-supplied `diagnostics` in the
+    MCP handler. (PR #53 addressed these by documenting the actual
+    opt-in/as-is behavior; the code changes are a separate increment.)
 - [x] Add a host-controlled documentation consistency check after the verified
   PR #46 false negative: select `tests/skills.test.mjs` only for documentation
   changes, skip untrusted or PR-modified tests, and block on a selected failure.

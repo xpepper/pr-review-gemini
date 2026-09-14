@@ -206,6 +206,11 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Docs-consistency test additions in `tests/skills.test.mjs` covering the README plugin identity, the plugin-reference link, and the `docs/plugin.md` contract (851 tests passing across 159 suites with 0 failures).
   - Merged via PR #51 (squash commit `d57c701`, 2026-09-14) after two dogfooding review rounds that fixed 10 findings.
   - Follow-up polish (2026-09-14): named the registered `pr_review_*` MCP tool aliases in `docs/plugin.md`, aligned the `docs/installation.md` intro enumeration with the plugin-first page order, and recorded both contracts as docs-consistency assertions in `tests/skills.test.mjs`.
+- [x] **Post-MVP Increment (2026-09-14): Focused Reference Pages (branch `docs/reference-pages`)**
+  - Six new code-verified pages: `docs/mcp-tools.md` (complete tool inventory: 17 registered tools, 5 registered aliases, 8 dispatcher-only aliases, mutating vs read-only, safety guarantees), `docs/custom-roles.md` (schema, scheduling semantics, override-by-id, config precedence), `docs/guidelines.md` (discovery, section routing, limits, trust rules), `docs/diagnostics.md` (flags per surface, report contents, redaction guarantees), `docs/verification.md` (profiles, fork fail-closed, verification-vs-approval gates), `docs/release.md` (manifest sync, SemVer rules, dispatch-only publish, marketplace maintenance).
+  - Moved the marketplace-maintenance paragraph from `docs/plugin.md` to `docs/release.md`; added cross-links from `README.md`, `docs/plugin.md`, `docs/cli.md`, and `docs/github-action.md`.
+  - Seven docs-consistency assertions in `tests/skills.test.mjs`, each written red-first (860 tests across 159 suites, 0 failures).
+  - Design record: `docs/superpowers/specs/2026-09-14-reference-pages-design.md` and `docs/superpowers/plans/2026-09-14-reference-pages.md`.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

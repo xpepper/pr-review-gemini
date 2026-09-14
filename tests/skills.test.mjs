@@ -210,6 +210,123 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /`pr_review_diagnostics`/, 'Should name the pr_review_diagnostics alias');
   });
 
+  it('documents the MCP tool inventory in the focused MCP tools reference', () => {
+    const mcpToolsPath = path.resolve('docs/mcp-tools.md');
+    assert.ok(fs.existsSync(mcpToolsPath), 'docs/mcp-tools.md must exist');
+    const content = fs.readFileSync(mcpToolsPath, 'utf8');
+    for (const tool of [
+      'gem_pr_review_subagents',
+      'gem_pr_review_diff',
+      'gem_pr_review_diff_read',
+      'gem_pr_review_publish',
+      'gem_pr_review_publish_cached',
+      'gem_pr_review_prior',
+      'gem_pr_review_threads',
+      'gem_pr_review_architecture',
+      'gem_pr_review_verify',
+      'gem_self_review',
+      'gem_pr_review_guidelines',
+      'gem_pr_review_diagnostics',
+    ]) {
+      assert.ok(content.includes(`\`${tool}\``), `MCP reference should document ${tool}`);
+    }
+    assert.ok(content.includes('`pr_review_threads`'), 'Should note the registered prefix aliases');
+    assert.ok(content.includes('`gem_pr_review_self`'), 'Should note the gem_pr_review_self alias');
+    assert.ok(content.includes('`pr_review_diff`'), 'Should document the dispatcher-only aliases');
+    assert.match(content, /16 reads/, 'Should document the diff_read read cap');
+    assert.match(content, /640 KB/, 'Should document the diff_read byte budget');
+    assert.match(content, /50 inline comments/i, 'Should document the inline comment cap');
+    assert.match(content, /host-gated/i, 'Should document host-gated publishing');
+  });
+
+  it('documents custom review roles in the focused roles reference', () => {
+    const rolesPath = path.resolve('docs/custom-roles.md');
+    assert.ok(fs.existsSync(rolesPath), 'docs/custom-roles.md must exist');
+    const content = fs.readFileSync(rolesPath, 'utf8');
+    for (const key of ['`custom_roles`', '`replace_standard_roles`', '`enabled_roles`', '`prompt`', '`reasoningEffort`', '`fallbacks`']) {
+      assert.ok(content.includes(key), `Roles reference should document ${key}`);
+    }
+    assert.match(content, /--role/, 'Should document the --role flag');
+    assert.match(content, /--replace-standard-roles/, 'Should document --replace-standard-roles');
+    assert.match(content, /\.github\/gem-pr-review\.json/, 'Should document the project config file');
+    assert.match(content, /~\/\.copilot\/gem-pr-review\.json/, 'Should document the user config file');
+    assert.match(content, /override the standard/i, 'Should document lens override by id');
+  });
+
+  it('documents repository review guidelines in the focused guidelines reference', () => {
+    const guidelinesPath = path.resolve('docs/guidelines.md');
+    assert.ok(fs.existsSync(guidelinesPath), 'docs/guidelines.md must exist');
+    const content = fs.readFileSync(guidelinesPath, 'utf8');
+    assert.match(content, /\.github\/gem-pr-review\.md/, 'Should document the default guidelines file');
+    assert.match(content, /\.github\/review-instructions\.md/, 'Should document the fallback filename');
+    assert.match(content, /## Lens:/, 'Should document Lens section routing');
+    assert.match(content, /## Role:/, 'Should document Role section routing');
+    assert.match(content, /64 KB/, 'Should document the size cap');
+    assert.match(content, /gem_pr_review_guidelines/, 'Should document the inspection tool');
+    assert.match(content, /--guidelines/, 'Should document the CLI flag');
+    assert.match(content, /guidelines_path/, 'Should document the Action input');
+  });
+
+  it('documents verbose diagnostics in the focused diagnostics reference', () => {
+    const diagnosticsPath = path.resolve('docs/diagnostics.md');
+    assert.ok(fs.existsSync(diagnosticsPath), 'docs/diagnostics.md must exist');
+    const content = fs.readFileSync(diagnosticsPath, 'utf8');
+    assert.match(content, /--verbose/, 'Should document --verbose');
+    assert.match(content, /-V/, 'Should document the -V short flag');
+    assert.match(content, /--json/, 'Should document --json');
+    assert.match(content, /gem_pr_review_diagnostics/, 'Should document the MCP diagnostics tool');
+    assert.match(content, /Phase Timing/, 'Should document phase timing');
+    assert.match(content, /Per-Lens Execution/, 'Should document per-lens execution');
+    assert.match(content, /redact/i, 'Should document redaction');
+    assert.match(content, /machine paths/i, 'Should document machine path redaction');
+  });
+
+  it('documents verification and gated approval in the focused verification reference', () => {
+    const verificationPath = path.resolve('docs/verification.md');
+    assert.ok(fs.existsSync(verificationPath), 'docs/verification.md must exist');
+    const content = fs.readFileSync(verificationPath, 'utf8');
+    assert.match(content, /`test`/, 'Should document the test profile');
+    assert.match(content, /`build`/, 'Should document the build profile');
+    assert.match(content, /`lint`/, 'Should document the lint profile');
+    assert.match(content, /verificationProfiles/, 'Should document custom profiles');
+    assert.match(content, /enableCustomCiProfiles/, 'Should document the CI opt-in');
+    assert.match(content, /fork/i, 'Should document fork fail-closed behavior');
+    assert.match(content, /approveMaxPriorityLevel/, 'Should document gated approval');
+    assert.match(content, /gem_pr_review_verify/, 'Should document the verify MCP tool');
+    assert.match(content, /--verify/, 'Should document the comment flag');
+  });
+
+  it('documents release and marketplace maintenance in the focused release reference', () => {
+    const releasePath = path.resolve('docs/release.md');
+    assert.ok(fs.existsSync(releasePath), 'docs/release.md must exist');
+    const content = fs.readFileSync(releasePath, 'utf8');
+    assert.match(content, /npm run version:check/, 'Should document version:check');
+    assert.match(content, /npm run bump/, 'Should document bump');
+    assert.match(content, /npm run release/, 'Should document release');
+    assert.match(content, /skills\/gem-pr-review\/SKILL\.md/, 'Should list all four synchronized manifests');
+    assert.match(content, /workflow_dispatch/, 'Should document the dispatch-only publish');
+    assert.match(content, /xpepper\/copilot-plugins/, 'Should document the plugin marketplace update');
+    assert.match(content, /`ref`/, 'Should document the ref pin bump');
+    const pluginContent = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(pluginContent, /release\.md/, 'plugin.md should link to the release reference');
+  });
+
+  it('cross-links the focused reference pages from the landing and shape pages', () => {
+    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+    for (const page of ['mcp-tools', 'custom-roles', 'guidelines', 'diagnostics', 'verification', 'release']) {
+      assert.ok(readmeContent.includes(`docs/${page}.md`), `README should link docs/${page}.md`);
+    }
+    const pluginContent = fs.readFileSync(pluginReferencePath, 'utf8');
+    assert.match(pluginContent, /mcp-tools\.md/, 'plugin.md should link the MCP tools reference');
+    assert.match(pluginContent, /custom-roles\.md/, 'plugin.md should link the roles reference');
+    assert.match(pluginContent, /guidelines\.md/, 'plugin.md should link the guidelines reference');
+    const cliContent = fs.readFileSync(cliReferencePath, 'utf8');
+    assert.match(cliContent, /diagnostics\.md/, 'cli.md should link the diagnostics reference');
+    assert.match(cliContent, /verification\.md/, 'cli.md should link the verification reference');
+    const actionContent = fs.readFileSync(actionReferencePath, 'utf8');
+    assert.match(actionContent, /verification\.md/, 'github-action.md should link the verification reference');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
