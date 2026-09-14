@@ -363,11 +363,16 @@ export async function runVerification({
     throw new Error(`Unsafe verification command for profile "${profile.name}": ${validation.reason}`);
   }
 
-  let targetHeadSha = headSha;
-  if (!targetHeadSha && prNumber) {
+  let targetHeadSha = headSha ? String(headSha).trim() : null;
+  if (prNumber) {
     const stdout = await execGhFn(['pr', 'view', String(prNumber), '--json', 'headRefOid'], { cwd: repoPath });
-    const parsed = JSON.parse(stdout);
-    targetHeadSha = parsed.headRefOid;
+    const currentHeadSha = String(JSON.parse(stdout).headRefOid || '').trim();
+    if (targetHeadSha && currentHeadSha && targetHeadSha !== currentHeadSha) {
+      throw new Error(
+        `Head SHA mismatch for PR #${prNumber}: expected ${targetHeadSha}, but PR head is ${currentHeadSha}. PR has been updated; rerun verification.`
+      );
+    }
+    targetHeadSha = targetHeadSha || currentHeadSha;
   }
 
   if (!targetHeadSha) {
