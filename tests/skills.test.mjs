@@ -267,6 +267,20 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /guidelines_path/, 'Should document the Action input');
   });
 
+  it('documents verbose diagnostics in the focused diagnostics reference', () => {
+    const diagnosticsPath = path.resolve('docs/diagnostics.md');
+    assert.ok(fs.existsSync(diagnosticsPath), 'docs/diagnostics.md must exist');
+    const content = fs.readFileSync(diagnosticsPath, 'utf8');
+    assert.match(content, /--verbose/, 'Should document --verbose');
+    assert.match(content, /-V/, 'Should document the -V short flag');
+    assert.match(content, /--json/, 'Should document --json');
+    assert.match(content, /gem_pr_review_diagnostics/, 'Should document the MCP diagnostics tool');
+    assert.match(content, /Phase Timing/, 'Should document phase timing');
+    assert.match(content, /Per-Lens Execution/, 'Should document per-lens execution');
+    assert.match(content, /redact/i, 'Should document redaction');
+    assert.match(content, /machine paths/i, 'Should document machine path redaction');
+  });
+
   it('introduces the shapes in plugin-first order in the installation reference', () => {
     const installationReferencePath = path.resolve('docs/installation.md');
     assert.ok(fs.existsSync(installationReferencePath), 'docs/installation.md must exist');
