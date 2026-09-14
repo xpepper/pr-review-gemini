@@ -94,7 +94,13 @@ runs:
         COPILOT_GITHUB_TOKEN: ''
         GH_TOKEN: ''
         GITHUB_TOKEN: ''
-      run: npm install --global @github/copilot@1.0.83
+      run: |
+        set -euo pipefail
+        install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
+        cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
+        cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
+        npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
+        echo "$install_root/node_modules/.bin" >> "$GITHUB_PATH"
 
     - name: Run Gem PR Review
       id: review

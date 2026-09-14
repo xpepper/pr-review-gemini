@@ -609,11 +609,24 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
-      assert.match(content.slice(installStep, reviewStep), /npm install --global @github\/copilot@1\.0\.83/);
+      assert.match(content.slice(installStep, reviewStep), /npm ci --prefix "\$install_root"/);
+      assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
+      assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+
+      const lockfilePath = path.resolve('.github/copilot-cli/package-lock.json');
+      assert.equal(fs.existsSync(lockfilePath), true, 'Copilot CLI lockfile must be committed');
+      const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
+      assert.equal(lockfile.lockfileVersion, 3);
+      assert.equal(lockfile.packages['node_modules/@github/copilot'].version, '1.0.83');
+      for (const [packagePath, packageMetadata] of Object.entries(lockfile.packages)) {
+        if (packagePath === '') continue;
+        assert.match(packageMetadata.resolved, /^https:\/\/registry\.npmjs\.org\//);
+        assert.match(packageMetadata.integrity, /^sha512-/);
+      }
     });
   });
 

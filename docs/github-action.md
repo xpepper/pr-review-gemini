@@ -84,9 +84,12 @@ unless the commenter is explicitly allowlisted.
 ## Copilot CLI provisioning and authentication
 
 The composite Action owns CLI bootstrap: it configures GitHub's required
-Node.js 22 runtime, installs pinned `@github/copilot@1.0.83` through the
-documented npm path, and discovers the resulting `copilot` binary through
-`PATH`. Consumers do not need separate setup or installation steps.
+Node.js 22 runtime, installs `@github/copilot@1.0.83` from the committed
+`.github/copilot-cli/package-lock.json` with `npm ci --ignore-scripts`, and
+discovers the resulting `copilot` binary through `PATH`. The lockfile records
+integrity values for the CLI and its platform dependencies, and disabling
+package lifecycle scripts keeps installation from executing fetched code.
+Consumers do not need separate setup or installation steps.
 
 For non-interactive CI authentication, create the `COPILOT_TOKEN` repository
 secret as a user-owned fine-grained personal access token with the **Copilot
