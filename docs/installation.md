@@ -37,7 +37,7 @@ then add the Action to a repository workflow:
 
 ```yaml
 - name: AI PR Code Review
-  uses: xpepper/pr-review-gemini@v0.4.0
+  uses: xpepper/pr-review-gemini@42cfe1a8dd8a72b91d2ab31f0babdd6f59a31f98
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
     copilot_token: ${{ secrets.COPILOT_TOKEN }}

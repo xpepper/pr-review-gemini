@@ -63,7 +63,7 @@ jobs:
           ref: ${{ steps.base.outputs.result }}
 
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@v0.4.0
+        uses: xpepper/pr-review-gemini@42cfe1a8dd8a72b91d2ab31f0babdd6f59a31f98
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           copilot_token: ${{ secrets.COPILOT_TOKEN }}

@@ -345,3 +345,65 @@ and documented template.
 `34894342377` installed and authenticated Copilot CLI, executed all five lenses
 with no execution errors, and passed the P1 gate with a genuine zero-finding
 summary. The full suite passes 892 tests across 161 suites.
+
+## 2026-09-14 — PR #64 Action-owned Copilot CLI bootstrap
+
+### PR / context
+
+- **PR:** [#64](https://github.com/xpepper/pr-review-gemini/pull/64), which
+  moves pinned Copilot CLI provisioning into the published composite Action.
+- **Reviews:** hosted incremental runs `34897872799`, `34898776092`, and
+  `34899128103`, plus `npm run dogfood:pr 64` balanced local dry-run.
+
+### What Gem PR Review did
+
+The first hosted run failed closed because the immutable base checkout loaded
+pre-#63 `action.yml`, proving the workflow did not execute PR-head Action code
+with the Copilot credential. A conditional self-hosting rollout path then
+provisioned the old trusted-base Action. The final hosted run executed all five
+lenses with zero execution errors and passed the P1 gate with one P2 finding.
+The local dogfood run reported one P1 and one P2.
+
+### What was useful
+
+- The workflow's indentation-sensitive Action-contract detection was a valid
+  maintenance risk. It was replaced with an explicit versioned marker plus a
+  fail-fast `action.yml` existence check.
+- The authentication wording was clarified: the Action guard prevents Copilot
+  CLI fallback to the GitHub API credentials even though the upstream CLI
+  supports those variables.
+- Pre-commit reviews correctly identified that setup/install must clear all
+  three documented Copilot credential variables. Tests now pin that boundary.
+
+### What was incorrect, missing, noisy, or confusing
+
+- The hosted P1 requesting a lockfile/integrity-pinned global install was not
+  actioned. GitHub's official installation path is global npm installation,
+  the package version is exact, and npm registry metadata for `1.0.83`
+  includes a SHA-512 `dist.integrity` that npm verifies. A separate lockfile
+  installer would add machinery beyond issue #63 without demonstrating an
+  exploit in the pinned official path.
+- The reviewer later auto-resolved that integrity finding only because its
+  anchor moved; the implementation did not change. This is a false resolution
+  signal and must not be treated as evidence that the concern was fixed.
+- The local P2 that trusted-base detection uses the stale base SHA describes
+  the intended security boundary. The rollout marker deliberately selects the
+  legacy bootstrap for this PR, then selects Action-owned bootstrap once the
+  marker lands on `main`.
+- The repeated ambient-state finding is a known migration trade-off, not an
+  unexamined secret source: new workflows pass `copilot_token`; only an
+  explicitly supplied `COPILOT_GITHUB_TOKEN` step environment is accepted
+  temporarily, with a deprecation warning. `GH_TOKEN` and `GITHUB_TOKEN` are
+  never accepted as Copilot credentials by the Action guard.
+
+### Recommended follow-up
+
+Merge #64, publish the next immutable release, update the temporary
+commit-pinned examples to that tag, and remove the deprecated step-environment fallback in a
+future breaking release.
+
+**Priority:** now
+
+**Evidence:** final hosted run `34899128103` passed after all five lenses ran
+with zero execution errors; `npm run dogfood:pr 64` completed with two findings
+that were validated as intentional behavior; 893 tests across 161 suites pass.

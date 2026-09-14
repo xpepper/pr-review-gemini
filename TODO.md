@@ -59,12 +59,21 @@ is live, and the Action is listed in Code quality and Continuous integration.
     escaped `::error` annotation (verified by hosted run `34890081003`).
     Documented in `docs/github-action.md` and pinned by a docs-consistency
     assertion.
-  - In review (PR #62, owner-approved): provision the hosted runner with
-    pinned Copilot CLI `1.0.83`, map repository secret `COPILOT_TOKEN` to
+  - Completed (PR #62): provision the hosted runner with pinned Copilot CLI
+    `1.0.83`, map repository secret `COPILOT_TOKEN` to
     `COPILOT_GITHUB_TOKEN`, fail fork runs early and closed when the secret is
     unavailable, and execute action code from the immutable PR base commit.
     Hosted run `34894342377` executed all lenses with zero execution errors and
     a genuine zero-finding result.
+  - In review (PR #64 / issue #63, test-first): move Node.js 22 and pinned
+    Copilot CLI `1.0.83` bootstrap into the composite Action; add the explicit
+    `copilot_token` input while temporarily warning on the previous
+    `COPILOT_GITHUB_TOKEN` step-environment contract; scrub all GitHub token
+    variables from setup/install; and retain immutable trusted-base execution.
+    The repository's self-hosting workflow uses a versioned base marker only
+    during rollout, so downstream examples no longer duplicate bootstrap.
+    Hosted run `34899128103` executed all five lenses with zero execution
+    errors; `npm run dogfood:pr 64` findings were individually validated.
   - Completed (PR #60, test-first): the CLI fallback runner
     honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
     name only the binary's base name), and `docs/plugin.md` documents the two
