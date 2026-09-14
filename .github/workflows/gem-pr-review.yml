@@ -27,10 +27,26 @@ jobs:
       )
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve trusted base branch
+        id: base
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string
+          script: |
+            if (context.eventName === 'pull_request') {
+              return context.payload.pull_request.base.ref;
+            }
+            const { data: pull } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.issue.number,
+            });
+            return pull.base.ref;
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          ref: ${{ steps.base.outputs.result }}
 
       - name: Require Copilot authentication
         env:
