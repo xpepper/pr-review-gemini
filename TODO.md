@@ -49,10 +49,13 @@ is live, and the Action is listed in Code quality and Continuous integration.
     the PR's current head before creating the detached worktree; and the MCP
     diagnostics handler re-sanitizes caller-supplied telemetry objects before
     formatting. Docs updated and pinned by docs-consistency assertions.
-  - [x] Provision the GitHub-hosted Action runner with GitHub Copilot CLI
-    version `1.0.83` and a dedicated `copilot_token` input. The workflow maps
-    its `COPILOT_TOKEN` secret to a fine-grained PAT with the Copilot Requests
-    permission; `GITHUB_TOKEN` remains scoped to GitHub API access.
+  - Backlog (CI review degradation, validated against workflow runs for PRs
+    #52, #53, and #54): the CI Action's model lenses silently no-op on
+    GitHub-hosted runners (`spawn copilot ENOENT`, once per lens) while the
+    run still reports "0 findings across all evaluated lenses" and passes on
+    the docs-consistency path alone. Fix candidate: fail or annotate loudly
+    on lens-execution degradation, or provision the `copilot` CLI on the
+    runner.
 - [x] Add a host-controlled documentation consistency check after the verified
   PR #46 false negative: select `tests/skills.test.mjs` only for documentation
   changes, skip untrusted or PR-modified tests, and block on a selected failure.

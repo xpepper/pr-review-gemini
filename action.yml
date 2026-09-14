@@ -10,9 +10,6 @@ inputs:
     description: 'GitHub token for authenticating API requests and posting reviews'
     required: false
     default: '${{ github.token }}'
-  copilot_token:
-    description: 'Fine-grained PAT with the Copilot Requests permission for specialist lens inference'
-    required: true
   pr_number:
     description: 'Pull request number to review (auto-detected from GITHUB_EVENT_PATH if omitted)'
     required: false
@@ -69,10 +66,6 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install GitHub Copilot CLI
-      shell: bash
-      run: npm install --global @github/copilot@1.0.83
-
     - name: Run Gem PR Review
       id: review
       shell: bash
@@ -87,6 +80,6 @@ runs:
         INPUT_GUIDELINES_PATH: ${{ inputs.guidelines_path }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
-        GH_TOKEN: ${{ inputs.copilot_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
       run: |
         node "${{ github.action_path }}/scripts/ci-action.mjs"

@@ -40,16 +40,12 @@ then add the Action to a repository workflow:
   uses: xpepper/pr-review-gemini@v0.4.0
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
-    copilot_token: ${{ secrets.COPILOT_TOKEN }}
     mode: balanced
     fail_on: P1
 ```
 
-Set `COPILOT_TOKEN` to a fine-grained personal access token with the
-**Copilot Requests** permission. `GITHUB_TOKEN` remains the token used for
-GitHub API reads and review publication. For the complete workflow,
-permissions, inputs, outputs, and execution boundary, see the
-[GitHub Action reference](github-action.md).
+For the complete workflow, permissions, inputs, outputs, and execution
+boundary, see the [GitHub Action reference](github-action.md).
 
 ## Local CLI quick starts
 

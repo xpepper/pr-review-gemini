@@ -34,7 +34,6 @@ jobs:
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
           incremental: auto

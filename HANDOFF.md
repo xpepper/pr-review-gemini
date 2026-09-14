@@ -19,11 +19,13 @@
 
 ## Next Actions
 
-1. Configure the repository `COPILOT_TOKEN` Actions secret as a fine-grained
-   PAT with the Copilot Requests permission before merging the CI runner
-   provisioning change. The Action installs Copilot CLI `1.0.83`, uses this
-   dedicated token only for model inference, and retains `GITHUB_TOKEN` for
-   GitHub API publication.
+1. CI review degradation (evidence-backed): every recent PR review run
+   on GitHub-hosted runners logs `spawn copilot ENOENT` once per lens
+   (runs for PRs #52–#55), so the model lenses silently no-op and CI
+   passes on the docs-consistency path alone. Real review gating currently
+   happens via the local pre-commit self-review and the marketplace
+   `/gem-pr-review <PR>` run. Fix candidate: fail or annotate loudly when
+   lens execution degrades, or provision `copilot` on the runner.
 2. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 

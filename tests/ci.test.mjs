@@ -538,9 +538,6 @@ describe('CI Event Payload & Environment Resolution', () => {
       for (const input of requiredInputs) {
         assert.match(content, new RegExp(`\\b${input}:`), `action.yml must define input '${input}'`);
       }
-      assert.match(content, /\bcopilot_token:/, 'action.yml must define a Copilot authentication token input');
-      assert.match(content, /npm install --global @github\/copilot@1\.0\.83/, 'action.yml must install the pinned Copilot CLI');
-      assert.match(content, /GH_TOKEN:\s*\$\{\{\s*inputs\.copilot_token\s*\}\}/, 'action.yml must use the Copilot token for CLI authentication');
 
       // Verify all required outputs
       const requiredOutputs = ['verdict', 'findings_count', 'blocking_count', 'summary'];
