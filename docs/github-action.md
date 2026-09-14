@@ -62,29 +62,11 @@ jobs:
         with:
           ref: ${{ steps.base.outputs.result }}
 
-      - name: Require Copilot authentication
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
-        run: |
-          if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
-            echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
-            exit 1
-          fi
-
-      - name: Set up Node.js for Copilot CLI
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-
-      - name: Install GitHub Copilot CLI
-        run: npm install --global @github/copilot@1.0.83
-
       - name: Run Gem PR Review
         uses: xpepper/pr-review-gemini@v0.4.0
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
           incremental: auto
@@ -101,13 +83,21 @@ unless the commenter is explicitly allowlisted.
 
 ## Copilot CLI provisioning and authentication
 
-The workflow follows GitHub's documented npm installation path, using its
-required Node.js 22 runtime and pinning the currently verified package release,
-then discovers the resulting `copilot` binary through `PATH`. For
-non-interactive CI authentication, create the `COPILOT_TOKEN` repository secret
-as a user-owned fine-grained personal access token with the **Copilot Requests**
-account permission. The workflow maps that secret to `COPILOT_GITHUB_TOKEN`,
-which has precedence over `GH_TOKEN` and `GITHUB_TOKEN`. Classic personal access
+The composite Action owns CLI bootstrap: it configures GitHub's required
+Node.js 22 runtime, installs pinned `@github/copilot@1.0.83` through the
+documented npm path, and discovers the resulting `copilot` binary through
+`PATH`. Consumers do not need separate setup or installation steps.
+
+For non-interactive CI authentication, create the `COPILOT_TOKEN` repository
+secret as a user-owned fine-grained personal access token with the **Copilot
+Requests** account permission, then pass it through the `copilot_token` input.
+For compatibility, the Action temporarily accepts an explicitly set
+`COPILOT_GITHUB_TOKEN` step environment and emits a deprecation warning; it
+never falls back to `GH_TOKEN` or `GITHUB_TOKEN` for Copilot authentication.
+The Action exposes the selected credential as
+`COPILOT_GITHUB_TOKEN` only to its authentication guard and review process;
+setup and installation never receive the credential. `COPILOT_GITHUB_TOKEN`
+has precedence over `GH_TOKEN` and `GITHUB_TOKEN`. Classic personal access
 tokens are not supported.
 
 See GitHub's official documentation for
@@ -124,6 +114,7 @@ reporting an unreviewed success.
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `github_token` | Token used to authenticate GitHub API calls and post reviews. | No | `${{ github.token }}` |
+| `copilot_token` | User-owned fine-grained PAT with **Copilot Requests** permission; exposed only as `COPILOT_GITHUB_TOKEN` during authentication and review. Required for new workflows; the deprecated step-environment fallback is temporary. | No | None |
 | `pr_number` | Pull request number; read from `GITHUB_EVENT_PATH` when omitted. | No | Auto-detected |
 | `mode` | Review mode: `quick`, `balanced`, `full`, or `deep`. | No | `balanced` |
 | `fail_on` | Severity that fails the job: `P0`, `P1`, `P2`, `P3`, or `none`. | No | `none` |
@@ -170,9 +161,8 @@ defects; branch protection can then require that check before merging.
 
 ## Lens execution failures
 
-Review lenses run through the Copilot CLI, which must be installed and able to
-authenticate on the runner. The starter workflow provisions it because the
-`ubuntu-latest` image does not include it. If every review lens fails to execute
+Review lenses run through the Copilot CLI, which the composite Action installs
+and authenticates on the runner. If every review lens fails to execute
 (for example `spawn copilot ENOENT`),
 no review was performed, so the Action fails the job with verdict `FAIL` and an
 error annotation instead of reporting zero findings. This applies to `dry-run`

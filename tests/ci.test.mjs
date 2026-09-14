@@ -580,7 +580,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /using:\s*['"]?composite['"]?/);
 
       // Verify all required inputs
-      const requiredInputs = ['github_token', 'pr_number', 'mode', 'fail_on', 'incremental', 'action', 'select', 'guidelines_path'];
+      const requiredInputs = ['github_token', 'copilot_token', 'pr_number', 'mode', 'fail_on', 'incremental', 'action', 'select', 'guidelines_path'];
       for (const input of requiredInputs) {
         assert.match(content, new RegExp(`\\b${input}:`), `action.yml must define input '${input}'`);
       }
@@ -590,6 +590,31 @@ describe('CI Event Payload & Environment Resolution', () => {
       for (const output of requiredOutputs) {
         assert.match(content, new RegExp(`\\b${output}:`), `action.yml must define output '${output}'`);
       }
+    });
+
+    it('owns pinned Copilot CLI bootstrap without exposing its credential to setup steps', () => {
+      const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
+      const authStep = content.indexOf('- name: Require Copilot authentication');
+      const nodeStep = content.indexOf('- name: Set up Node.js for Copilot CLI');
+      const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
+      const reviewStep = content.indexOf('- name: Run Gem PR Review');
+
+      assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*false/);
+      assert.ok(authStep >= 0 && authStep < nodeStep, 'authentication must fail closed before setup');
+      assert.ok(nodeStep < installStep && installStep < reviewStep, 'bootstrap must precede review execution');
+      assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*\|\|\s*env\.COPILOT_GITHUB_TOKEN\s*}}/);
+      assert.match(content.slice(authStep, nodeStep), /COPILOT_TOKEN_SUPPLIED:\s*\${{\s*inputs\.copilot_token\s*!=\s*''\s*}}/);
+      assert.match(content.slice(authStep, nodeStep), /::warning title=Gem PR Review::COPILOT_GITHUB_TOKEN step environment is deprecated; pass the copilot_token input\./);
+      assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
+      assert.match(content.slice(nodeStep, installStep), /node-version:\s*['"]22['"]/);
+      assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /npm install --global @github\/copilot@1\.0\.83/);
+      assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*\|\|\s*env\.COPILOT_GITHUB_TOKEN\s*}}/);
     });
   });
 
@@ -1894,12 +1919,10 @@ index 1111111..2222222 100644
       assert.match(content, /return pull\.base\.sha/);
       assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
-      assert.match(content, /uses:\s*actions\/setup-node@v6/);
-      assert.match(content, /node-version:\s*['"]22['"]/);
-      assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
-      assert.match(content, /COPILOT_GITHUB_TOKEN:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
-      assert.match(content, /if \[ -z "\$COPILOT_GITHUB_TOKEN" \]/);
-      assert.match(content, /::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed\./);
+      assert.doesNotMatch(content, /uses:\s*actions\/setup-node@v6/, 'The composite Action must own Node setup');
+      assert.doesNotMatch(content, /npm install --global @github\/copilot/, 'The composite Action must own CLI installation');
+      assert.match(content, /copilot_token:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+      assert.doesNotMatch(content, /COPILOT_GITHUB_TOKEN/, 'The workflow must not expose the credential outside the Action');
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
