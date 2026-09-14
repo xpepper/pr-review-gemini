@@ -395,6 +395,15 @@ The local dogfood run reported one P1 and one P2.
   was removed. The new contract requires `copilot_token`; no caller ambient
   token can satisfy the guard. Because that breaks the `v0.4.0` Action contract,
   all manifests were bumped to `1.0.0` and the migration is documented.
+- The P3 about passing an undeclared input to the old base Action was valid.
+  Mutually exclusive legacy and modern invocation steps now pass only the
+  credential shape understood by their trusted Action revision, eliminating
+  the rollout warning.
+- The later P2 calling the version marker ambient state was not actionable. The
+  marker is the explicit repository-scoped version indicator suggested by the
+  preceding review, is read from the immutable trusted base, and is pinned by a
+  regression test. Deriving the decision from PR-head state would violate the
+  security boundary this rollout exists to preserve.
 
 ### Recommended follow-up
 

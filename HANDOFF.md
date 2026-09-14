@@ -13,7 +13,7 @@
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
     remains at `version 0.4.0` / `ref v0.4.0`.
-* **Docs examples** pin runtime commit `831f1ad` while PR #64's Action contract
+* **Docs examples** pin runtime commit `629c5c7` while PR #64's Action contract
   is unreleased; switch them to the next immutable tag during release preparation.
 * **In flight**: PR [#64](https://github.com/xpepper/pr-review-gemini/pull/64)
   (`feat/action-bootstrap-copilot-cli`) makes the composite Action own Node.js
