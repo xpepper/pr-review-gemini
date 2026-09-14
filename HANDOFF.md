@@ -35,7 +35,7 @@ Documentation-only increment (no code changes; version stays `0.3.3` everywhere)
   `docs/installation.md`, and `docs/plugin.md`.
 * Marketplace entry live in `xpepper/copilot-plugins` (root-source path `"."`
   verified working; ref pinned to `v0.3.3`) plus marketplace install and
-  maintenance documentation in `docs/installation.md`.
+  maintenance documentation in `docs/plugin.md`.
 * Handoff updates per `AGENTS.md` §4: `TODO.md`, `docs/roadmap.md`, and this
   file.
 * Design record: [`docs/superpowers/specs/2026-09-13-plugin-first-docs-design.md`](docs/superpowers/specs/2026-09-13-plugin-first-docs-design.md)
@@ -49,8 +49,9 @@ Documentation-only increment (no code changes; version stays `0.3.3` everywhere)
 2. After the PR merges and the next release is tagged, update the marketplace
    entry's version and `ref` in `xpepper/copilot-plugins` to the new `vX.Y.Z`
    tag so plugin installs track the release.
-3. Known environment note: reinstalling `z-pr-review@xpepper-copilot-plugins`
-   requires the `v0.2.5` tag to land in `xpepper/pr-review-glm` first.
+3. Known environment note (sibling project, not this repository): reinstalling
+   `z-pr-review@xpepper-copilot-plugins` requires the `v0.2.5` tag to land in
+   `xpepper/pr-review-glm` first.
 
 ## Where the History Lives
 

@@ -32,6 +32,10 @@ is live, and the Action is listed in Code quality and Continuous integration.
 - [ ] Continue the documentation information architecture with focused MCP,
   custom-role, repository-guideline, diagnostics, verification, and release
   reference pages.
+  - Backlog: plugin docs polish from the 2026-09-13 final review — `plugin.md`
+    alias-sentence wording, `installation.md` intro shape enumeration order,
+    README marketplace sentence install half, README "full flag tables"
+    wording → "per-shape references".
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
 - [x] Add a host-controlled documentation consistency check after the verified
