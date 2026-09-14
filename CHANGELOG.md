@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-09-14
+
+### 🚀 Features
+
+- **ci:** add targeted documentation consistency check (#47) (#47) (`
+d5f6be`)
+
+### 🐛 Bug Fixes
+
+- **release:** guard against republishing existing releases (#48) (#48) (`
+3b15a0`)
+
+### 📝 Documentation
+
+- record PR #53 merge and pre-release state in handoff docs (#54) (#53) (`546865e`)
+- focused reference pages for MCP tools, roles, guidelines, diagnostics, verification, release (#53) (#53) (`
+690ba5`)
+- post-#51 state sweep and plugin reference polish (#52) (#51) (`
+b9fa42`)
+- plugin-first documentation and Copilot marketplace entry (#51) (#51) (`
+d57c70`)
+- split first-time user documentation (#46) (#46) (`
+0a7408`)
+- establish post-MVP dogfooding baseline (#45) (#45) (`
+9b8cce`)
+
+### 🔧 Maintenance & Chores
+
+- **ci:** migrate GitHub Actions off deprecated Node.js 20 runtime (#50) (#50) (`
+d26657`)
+
 ## [0.3.3] - 2026-09-13
 
 ### 🐛 Bug Fixes
