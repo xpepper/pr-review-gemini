@@ -45,6 +45,10 @@ it is stored, printed, or published:
 
 - Prompt and diff bodies, environments, headers, and authorization
   material are dropped entirely (blocklisted keys).
+- Secret-named keys (`token`, `secret`, password forms, `credential`,
+  api-key forms, …) are dropped at any depth, regardless of their
+  values — so untrusted objects cannot smuggle credentials through
+  key names.
 - Token patterns (`ghp_…`, `gho_…`, `github_pat_…`, `Bearer …`) are
   replaced with `[REDACTED_TOKEN]`; secret-like key/value pairs become
   `[REDACTED]`.
@@ -54,10 +58,11 @@ it is stored, printed, or published:
 - MCP tool error messages get the same path redaction plus a 500
   character cap.
 
-One boundary to know: the redaction guarantee covers engine-produced
-telemetry — review runs and the session cache they populate. The MCP
-diagnostics tool formats whatever it is handed: a caller-supplied
-`diagnostics` object is formatted as-is, not re-sanitized.
+The MCP diagnostics tool re-sanitizes anything it is handed: a
+caller-supplied `diagnostics` object passes through the same
+sanitization pipeline (blocklisted keys dropped, token and machine-path
+patterns redacted) before formatting, so the redaction guarantee holds
+for engine-produced telemetry and caller-supplied objects alike.
 
 ## MCP
 

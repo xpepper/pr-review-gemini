@@ -212,6 +212,23 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Seven docs-consistency assertions in `tests/skills.test.mjs`, each written red-first (860 tests across 159 suites, 0 failures).
   - Design record: `docs/superpowers/specs/2026-09-14-reference-pages-design.md` and `docs/superpowers/plans/2026-09-14-reference-pages.md`.
   - Merged via PR #53 (squash commit `690ba55`, 2026-09-14) after a dogfood review by this tool; all 8 findings were independently validated against the code and fixed before merge.
+- [x] **Post-MVP Increment (2026-09-14): Host-Gate Hardening (PR #56)**
+  - Required and enforced `expectedHeadSha` on both MCP publish tools
+    (`gem_pr_review_publish` and `gem_pr_review_publish_cached`, plus their
+    aliases): the schemas mark the parameter required and the handlers fail
+    closed before any GitHub mutation, closing the silently-skipped stale-head
+    gate (including the `publish_cached` path where the internal freshness
+    fetch is not wired).
+  - Cross-checked a caller-supplied verify `headSha` against the PR's current
+    `headRefOid` in `runVerification` (`src/verify.js`): mismatches fail closed
+    instead of verifying a stale or arbitrary commit in a detached worktree.
+  - Re-sanitized caller-supplied diagnostics in the MCP diagnostics handler
+    via `sanitizeTelemetry` (blocklisted keys dropped, token/machine-path
+    patterns redacted) before markdown or json formatting.
+  - All changes test-first (6 new tests; 866 tests across 159 suites passing);
+    reference pages (`docs/mcp-tools.md`, `docs/verification.md`,
+    `docs/diagnostics.md`) and the skill publish example updated and pinned by
+    red-first docs-consistency assertions in `tests/skills.test.mjs`.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

@@ -363,11 +363,31 @@ export async function runVerification({
     throw new Error(`Unsafe verification command for profile "${profile.name}": ${validation.reason}`);
   }
 
-  let targetHeadSha = headSha;
-  if (!targetHeadSha && prNumber) {
+  const suppliedHeadSha = headSha != null ? String(headSha).trim() : '';
+  if (headSha != null && !suppliedHeadSha) {
+    throw new Error('headSha, when provided, must be a non-empty commit SHA.');
+  }
+  let targetHeadSha = suppliedHeadSha || null;
+  if (prNumber) {
     const stdout = await execGhFn(['pr', 'view', String(prNumber), '--json', 'headRefOid'], { cwd: repoPath });
-    const parsed = JSON.parse(stdout);
-    targetHeadSha = parsed.headRefOid;
+    const currentHeadSha = String(JSON.parse(stdout).headRefOid || '').trim();
+    if (!currentHeadSha) {
+      throw new Error(`Unable to resolve current PR head for PR #${prNumber}; refusing to verify an unconfirmed commit.`);
+    }
+    if (targetHeadSha) {
+      const supplied = targetHeadSha.toLowerCase();
+      const current = currentHeadSha.toLowerCase();
+      // The authoritative commit is always the resolved full PR head; an
+      // abbreviated SHA (>= 7 chars, GitHub's short form) is accepted only
+      // as a prefix of that head.
+      const isCurrentHead = supplied === current || (supplied.length >= 7 && current.startsWith(supplied));
+      if (!isCurrentHead) {
+        throw new Error(
+          `Head SHA mismatch for PR #${prNumber}: expected ${targetHeadSha}, but PR head is ${currentHeadSha}. PR has been updated; rerun verification.`
+        );
+      }
+    }
+    targetHeadSha = currentHeadSha;
   }
 
   if (!targetHeadSha) {

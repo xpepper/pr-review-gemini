@@ -362,6 +362,89 @@ index 1111111..2222222 100644
       assert.deepEqual(publishCachedCalledWith.selectedIndices, [0]);
     });
 
+    it('requires expectedHeadSha on gem_pr_review_publish and pr_review_publish', async () => {
+      let publishCalled = false;
+      const handler = createMcpHandler({
+        publishReviewFn: async () => {
+          publishCalled = true;
+          return { published: true };
+        },
+      });
+
+      const missing = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 210,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_publish',
+          arguments: { prNumber: 42, findings: [] },
+        },
+      });
+      assert.equal(missing.id, 210);
+      assert.equal(missing.result?.isError, true);
+      assert.match(missing.result.content[0].text, /expectedHeadSha is required/i);
+
+      const blank = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 211,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_publish',
+          arguments: { prNumber: 42, findings: [], expectedHeadSha: '   ' },
+        },
+      });
+      assert.equal(blank.result?.isError, true);
+      assert.match(blank.result.content[0].text, /expectedHeadSha is required/i);
+
+      assert.equal(publishCalled, false, 'publishReviewFn must not run without expectedHeadSha');
+    });
+
+    it('requires expectedHeadSha on gem_pr_review_publish_cached', async () => {
+      let publishCachedCalled = false;
+      const handler = createMcpHandler({
+        publishCachedReviewFn: async () => {
+          publishCachedCalled = true;
+          return { published: true };
+        },
+      });
+
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 212,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_publish_cached',
+          arguments: { prNumber: 77 },
+        },
+      });
+
+      assert.equal(response.id, 212);
+      assert.equal(response.result?.isError, true);
+      assert.match(response.result.content[0].text, /expectedHeadSha is required/i);
+      assert.equal(publishCachedCalled, false, 'publishCachedReviewFn must not run without expectedHeadSha');
+    });
+
+    it('marks expectedHeadSha as required in publish tool schemas', async () => {
+      const handler = createMcpHandler();
+      const response = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 213,
+        method: 'tools/list',
+      });
+
+      const publishTool = response.result.tools.find((t) => t.name === 'gem_pr_review_publish');
+      assert.ok(
+        publishTool.inputSchema.required.includes('expectedHeadSha'),
+        'gem_pr_review_publish schema must require expectedHeadSha'
+      );
+
+      const publishCachedTool = response.result.tools.find((t) => t.name === 'gem_pr_review_publish_cached');
+      assert.ok(
+        publishCachedTool.inputSchema.required.includes('expectedHeadSha'),
+        'gem_pr_review_publish_cached schema must require expectedHeadSha'
+      );
+    });
+
     it('handles tools/call for gem_self_review and returns fail-closed result', async () => {
       let runSelfReviewArgs = null;
       const handler = createMcpHandler({
@@ -1354,6 +1437,61 @@ index 0000000..1111111 100644
       } finally {
         fs.rmSync(tempCacheDir, { recursive: true, force: true });
       }
+    });
+
+    it('re-sanitizes caller-supplied diagnostics before formatting', async () => {
+      const handler = createMcpHandler();
+      const unsanitized = {
+        phases: { diffFetch: { durationMs: 20, status: 'completed' } },
+        lenses: [
+          {
+            lensId: 'security',
+            name: 'security ghp_abcdefghijklmnopqrstuvwxyz',
+            status: 'completed',
+          },
+        ],
+        guidelines: {
+          found: true,
+          path: '/Users/spy/project/.github/gem-pr-review.md',
+          bytes: 10,
+          untrusted: false,
+          truncated: false,
+        },
+        env: { GITHUB_TOKEN: 'gho_abcdefghijklmnopqrstuvwxyz' },
+        apiKey: 'plainsecretvalue',
+      };
+
+      const mdRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 105,
+        method: 'tools/call',
+        params: {
+          name: 'gem_pr_review_diagnostics',
+          arguments: { diagnostics: unsanitized, format: 'markdown' },
+        },
+      });
+      assert.equal(mdRes.id, 105);
+      const mdText = mdRes.result.content[0].text;
+      assert.doesNotMatch(mdText, /ghp_|gho_/, 'markdown report must redact token patterns');
+      assert.doesNotMatch(mdText, /\/Users\//, 'markdown report must not contain machine paths');
+
+      const jsonRes = await handler.handleMessage({
+        jsonrpc: '2.0',
+        id: 106,
+        method: 'tools/call',
+        params: {
+          name: 'pr_review_diagnostics',
+          arguments: { diagnostics: unsanitized, format: 'json' },
+        },
+      });
+      assert.equal(jsonRes.id, 106);
+      const parsedJson = JSON.parse(jsonRes.result.content[0].text);
+      assert.equal(parsedJson.env, undefined, 'forbidden telemetry keys must be dropped');
+      assert.equal(parsedJson.apiKey, undefined, 'secret-named keys must be dropped');
+      assert.equal(parsedJson.phases.diffFetch.durationMs, 20);
+      const raw = JSON.stringify(parsedJson);
+      assert.doesNotMatch(raw, /ghp_|gho_/, 'json output must redact token patterns');
+      assert.doesNotMatch(raw, /\/Users\//, 'json output must not contain machine paths');
     });
 
     it('passes verbose: true to gem_self_review and includes diagnostics in summary and payload', async () => {

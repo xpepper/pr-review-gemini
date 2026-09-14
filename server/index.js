@@ -20,7 +20,11 @@ import {
 } from '../src/diff.js';
 import { publishReview } from '../src/publish.js';
 import { publishCachedReview, getReviewCache } from '../src/cache.js';
-import { formatDiagnosticReport, formatDiagnosticsJson } from '../src/diagnostics.js';
+import {
+  formatDiagnosticReport,
+  formatDiagnosticsJson,
+  sanitizeTelemetry,
+} from '../src/diagnostics.js';
 import { runReview, resolveReviewMode } from '../src/reviewer.js';
 import { createSubagentRunner } from '../src/subagents.js';
 import { loadConfig } from '../src/config.js';
@@ -215,14 +219,15 @@ export const MCP_TOOLS = [
         },
         expectedHeadSha: {
           type: 'string',
-          description: 'Expected PR head SHA for stale review check',
+          description:
+            'Required PR head SHA the findings were reviewed against; publishing fails if the PR head has moved (stale review guard)',
         },
         repo: {
           type: 'string',
           description: 'Optional repository in owner/repo format',
         },
       },
-      required: ['prNumber', 'findings'],
+      required: ['prNumber', 'findings', 'expectedHeadSha'],
     },
   },
   {
@@ -242,7 +247,8 @@ export const MCP_TOOLS = [
         },
         expectedHeadSha: {
           type: 'string',
-          description: 'Expected PR head commit SHA for freshness check',
+          description:
+            'Required expected PR head commit SHA; the cached review must match the current PR head before publishing',
         },
         selectedIndices: {
           type: 'array',
@@ -259,7 +265,7 @@ export const MCP_TOOLS = [
           description: 'Optional review summary markdown body override',
         },
       },
-      required: ['prNumber'],
+      required: ['prNumber', 'expectedHeadSha'],
     },
   },
   {
@@ -641,6 +647,34 @@ export const MCP_TOOLS = [
 ];
 
 /**
+ * Parses the required expectedHeadSha argument shared by the publish tools.
+ * Returns the trimmed SHA, or an empty string when absent/blank.
+ */
+function parseExpectedHeadSha(args) {
+  return typeof args?.expectedHeadSha === 'string' ? args.expectedHeadSha.trim() : '';
+}
+
+/**
+ * Builds the fail-closed JSON-RPC error envelope for publish calls that
+ * omitted expectedHeadSha.
+ */
+function missingExpectedHeadShaResponse(id, text) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    result: {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text,
+        },
+      ],
+    },
+  };
+}
+
+/**
  * Creates an MCP message handler implementing the JSON-RPC 2.0 protocol.
  */
 export function createMcpHandler(options = {}) {
@@ -877,11 +911,19 @@ export function createMcpHandler(options = {}) {
             }
 
             if (toolName === 'gem_pr_review_publish' || toolName === 'pr_review_publish') {
+              const expectedHeadSha = parseExpectedHeadSha(args);
+              if (!expectedHeadSha) {
+                return missingExpectedHeadShaResponse(
+                  id,
+                  'expectedHeadSha is required for publishing: pass the PR head SHA the findings were reviewed against so the host can reject stale reviews.'
+                );
+              }
+
               const pubResult = await publishReviewFn({
                 prNumber: args.prNumber,
                 findings: args.findings || [],
                 reviewBody: args.reviewBody || 'Automated code review summary.',
-                expectedHeadSha: args.expectedHeadSha,
+                expectedHeadSha,
                 repo: args.repo,
                 cwd,
               });
@@ -904,10 +946,18 @@ export function createMcpHandler(options = {}) {
               toolName === 'gem_pr_review_publish_cached' ||
               toolName === 'pr_review_publish_cached'
             ) {
+              const expectedHeadSha = parseExpectedHeadSha(args);
+              if (!expectedHeadSha) {
+                return missingExpectedHeadShaResponse(
+                  id,
+                  'expectedHeadSha is required for publishing a cached review: pass the head SHA the review was cached for so the host can verify freshness before publishing.'
+                );
+              }
+
               const pubCachedResult = await publishCachedReviewFn({
                 prNumber: args.prNumber,
                 repo: args.repo,
-                headSha: args.expectedHeadSha,
+                headSha: expectedHeadSha,
                 selectedIndices: args.selectedIndices,
                 minSeverity: args.minSeverity,
                 reviewBody: args.reviewBody,
@@ -1419,11 +1469,14 @@ export function createMcpHandler(options = {}) {
               }
 
               const format = (args.format || 'markdown').toLowerCase();
+              // Re-sanitize regardless of source: caller-supplied objects are
+              // untrusted, and cached telemetry gets defense-in-depth.
+              const safeDiagData = sanitizeTelemetry(diagData, { cwd });
               let text;
               if (format === 'json') {
-                text = formatDiagnosticsJson(diagData);
+                text = formatDiagnosticsJson(safeDiagData);
               } else {
-                text = formatDiagnosticReport(diagData);
+                text = formatDiagnosticReport(safeDiagData);
               }
 
               return {

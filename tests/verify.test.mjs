@@ -288,6 +288,13 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
         return '';
       };
 
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'headsha4242' });
+        }
+        return '';
+      };
+
       const mockSpawn = (cmd, args, options) => {
         return {
           on(event, handler) {
@@ -310,6 +317,7 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
         headSha: 'headsha4242',
         profileName: 'test',
         repoPath: '/workspace/project',
+        execGhFn: mockGh,
         execGitFn: mockGit,
         spawnFn: mockSpawn,
       });
@@ -354,11 +362,201 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
       assert.equal(result.status, 'passed');
     });
 
+    it('rejects a caller-supplied headSha that does not match the PR current head', async () => {
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'fresh_head_777' });
+        }
+        return '';
+      };
+
+      let worktreeAdded = false;
+      const mockGit = async (args) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          worktreeAdded = true;
+        }
+        return '';
+      };
+
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'stale_head_111',
+            execGhFn: mockGh,
+            execGitFn: mockGit,
+            spawnFn: () => {
+              throw new Error('verification command must not spawn for a stale head');
+            },
+          }),
+        /Head SHA mismatch for PR #42: expected stale_head_111, but PR head is fresh_head_777/
+      );
+
+      assert.equal(worktreeAdded, false, 'no worktree may be created for a stale caller-supplied head');
+    });
+
+    it('fails closed when the PR current head cannot be resolved', async () => {
+      const emptyGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({});
+        }
+        return '';
+      };
+
+      let worktreeAdded = false;
+      const mockGit = async (args) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          worktreeAdded = true;
+        }
+        return '';
+      };
+
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'caller_supplied_head',
+            execGhFn: emptyGh,
+            execGitFn: mockGit,
+            spawnFn: () => {
+              throw new Error('verification command must not spawn when the PR head is unresolvable');
+            },
+          }),
+        /Unable to resolve current PR head for PR #42/
+      );
+
+      assert.equal(worktreeAdded, false, 'no worktree may be created when the PR head is unresolvable');
+    });
+
+    it('accepts an abbreviated caller-supplied headSha that prefixes the current PR head', async () => {
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'fresh_head_777' });
+        }
+        return '';
+      };
+
+      const gitCalls = [];
+      const mockGit = async (args) => {
+        gitCalls.push(args);
+        return '';
+      };
+
+      const mockSpawn = () => ({
+        on(event, handler) {
+          if (event === 'close') setTimeout(() => handler(0), 10);
+          return this;
+        },
+        stdout: { on() { return this; } },
+        stderr: { on() { return this; } },
+        kill() {},
+      });
+
+      const result = await runVerification({
+        prNumber: 42,
+        headSha: 'fresh_h',
+        execGhFn: mockGh,
+        execGitFn: mockGit,
+        spawnFn: mockSpawn,
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.equal(result.headSha, 'fresh_head_777', 'the authoritative full PR head SHA must be verified');
+      const addCall = gitCalls.find((c) => c[0] === 'worktree' && c[1] === 'add');
+      assert.ok(addCall);
+      assert.equal(addCall[4], 'fresh_head_777', 'worktree must be created at the full resolved head');
+    });
+
+    it('rejects an abbreviated headSha that is not the current PR head', async () => {
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'fresh_head_777' });
+        }
+        return '';
+      };
+
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: 'stale12',
+            execGhFn: mockGh,
+            execGitFn: async () => '',
+            spawnFn: () => {
+              throw new Error('verification command must not spawn for a stale abbreviated head');
+            },
+          }),
+        /Head SHA mismatch for PR #42: expected stale12, but PR head is fresh_head_777/
+      );
+    });
+
+    it('rejects a whitespace-only headSha instead of treating it as absent', async () => {
+      await assert.rejects(
+        () =>
+          runVerification({
+            prNumber: 42,
+            headSha: '   ',
+            execGhFn: async () => JSON.stringify({ headRefOid: 'fresh_head_777' }),
+            execGitFn: async () => '',
+            spawnFn: () => {
+              throw new Error('verification command must not spawn for a blank headSha');
+            },
+          }),
+        /headSha, when provided, must be a non-empty commit SHA/
+      );
+    });
+
+    it('verifies against the supplied headSha when it matches the PR current head', async () => {
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'headsha4242' });
+        }
+        return '';
+      };
+
+      const gitCalls = [];
+      const mockGit = async (args) => {
+        gitCalls.push(args);
+        return '';
+      };
+
+      const mockSpawn = () => ({
+        on(event, handler) {
+          if (event === 'close') setTimeout(() => handler(0), 10);
+          return this;
+        },
+        stdout: { on() { return this; } },
+        stderr: { on() { return this; } },
+        kill() {},
+      });
+
+      const result = await runVerification({
+        prNumber: 42,
+        headSha: 'headsha4242',
+        execGhFn: mockGh,
+        execGitFn: mockGit,
+        spawnFn: mockSpawn,
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.equal(result.headSha, 'headsha4242');
+      const addCall = gitCalls.find((c) => c[0] === 'worktree' && c[1] === 'add');
+      assert.ok(addCall, 'worktree add must be invoked for a matching head');
+      assert.equal(addCall[4], 'headsha4242', 'worktree must be created at the verified head SHA');
+    });
+
     it('cleans up worktree even if command execution fails or throws', async () => {
       let cleanedUp = false;
       const mockGit = async (args) => {
         if (args[0] === 'worktree' && args[1] === 'remove') {
           cleanedUp = true;
+        }
+        return '';
+      };
+
+      const mockGh = async (args) => {
+        if (args[0] === 'pr' && args[1] === 'view') {
+          return JSON.stringify({ headRefOid: 'headsha4242' });
         }
         return '';
       };
@@ -372,6 +570,7 @@ describe('Detached Worktree Test Verification (pr_review_verify)', () => {
           await runVerification({
             prNumber: 42,
             headSha: 'headsha4242',
+            execGhFn: mockGh,
             execGitFn: mockGit,
             spawnFn: mockSpawn,
           });
