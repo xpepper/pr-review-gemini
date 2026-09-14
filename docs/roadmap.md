@@ -252,6 +252,14 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     in `docs/github-action.md` and pinned by a docs-consistency assertion.
     Verified on real GitHub-hosted runs of PR #57, whose own review check now
     fails by design until the Copilot CLI is provisioned on the runner.
+- [ ] **Post-MVP Increment (2026-09-14): `COPILOT_CLI_PATH` in the CLI Fallback (PR #60, stacked on #57, in review)**
+  - The CLI fallback runner (`src/subagents.js`) runs
+    `path.resolve(COPILOT_CLI_PATH)` when set and `copilot` from `PATH`
+    otherwise; previously the variable only took effect together with
+    `COPILOT_SDK_PATH`. Spawn failures report only the binary's base name.
+  - `docs/plugin.md` documents the variables independently, pinned by a
+    docs-consistency assertion. Test-first; 890 tests passing.
+  - Prerequisite for provisioning the Copilot CLI on the review runner.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

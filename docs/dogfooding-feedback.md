@@ -213,7 +213,8 @@ error wrapping, stderr sanitization, and JSDoc.
 ### Recommended follow-up
 
 Honor `COPILOT_CLI_PATH` in the CLI fallback before provisioning the Copilot
-CLI on the review runner.
+CLI on the review runner. Implemented test-first in
+[PR #60](https://github.com/xpepper/pr-review-gemini/pull/60).
 
 **Priority:** next
 
