@@ -211,6 +211,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Moved the marketplace-maintenance paragraph from `docs/plugin.md` to `docs/release.md`; added cross-links from `README.md`, `docs/plugin.md`, `docs/cli.md`, and `docs/github-action.md`.
   - Seven docs-consistency assertions in `tests/skills.test.mjs`, each written red-first (860 tests across 159 suites, 0 failures).
   - Design record: `docs/superpowers/specs/2026-09-14-reference-pages-design.md` and `docs/superpowers/plans/2026-09-14-reference-pages.md`.
+  - Merged via PR #53 (squash commit `690ba55`, 2026-09-14) after a dogfood review by this tool; all 8 findings were independently validated against the code and fixed before merge.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

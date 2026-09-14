@@ -38,7 +38,9 @@ is live, and the Action is listed in Code quality and Continuous integration.
   custom-role, repository-guideline, diagnostics, verification, and release
   reference pages (`docs/mcp-tools.md`, `docs/custom-roles.md`,
   `docs/guidelines.md`, `docs/diagnostics.md`, `docs/verification.md`,
-  `docs/release.md`; branch `docs/reference-pages`).
+  `docs/release.md`). Landed via PR #53 (squash `690ba55`, 2026-09-14)
+  after a dogfood review whose 8 findings were all validated against the
+  code and fixed before merge.
 - [ ] Dogfood the reviewer on real pull requests and prioritize only reproducible,
   high-confidence polish opportunities.
   - Backlog (host-gate hardening candidates surfaced by the PR #53 dogfood
