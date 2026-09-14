@@ -712,11 +712,12 @@ export async function dispatchSubagentsParallel({
  * (untrusted diff content), so it must not reach logs or review bodies.
  *
  * @param {Error & { code?: string|number, signal?: string, stderr?: string }} err
+ * @param {string} [command='copilot'] - Executed binary; only its base name is reported
  * @returns {string}
  */
-function describeCliFailure(err) {
+function describeCliFailure(err, command = 'copilot') {
   if (typeof err?.code === 'string') {
-    return `spawn copilot ${err.code}`;
+    return `spawn ${path.basename(command)} ${err.code}`;
   }
   const status = err?.signal ? `signal ${err.signal}` : `exit code ${err?.code ?? 'unknown'}`;
   const stderrTail = String(err?.stderr || '')
@@ -827,6 +828,7 @@ export async function createSubagentRunner(options = {}) {
   }
 
   // Fallback to direct Copilot CLI invocation
+  const cliCommand = copilotCliPath ? path.resolve(copilotCliPath) : 'copilot';
   return async ({ prompt, model }) => {
     const selectedModel = modelOverride || model;
     const cliArgs = ['-s', '-p', prompt, '--no-color'];
@@ -835,14 +837,14 @@ export async function createSubagentRunner(options = {}) {
     }
 
     try {
-      const { stdout } = await execFileFn('copilot', cliArgs, {
+      const { stdout } = await execFileFn(cliCommand, cliArgs, {
         cwd,
         maxBuffer: 10 * 1024 * 1024,
       });
       return stdout;
     } catch (err) {
       // Fail closed: an empty string would be parsed as a clean lens with zero findings.
-      const message = `Copilot CLI execution failed: ${describeCliFailure(err)}`;
+      const message = `Copilot CLI execution failed: ${describeCliFailure(err, cliCommand)}`;
       const cliError = new Error(message, { cause: err });
       cliError.sanitizedMessage = message;
       throw cliError;
