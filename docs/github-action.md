@@ -46,6 +46,15 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
 
+      - name: Require Copilot authentication
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+        run: |
+          if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+            echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
+            exit 1
+          fi
+
       - name: Set up Node.js for Copilot CLI
         uses: actions/setup-node@v6
         with:
@@ -90,7 +99,8 @@ See GitHub's official documentation for
 and [authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli).
 
 Repository secrets are not passed to `pull_request` workflows triggered from
-forks. By owner decision, those runs remain enabled and fail closed rather than
+forks. By owner decision, those runs remain enabled and fail closed at an
+explicit authentication precondition before installation or review rather than
 reporting an unreviewed success.
 
 ## Inputs

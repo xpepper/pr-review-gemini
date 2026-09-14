@@ -1894,6 +1894,8 @@ index 1111111..2222222 100644
       assert.match(content, /node-version:\s*['"]22['"]/);
       assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
       assert.match(content, /COPILOT_GITHUB_TOKEN:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+      assert.match(content, /if \[ -z "\$COPILOT_GITHUB_TOKEN" \]/);
+      assert.match(content, /::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed\./);
       assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
       assert.match(content, /fail_on:\s*P1/);
     });
