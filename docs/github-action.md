@@ -50,6 +50,7 @@ jobs:
         uses: xpepper/pr-review-gemini@v0.4.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
           incremental: auto
@@ -69,6 +70,7 @@ unless the commenter is explicitly allowlisted.
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `github_token` | Token used to authenticate GitHub API calls and post reviews. | No | `${{ github.token }}` |
+| `copilot_token` | Fine-grained PAT with the **Copilot Requests** permission, used only for specialist lens inference. | Yes | — |
 | `pr_number` | Pull request number; read from `GITHUB_EVENT_PATH` when omitted. | No | Auto-detected |
 | `mode` | Review mode: `quick`, `balanced`, `full`, or `deep`. | No | `balanced` |
 | `fail_on` | Severity that fails the job: `P0`, `P1`, `P2`, `P3`, or `none`. | No | `none` |
@@ -94,6 +96,15 @@ For what the `verbose` input and `diagnostics` output contain, see the
 [diagnostics reference](diagnostics.md). For verification profiles, the
 comment-driven `--verify` flow, and fork fail-closed behavior, see the
 [verification reference](verification.md).
+
+## Copilot CLI authentication
+
+The Action installs GitHub Copilot CLI version `1.0.83` before running the
+review. Create the `COPILOT_TOKEN` repository secret as a fine-grained
+personal access token with the **Copilot Requests** permission, then pass it
+to `copilot_token` as shown above. The ephemeral `GITHUB_TOKEN` cannot
+authenticate Copilot inference; it remains isolated to GitHub API reads and
+host-gated review publication.
 
 ## Documentation consistency check
 

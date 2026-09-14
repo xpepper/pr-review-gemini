@@ -68,13 +68,16 @@ jobs:
       - uses: xpepper/pr-review-gemini@v0.4.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
 ```
 
 This minimal workflow handles pull-request events only. For the `/gem-review`
 comment trigger and concurrency controls, see the complete
-[GitHub Action reference](docs/github-action.md).
+[GitHub Action reference](docs/github-action.md). Create `COPILOT_TOKEN` as a
+fine-grained personal access token with the **Copilot Requests** permission;
+the Actions-provided `GITHUB_TOKEN` is used only for GitHub API access.
 
 ## Driving a review
 
