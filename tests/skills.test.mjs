@@ -237,6 +237,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /640 KB/, 'Should document the diff_read byte budget');
     assert.match(content, /50 inline comments/i, 'Should document the inline comment cap');
     assert.match(content, /host-gated/i, 'Should document host-gated publishing');
+    assert.match(content, /required `expectedHeadSha`/, 'Should document the required stale-head parameter on publish tools');
   });
 
   it('documents custom review roles in the focused roles reference', () => {
@@ -279,6 +280,12 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /Per-Lens Execution/, 'Should document per-lens execution');
     assert.match(content, /redact/i, 'Should document redaction');
     assert.match(content, /machine paths/i, 'Should document machine path redaction');
+    assert.match(
+      content,
+      /re-sanitizes anything it is handed/i,
+      'Should document re-sanitization of caller-supplied diagnostics'
+    );
+    assert.doesNotMatch(content, /formatted as-is/, 'The as-is formatting boundary must be gone');
   });
 
   it('documents verification and gated approval in the focused verification reference', () => {
@@ -294,6 +301,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /approveMaxPriorityLevel/, 'Should document gated approval');
     assert.match(content, /gem_pr_review_verify/, 'Should document the verify MCP tool');
     assert.match(content, /--verify/, 'Should document the comment flag');
+    assert.match(content, /cross-check/i, 'Should document the supplied headSha cross-check');
   });
 
   it('documents release and marketplace maintenance in the focused release reference', () => {

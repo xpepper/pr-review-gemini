@@ -8,10 +8,10 @@ can be backed by executed evidence instead of model claims.
 
 - A temporary worktree is created (`git worktree add --detach` at the
   target commit) under the OS temp directory and force-cleaned afterwards.
-  The target is the PR head SHA, auto-resolved via `gh pr view` — unless
-  the caller supplies `headSha`, which is used as-is: the tool does not
-  re-check a supplied SHA against the PR's current head, so supply one
-  only to pin verification to a known head.
+  The target is the PR head SHA, auto-resolved via `gh pr view`. A
+  caller-supplied `headSha` is cross-checked against the PR's current
+  head: on mismatch (the PR has moved) verification fails closed rather
+  than verifying a stale or arbitrary commit.
 - The command runs without a shell (direct spawn) with a scrubbed
   environment (only `PATH`, `HOME`, `TMPDIR`, `NODE_ENV`, `USER`,
   `LOGNAME`, `SHELL`, `TERM`, `LANG`, `LC_ALL`, `CI` are passed through).
