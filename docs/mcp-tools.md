@@ -65,9 +65,12 @@ tool but are not listed: `pr_review_diff`, `pr_review_diff_read`,
   Findings are validated against actual diff hunks; unanchored findings are
   demoted to the review summary instead of becoming broken inline comments,
   and inline comments are capped at 50 inline comments per review.
-- **Stale-head check.** Publishing requires an `expectedHeadSha`; if the PR
-  head has moved, publishing fails rather than anchoring to an outdated
-  diff.
+- **Stale-head check (opt-in via `expectedHeadSha`).** Publishing always
+  queries current PR state, but the freshness comparison runs only when
+  the caller supplies `expectedHeadSha`: if the PR head has moved,
+  publishing fails rather than anchoring to an outdated diff. Supply it
+  whenever publishing cached or earlier-generated findings; when omitted,
+  no freshness comparison is performed.
 - **Bounded diff access.** `gem_pr_review_diff_read` enforces its read/byte
   budget and rejects path traversal, so large-diff reviews cannot exhaust
   context or escape the diff.
