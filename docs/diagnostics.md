@@ -40,7 +40,8 @@ The Markdown report (`### 🔬 Review Execution Diagnostics`) includes:
 
 ## Redaction guarantees
 
-Telemetry is sanitized before it is stored, printed, or published:
+Telemetry produced by the review engine's collector is sanitized before
+it is stored, printed, or published:
 
 - Prompt and diff bodies, environments, headers, and authorization
   material are dropped entirely (blocklisted keys).
@@ -52,6 +53,11 @@ Telemetry is sanitized before it is stored, printed, or published:
   zero machine paths.
 - MCP tool error messages get the same path redaction plus a 500
   character cap.
+
+One boundary to know: the redaction guarantee covers engine-produced
+telemetry — review runs and the session cache they populate. The MCP
+diagnostics tool formats whatever it is handed: a caller-supplied
+`diagnostics` object is formatted as-is, not re-sanitized.
 
 ## MCP
 
