@@ -350,7 +350,8 @@ export async function getGitCommitsSinceTag(options = {}) {
   const commits = [];
 
   for (const record of rawRecords) {
-    const [hash, subject, body] = record.trim().split('\x1f');
+    const [rawHash, subject, body] = record.split('\x1f');
+    const hash = rawHash?.trim();
     if (hash && subject) {
       const fullText = body ? `${subject}\n\n${body}` : subject;
       commits.push(parseConventionalCommit(fullText, hash));
