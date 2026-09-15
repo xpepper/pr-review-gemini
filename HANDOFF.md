@@ -16,7 +16,8 @@
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-    still needs its `gem-pr-review` entry updated to `version 1.0.1` / `ref v1.0.1`.
+    now tracks `gem-pr-review` at `version 1.0.1` / `ref v1.0.1` (marketplace PR
+    [#2](https://github.com/xpepper/copilot-plugins/pull/2)).
 * **Docs examples** in `README.md`, `docs/installation.md`, and
   `docs/github-action.md` now pin the immutable release commit
   `@d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2` with a `v1.0.1` annotation.
@@ -26,17 +27,16 @@
 * **Hosted evidence**: run `34899128103` completed successfully with all five
   real lenses and zero execution errors. A later repeated finding on ambient
   credential coupling was validated and fixed by removing that fallback;
-  callers must pass `copilot_token` explicitly.
+  callers must pass `copilot_token` explicitly. Post-release self-hosting run
+  `34950545777` passed against the v1.0.1 trusted base.
 * **Post-#62 main run**: requested run `34896350107` completed with its sole job
   skipped (`issue_comment` on `main`), so it did not validate lens execution.
 
 ## Next Actions
 
-1. Update and merge the `gem-pr-review` entry in
-   `xpepper/copilot-plugins` to version/ref `v1.0.1`.
-2. Dogfood a downstream workflow using `copilot_token` and verify the
+1. Dogfood a downstream workflow using `copilot_token` and verify the
    `v0.4.0` migration path in a real consumer repository.
-3. Prioritize #65 or #66 based on whether trusted-base compatibility or
+2. Prioritize #65 or #66 based on whether trusted-base compatibility or
    persistent-runner hygiene is the more immediate operational need.
 
 ## Recently Landed
