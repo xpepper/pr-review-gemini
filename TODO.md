@@ -79,6 +79,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
   - Follow-up PR #70 normalized local composite-Action paths before
     `actions/setup-node` consumes the npm cache dependency path; published as
     patch release `v1.0.1`.
+  - Completed (PR #73 / issue #65, test-first): consolidate modern and legacy
+    contract validation in the YAML-safe detector. The workflow accepts the
+    trusted-base copy only when its checksum matches the immutable `v1.0.1`
+    artifact; older bases receive a credential-free sparse checkout of that
+    artifact instead. Hosted review and the final incremental re-review passed.
   - Completed (PR #60, test-first): the CLI fallback runner
     honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
     name only the binary's base name), and `docs/plugin.md` documents the two
