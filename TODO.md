@@ -8,7 +8,7 @@
 
 ## Status: MVP Complete — Post-MVP Polish & Dogfooding
 
-All MVP increments (0–22) are complete. Release `v0.4.0` is published, the
+All MVP increments (0–22) are complete. Release `v1.0.1` is published, the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live, and the Action is listed in Code quality and Continuous integration.
 
@@ -65,7 +65,7 @@ is live, and the Action is listed in Code quality and Continuous integration.
     unavailable, and execute action code from the immutable PR base commit.
     Hosted run `34894342377` executed all lenses with zero execution errors and
     a genuine zero-finding result.
-  - In review (PR #64 / issue #63, test-first): move Node.js 22 and pinned
+  - Completed (PR #64 / issue #63, test-first): move Node.js 22 and pinned
     Copilot CLI `1.0.83` bootstrap into the composite Action; add the explicit
     required `copilot_token` input with no ambient credential fallback and mark
     the breaking contract as `v1.0.0`; scrub all GitHub token
@@ -74,6 +74,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
     during rollout, so downstream examples no longer duplicate bootstrap.
     Hosted run `34899128103` executed all five lenses with zero execution
     errors; `npm run dogfood:pr 64` findings were individually validated.
+    Published as `v1.0.0` after manifest, tag, and release-workflow
+    verification.
+  - Follow-up PR #70 normalized local composite-Action paths before
+    `actions/setup-node` consumes the npm cache dependency path; published as
+    patch release `v1.0.1`.
   - Completed (PR #60, test-first): the CLI fallback runner
     honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
     name only the binary's base name), and `docs/plugin.md` documents the two
