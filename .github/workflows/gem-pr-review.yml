@@ -68,7 +68,7 @@ jobs:
 
       - name: Checkout immutable Action contract detector
         if: steps.action-contract-detector-source.outputs.source == 'artifact'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: xpepper/pr-review-gemini
           ref: d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2

@@ -1955,6 +1955,10 @@ index 1111111..2222222 100644
       assert.match(content, /source=base/);
       assert.match(content, /source=artifact/);
       assert.match(content, /name:\s*Checkout immutable Action contract detector/);
+      const detectorCheckout = content.indexOf('- name: Checkout immutable Action contract detector');
+      const contractDetection = content.indexOf('- name: Detect trusted-base Action contract');
+      assert.ok(detectorCheckout >= 0 && contractDetection > detectorCheckout);
+      assert.match(content.slice(detectorCheckout, contractDetection), /uses:\s*actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
       assert.match(content, /if:\s*steps\.action-contract-detector-source\.outputs\.source == 'artifact'/);
       assert.match(content, /repository:\s*xpepper\/pr-review-gemini/);
       assert.match(content, /ref:\s*d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2/);
