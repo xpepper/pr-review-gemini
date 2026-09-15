@@ -412,7 +412,7 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(readme, /ref:\s*\${{\s*github\.event\.pull_request\.base\.sha\s*}}/);
     assert.match(readme, /copilot_token:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
     for (const publicDoc of [readme, content, installation]) {
-      assert.match(publicDoc, /xpepper\/pr-review-gemini@629c5c7c9141b5b30527bee219de7ba8c80ec928/);
+      assert.match(publicDoc, /xpepper\/pr-review-gemini@668cd5cf756894976a1b8f526bbfaffd0eb6c851/);
       assert.doesNotMatch(publicDoc, /xpepper\/pr-review-gemini@(main|v0\.4\.0)/);
     }
   });
