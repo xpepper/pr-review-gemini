@@ -103,6 +103,16 @@ runs:
         cache: npm
         cache-dependency-path: ${{ steps.action_path.outputs.root }}/.github/copilot-cli/package-lock.json
 
+    - name: Clean stale GitHub Copilot CLI installs
+      shell: bash
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      run: |
+        set -euo pipefail
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" prune-stale
+
     - name: Install GitHub Copilot CLI
       id: install_copilot
       shell: bash
@@ -113,8 +123,12 @@ runs:
       run: |
         set -euo pipefail
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
-        : > "$install_root/.gem-pr-review-copilot-owned"
+        # The cleanup step can find this install only after its root is published.
+        trap 'rm -rf -- "$install_root"' EXIT
+        created_at="$(date +%s)"
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at"
         echo "install_root=$install_root" >> "$GITHUB_OUTPUT"
+        trap - EXIT
         cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
         cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
         npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
@@ -134,9 +148,11 @@ runs:
         INPUT_SELECT: ${{ inputs.select }}
         INPUT_GUIDELINES_PATH: ${{ inputs.guidelines_path }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
+        COPILOT_INSTALL_ROOT: ${{ steps.install_copilot.outputs.install_root }}
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" activate-lease "$COPILOT_INSTALL_ROOT"
         node "${{ github.action_path }}/scripts/ci-action.mjs"
 
     - name: Clean up GitHub Copilot CLI
@@ -144,28 +160,15 @@ runs:
       shell: bash
       env:
         COPILOT_INSTALL_ROOT: ${{ steps.install_copilot.outputs.install_root }}
+        INSTALL_OUTCOME: ${{ steps.install_copilot.outcome }}
       run: |
         set -euo pipefail
-        cleanup_root="${COPILOT_INSTALL_ROOT:-}"
-        if [ -z "$cleanup_root" ]; then
+        if [ -z "$COPILOT_INSTALL_ROOT" ]; then
+          # An install that failed before publishing its root owns nothing to clean up.
+          if [ "$INSTALL_OUTCOME" = 'success' ]; then
+            echo "::error title=Gem PR Review::Copilot CLI install root is unavailable."
+            exit 1
+          fi
           exit 0
         fi
-        runner_temp="$(cd "${RUNNER_TEMP:-/tmp}" && pwd -P)"
-        canonical_root="$(cd "$cleanup_root" && pwd -P)"
-        if [ "$(dirname "$canonical_root")" != "$runner_temp" ]; then
-          echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
-          exit 1
-        fi
-        case "$(basename "$canonical_root")" in
-          gem-pr-review-copilot.*)
-            ;;
-          *)
-            echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
-            exit 1
-            ;;
-        esac
-        if [ ! -f "$canonical_root/.gem-pr-review-copilot-owned" ]; then
-          echo "::error title=Gem PR Review::Copilot CLI install ownership marker is missing."
-          exit 1
-        fi
-        rm -rf -- "$canonical_root"
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" cleanup-current "$COPILOT_INSTALL_ROOT"
