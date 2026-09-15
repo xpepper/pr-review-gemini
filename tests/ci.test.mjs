@@ -607,6 +607,8 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
       assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
       assert.match(content.slice(nodeStep, installStep), /node-version:\s*['"]22['"]/);
+      assert.match(content.slice(nodeStep, installStep), /cache:\s*npm/);
+      assert.match(content.slice(nodeStep, installStep), /cache-dependency-path:\s*\$\{\{\s*github\.action_path\s*\}\}\/\.github\/copilot-cli\/package-lock\.json/);
       assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
