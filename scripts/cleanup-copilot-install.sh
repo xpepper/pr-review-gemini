@@ -41,7 +41,7 @@ validate_runner_temp() {
   local runner_temp
   local mode
 
-  runner_temp="$(canonical_directory "${RUNNER_TEMP:-/tmp}")" || return 1
+  runner_temp="$(canonical_directory "$1")" || return 1
   [ "$(file_owner "$runner_temp")" = "$(id -u)" ] || return 1
   mode="$(file_mode "$runner_temp")"
   [[ "$mode" =~ ^[0-7]{3}$ ]] || return 1
@@ -305,10 +305,11 @@ initialize_install() {
   local install_path="$1"
   local created_at="$2"
   local lease_pid="$3"
+  local runner_temp_root="$4"
   local runner_temp
   local canonical_install
 
-  runner_temp="$(validate_runner_temp)" ||
+  runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
@@ -330,10 +331,11 @@ activate_lease_locked() {
 activate_lease() {
   local install_path="$1"
   local lease_pid="$2"
+  local runner_temp_root="$3"
   local runner_temp
   local canonical_install
 
-  runner_temp="$(validate_runner_temp)" ||
+  runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
@@ -386,10 +388,11 @@ remove_current_install_locked() {
 
 remove_current_install() {
   local install_path="$1"
+  local runner_temp_root="$2"
   local runner_temp
   local canonical_install
 
-  runner_temp="$(validate_runner_temp)" ||
+  runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
@@ -479,13 +482,14 @@ prune_abandoned_quarantines() {
 }
 
 prune_stale_installs() {
+  local runner_temp_root="$1"
   local runner_temp
   local now
   local candidate
   local canonical_install
   local lock_status
 
-  runner_temp="$(validate_runner_temp)" ||
+  runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   now="$(date +%s)"
   prune_abandoned_quarantines "$runner_temp" "$now"
@@ -509,23 +513,25 @@ prune_stale_installs() {
   done
 }
 
+# The environment is read only here; operations receive their inputs explicitly.
+runner_temp_root="${RUNNER_TEMP:-/tmp}"
 case "${1:-}" in
   prune-stale)
     [ "$#" -eq 1 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    prune_stale_installs
+    prune_stale_installs "$runner_temp_root"
     ;;
   cleanup-current)
     [ "$#" -eq 2 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    remove_current_install "$2"
+    remove_current_install "$2" "$runner_temp_root"
     ;;
   # Leases belong to the invoking step shell, never to a caller-chosen PID.
   initialize-install)
     [ "$#" -eq 3 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    initialize_install "$2" "$3" "$PPID"
+    initialize_install "$2" "$3" "$PPID" "$runner_temp_root"
     ;;
   activate-lease)
     [ "$#" -eq 2 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    activate_lease "$2" "$PPID"
+    activate_lease "$2" "$PPID" "$runner_temp_root"
     ;;
   *)
     fail 'Unknown Copilot CLI cleanup command.'
