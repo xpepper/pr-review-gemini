@@ -184,8 +184,16 @@ the pull request diff through GitHub APIs. It therefore does not check out or
 execute untrusted PR-head code by default.
 
 The starter workflow derives its legacy-versus-modern bootstrap path by
-parsing the trusted base `action.yml` contract, so a partial rollback cannot
-silently select a path that does not match the Action implementation.
+parsing the trusted base `action.yml` contract with a separately pinned,
+SHA-256-verified detector from the immutable `v1.0.1` release commit. The
+workflow uses the trusted-base copy only when it matches that artifact hash;
+otherwise it checks out the artifact from `xpepper/pr-review-gemini` at its
+immutable commit with persisted credentials disabled. This keeps one YAML-safe,
+fail-closed detector available when the trusted base predates the detector
+itself, without executing PR-head code. Update the artifact commit and
+checksum together only when its supported Action contract changes, so a partial
+rollback cannot silently select a path that does not match the Action
+implementation.
 
 Optional detached-worktree verification is maintainer initiated. In CI it is
 limited to same-repository branches and canonical safe profiles (`test`,

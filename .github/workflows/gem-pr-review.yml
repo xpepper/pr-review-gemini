@@ -48,96 +48,71 @@ jobs:
         with:
           ref: ${{ steps.base.outputs.result }}
 
+      - name: Resolve trusted Action contract detector
+        id: action-contract-detector-source
+        shell: bash
+        run: |
+          set -euo pipefail
+          detector_path="scripts/detect-action-contract.rb"
+          detector_sha256=6b6616a29cd927fc7f2ada24db82bec0a42edd938842a0bc31c7f6251a814f71
+          if [ -f "$detector_path" ] && [ ! -L "$detector_path" ]; then
+            actual_sha256="$(shasum -a 256 "$detector_path" | awk '{print $1}')"
+            if [ "$actual_sha256" = "$detector_sha256" ]; then
+              echo "source=base" >> "$GITHUB_OUTPUT"
+              echo "sha256=$detector_sha256" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "source=artifact" >> "$GITHUB_OUTPUT"
+          echo "sha256=$detector_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout immutable Action contract detector
+        if: steps.action-contract-detector-source.outputs.source == 'artifact'
+        uses: actions/checkout@v7
+        with:
+          repository: xpepper/pr-review-gemini
+          ref: d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2
+          path: .gem-pr-review-action-contract-detector
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            scripts/detect-action-contract.rb
+          sparse-checkout-cone-mode: false
+
       - name: Detect trusted-base Action contract
         id: action-contract
         shell: bash
         run: |
+          set -euo pipefail
           if [ ! -f action.yml ]; then
             echo "::error title=Gem PR Review::Trusted-base action.yml is unavailable."
             exit 1
           fi
-          if git cat-file -e HEAD:scripts/detect-action-contract.rb 2>/dev/null; then
-            # Load the detector from the same trusted base commit as action.yml.
-            if ! contract=$(git show HEAD:scripts/detect-action-contract.rb | ruby - action.yml); then
-              echo "::error title=Gem PR Review::Trusted-base action.yml could not be parsed."
+          case "${{ steps.action-contract-detector-source.outputs.source }}" in
+            base)
+              detector_path="scripts/detect-action-contract.rb"
+              ;;
+            artifact)
+              detector_path=".gem-pr-review-action-contract-detector/scripts/detect-action-contract.rb"
+              ;;
+            *)
+              echo "::error title=Gem PR Review::Trusted Action contract detector source is invalid."
               exit 1
-            fi
-          else
-            # Older trusted bases predate the detector; validate only their legacy contract inline.
-            if ! contract=$(ruby - action.yml <<'RUBY'
-          require 'yaml'
-
-          manifest = YAML.safe_load(
-            File.read(ARGV.fetch(0)),
-            permitted_classes: [],
-            permitted_symbols: [],
-            aliases: false
-          )
-          abort 'action.yml must contain a mapping' unless manifest.is_a?(Hash)
-          inputs = manifest.fetch('inputs', {})
-          runs = manifest['runs']
-          abort 'action.yml inputs must be a mapping' unless inputs.is_a?(Hash)
-          abort 'action.yml runs must be a mapping' unless runs.is_a?(Hash)
-          steps = runs['steps']
-          abort 'action.yml steps must be a list of mappings' unless steps.is_a?(Array) && steps.all? { |step| step.is_a?(Hash) }
-
-          def blank_setup_env?(step)
-            env = step['env']
-            env.is_a?(Hash) &&
-              env['COPILOT_GITHUB_TOKEN'] == '' &&
-              env['GH_TOKEN'] == '' &&
-              env['GITHUB_TOKEN'] == ''
-          end
-
-          auth_step = steps.find { |step| step['name'] == 'Require Copilot authentication' }
-          node_step = steps.find { |step| step['name'] == 'Set up Node.js for Copilot CLI' }
-          install_step = steps.find { |step| step['name'] == 'Install GitHub Copilot CLI' }
-          review_step = steps.find { |step| step['name'] == 'Run Gem PR Review' }
-          auth_run = auth_step.fetch('run', '').to_s if auth_step
-          install_run = install_step.fetch('run', '').to_s if install_step
-          expression_start = '$' + '{{ '
-          copilot_token_expression = expression_start + 'inputs.copilot_token }}'
-          github_token_expression = expression_start + 'inputs.github_token }}'
-          modern =
-            runs['using'] == 'composite' &&
-            inputs['copilot_token'].is_a?(Hash) &&
-            inputs['copilot_token']['required'] == true &&
-            auth_step &&
-            auth_step.dig('env', 'COPILOT_GITHUB_TOKEN') == copilot_token_expression &&
-            auth_run.include?('if [ -z "$COPILOT_GITHUB_TOKEN" ]') &&
-            auth_run.include?('exit 1') &&
-            node_step &&
-            node_step['uses'] == 'actions/setup-node@v6' &&
-            node_step.dig('with', 'node-version').to_s == '22' &&
-            blank_setup_env?(node_step) &&
-            install_step &&
-            blank_setup_env?(install_step) &&
-            install_run.include?('npm ci --prefix') &&
-            install_run.include?('--ignore-scripts') &&
-            review_step &&
-            review_step.dig('env', 'COPILOT_GITHUB_TOKEN') == copilot_token_expression
-          legacy =
-            runs['using'] == 'composite' &&
-            !inputs.key?('copilot_token') &&
-            steps.length == 1 &&
-            review_step &&
-            review_step['id'] == 'review' &&
-            review_step['shell'] == 'bash' &&
-            review_step.fetch('run', '').to_s.include?('scripts/ci-action.mjs') &&
-            review_step.dig('env', 'GITHUB_TOKEN') == github_token_expression &&
-            review_step.dig('env', 'GH_TOKEN') == github_token_expression
-          if modern
-            puts 'modern'
-          elsif legacy
-            puts 'legacy'
-          else
-            abort 'action.yml has an unsupported contract'
-          end
-          RUBY
-            ); then
-              echo "::error title=Gem PR Review::Trusted-base action contract is unsupported."
-              exit 1
-            fi
+              ;;
+          esac
+          if [ ! -f "$detector_path" ] || [ -L "$detector_path" ]; then
+            echo "::error title=Gem PR Review::Trusted Action contract detector is unavailable."
+            exit 1
+          fi
+          actual_sha256="$(shasum -a 256 "$detector_path" | awk '{print $1}')"
+          expected_sha256="${{ steps.action-contract-detector-source.outputs.sha256 }}"
+          if [ -z "$expected_sha256" ] || [ "$actual_sha256" != "$expected_sha256" ]; then
+            echo "::error title=Gem PR Review::Trusted Action contract detector integrity check failed."
+            exit 1
+          fi
+          if ! contract=$(ruby "$detector_path" action.yml); then
+            echo "::error title=Gem PR Review::Trusted-base action contract is unsupported."
+            exit 1
           fi
           case "$contract" in
             modern)
