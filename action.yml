@@ -124,7 +124,10 @@ runs:
         set -euo pipefail
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
         created_at="$(date +%s)"
-        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at" "$BASHPID"
+        if ! bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at" "$BASHPID"; then
+          rm -rf -- "$install_root"
+          exit 1
+        fi
         echo "install_root=$install_root" >> "$GITHUB_OUTPUT"
         cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
         cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"

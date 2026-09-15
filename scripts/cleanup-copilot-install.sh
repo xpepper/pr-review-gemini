@@ -118,6 +118,12 @@ process_start_time() {
   ps -o lstart= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+process_state() {
+  local pid="$1"
+
+  ps -o stat= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
 read_process_identity() {
   local marker="$1"
   local pid
@@ -162,10 +168,31 @@ is_lease_active() {
   local pid="$1"
   local expected_started_at="$2"
   local actual_started_at
+  local state
 
   kill -0 "$pid" 2>/dev/null || return 1
+  state="$(process_state "$pid")" || return 1
+  [[ "$state" != Z* ]] || return 1
   actual_started_at="$(process_start_time "$pid")" || return 1
   [ "$actual_started_at" = "$expected_started_at" ]
+}
+
+release_install_lock_if_owner() {
+  local lock_directory="$1"
+  local expected_identity="$2"
+  local actual_identity
+
+  if [ -n "$expected_identity" ]; then
+    actual_identity="$(read_process_identity "$lock_directory/pid" || true)"
+    [ -n "$actual_identity" ] && [ "$actual_identity" != "$expected_identity" ] &&
+      return 0
+  # An empty identity means lock setup did not finish, so remove only an
+  # empty lock directory that no other invocation could have claimed.
+  elif [ -e "$lock_directory/pid" ] || [ -L "$lock_directory/pid" ]; then
+    return 0
+  fi
+  rm -f -- "$lock_directory/pid"
+  rmdir -- "$lock_directory"
 }
 
 with_install_lock() (
@@ -177,6 +204,7 @@ with_install_lock() (
   local lock_started_at
   local lock_modified_at
   local lock_owner_started_at
+  local lock_owner_identity=''
   local now
 
   shift 2
@@ -196,24 +224,24 @@ with_install_lock() (
       lock_pid="${lock_identity%%|*}"
       lock_started_at="${lock_identity#*|}"
       is_lease_active "$lock_pid" "$lock_started_at" && return 75
-      rm -f -- "$lock_directory/pid" && rmdir -- "$lock_directory" || return 75
     elif [ ! -e "$lock_directory/pid" ]; then
       lock_modified_at="$(file_modified_at "$lock_directory")" || return 75
       now="$(date +%s)"
       [ "$lock_modified_at" -le "$now" ] &&
         [ $((now - lock_modified_at)) -ge "$STALE_INSTALL_RETENTION_SECONDS" ] ||
         return 75
-      rmdir -- "$lock_directory" || return 75
     else
       return 75
     fi
+    rm -f -- "$lock_directory/pid" && rmdir -- "$lock_directory" || return 75
     (
       umask 077
       mkdir "$lock_directory"
     ) || return 75
   fi
-  trap 'rm -f -- "$lock_directory/pid"; rmdir -- "$lock_directory"' EXIT
+  trap 'release_install_lock_if_owner "$lock_directory" "$lock_owner_identity"' EXIT
   lock_owner_started_at="$(process_start_time "$BASHPID")" || return 75
+  lock_owner_identity="$BASHPID|$lock_owner_started_at"
   printf 'pid=%s\nstarted_at=%s\n' "$BASHPID" "$lock_owner_started_at" > "$lock_directory/pid"
   "$@"
 )
@@ -418,6 +446,7 @@ prune_stale_installs() {
   local now
   local candidate
   local canonical_install
+  local created_at
   local lock_status
 
   runner_temp="$(validate_runner_temp)" ||
@@ -430,6 +459,17 @@ prune_stale_installs() {
       warn 'Skipping Copilot CLI install with an invalid path.'
       continue
     }
+    created_at="$(read_created_at "$canonical_install")" || {
+      warn 'Skipping Copilot CLI install without a valid ownership marker.'
+      continue
+    }
+    if [ "$created_at" -gt "$now" ]; then
+      warn 'Skipping Copilot CLI install with future ownership metadata.'
+      continue
+    fi
+    if [ $((now - created_at)) -lt "$STALE_INSTALL_RETENTION_SECONDS" ]; then
+      continue
+    fi
     if with_install_lock "$canonical_install" "$runner_temp" \
       prune_stale_install_locked "$canonical_install" "$runner_temp" "$now"; then
       continue
