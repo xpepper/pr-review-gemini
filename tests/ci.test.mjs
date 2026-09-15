@@ -628,14 +628,15 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
       assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
       assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
-      assert.match(content.slice(installStep, reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" initialize-install "\$install_root" "\$created_at" "\$BASHPID"/);
+      assert.match(content.slice(installStep, reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" initialize-install "\$install_root" "\$created_at";/);
       assert.match(content.slice(installStep, reviewStep), /echo "install_root=\$install_root" >> "\$GITHUB_OUTPUT"/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
       assert.match(content.slice(reviewStep), /COPILOT_INSTALL_ROOT:\s*\${{\s*steps\.install_copilot\.outputs\.install_root\s*}}/);
-      assert.match(content.slice(reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" activate-lease "\$COPILOT_INSTALL_ROOT" "\$BASHPID"/);
+      assert.match(content.slice(reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" activate-lease "\$COPILOT_INSTALL_ROOT"\n/);
+      assert.doesNotMatch(content, /BASHPID/, 'lease owners must come from the invoking shell, not a caller-supplied PID');
       assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
       assert.match(content.slice(cleanupStep), /COPILOT_INSTALL_ROOT:\s*\$\{\{\s*steps\.install_copilot\.outputs\.install_root\s*\}\}/);
       assert.match(content.slice(cleanupStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" cleanup-current/);
@@ -820,6 +821,44 @@ describe('CI Event Payload & Environment Resolution', () => {
           env: { ...process.env, RUNNER_TEMP: sharedRunnerTemp },
         });
         assert.equal(sharedRootResult.status, 1, 'must fail closed for a shared RUNNER_TEMP root');
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const installRoot = path.join(runnerTemp, 'gem-pr-review-copilot.lease');
+      const leaseMarker = path.join(installRoot, '.gem-pr-review-copilot-lease');
+      // The wrapper outlives the script, like an Actions step shell, and reports its own PID.
+      const runFromShell = (...args) => spawnSync(
+        'bash',
+        ['-c', 'bash "$0" "$@"; status=$?; echo "shell_pid=$$"; exit "$status"', cleanupScript, ...args],
+        { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: runnerTemp } },
+      );
+      const shellPid = (result) => result.stdout.match(/^shell_pid=(\d+)$/m)?.[1];
+      const leasePid = () => fs.readFileSync(leaseMarker, 'utf8').match(/^pid=(\d+)$/m)?.[1];
+
+      try {
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.chmodSync(installRoot, 0o700);
+
+        const initializeResult = runFromShell('initialize-install', installRoot, String(Math.floor(Date.now() / 1000)));
+        assert.equal(initializeResult.status, 0, initializeResult.stderr);
+        assert.equal(leasePid(), shellPid(initializeResult), 'initialization must lease the install to the invoking shell');
+
+        const activateResult = runFromShell('activate-lease', installRoot);
+        assert.equal(activateResult.status, 0, activateResult.stderr);
+        assert.equal(leasePid(), shellPid(activateResult), 'lease activation must move the lease to the invoking shell');
+
+        const leaseBeforeSpoof = fs.readFileSync(leaseMarker, 'utf8');
+        const spoofedResult = runFromShell('activate-lease', installRoot, '1');
+        assert.equal(spoofedResult.status, 1, 'must reject a caller-supplied lease PID');
+        assert.match(spoofedResult.stderr, /Unexpected Copilot CLI cleanup arguments/);
+        assert.equal(fs.readFileSync(leaseMarker, 'utf8'), leaseBeforeSpoof, 'a rejected lease request must not change the lease');
       } finally {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }

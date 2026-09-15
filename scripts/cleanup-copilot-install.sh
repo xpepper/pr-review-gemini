@@ -501,13 +501,14 @@ case "${1:-}" in
     [ "$#" -eq 1 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
     remove_current_install
     ;;
+  # Leases belong to the invoking step shell, never to a caller-chosen PID.
   initialize-install)
-    [ "$#" -eq 4 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    initialize_install "$2" "$3" "$4"
+    [ "$#" -eq 3 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
+    initialize_install "$2" "$3" "$PPID"
     ;;
   activate-lease)
-    [ "$#" -eq 3 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    activate_lease "$2" "$3"
+    [ "$#" -eq 2 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
+    activate_lease "$2" "$PPID"
     ;;
   *)
     fail 'Unknown Copilot CLI cleanup command.'

@@ -124,7 +124,7 @@ runs:
         set -euo pipefail
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
         created_at="$(date +%s)"
-        if ! bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at" "$BASHPID"; then
+        if ! bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at"; then
           rm -rf -- "$install_root"
           exit 1
         fi
@@ -152,7 +152,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
-        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" activate-lease "$COPILOT_INSTALL_ROOT" "$BASHPID"
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" activate-lease "$COPILOT_INSTALL_ROOT"
         node "${{ github.action_path }}/scripts/ci-action.mjs"
 
     - name: Clean up GitHub Copilot CLI
