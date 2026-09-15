@@ -260,7 +260,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - `docs/plugin.md` documents the variables independently, pinned by a
     docs-consistency assertion. Test-first; 891 tests passing after rebase.
   - Prerequisite for provisioning the Copilot CLI on the review runner.
-- [ ] **Post-MVP Increment (2026-09-14): Provision Hosted Review Lenses (PR #62, in review)**
+- [x] **Post-MVP Increment (2026-09-14): Provision Hosted Review Lenses (PR #62)**
   - Resolve and check out the immutable PR base commit so the Copilot token is
     never exposed to pull-request code, including comment-triggered reviews.
   - Require the owner-selected `COPILOT_TOKEN`; fork runs without repository
@@ -269,6 +269,20 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     on Node.js 22 and authenticate via `COPILOT_GITHUB_TOKEN`.
   - Test-first; 892 tests passing. Hosted run `34894342377` executed all five
     real lenses without execution errors and passed with zero findings.
+- [ ] **Post-MVP Increment (2026-09-14): Action-Owned Copilot CLI Bootstrap (PR #64 / issue #63, in review)**
+  - Move Node.js 22 setup and pinned `@github/copilot@1.0.83` installation into
+    `action.yml`, eliminating bootstrap duplication from consumer workflows.
+  - Require `copilot_token`, expose it only as `COPILOT_GITHUB_TOKEN` during the
+    authentication guard and review, and clear all GitHub credential variables
+    from setup/install steps. Ambient credentials cannot satisfy the Action
+    contract; missing secrets and fork runs still fail closed. This intentional
+    breaking contract sets the next release to `v1.0.0`.
+  - Preserve the trusted-base checkout. A versioned marker lets this repository
+    provision the old base Action only during rollout without executing the PR
+    head with the credential.
+  - Test-first; 893 tests passing. Hosted run `34899128103` executed all five
+    lenses with zero execution errors; local `npm run dogfood:pr 64` findings
+    were validated rather than accepted automatically.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

@@ -3,41 +3,38 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **`main`**: PR #54 (`546865e`, post-#53 state sweep) is merged, followed by
-  the release commit `3c636d4` (`chore(release): v0.4.0`).
-* **Release**: `v0.4.0` is tagged and its GitHub Release is published
-  (dispatch-only publish; verify job green). Minor bump — the `feat(ci)`
-  PR #47 landed since `v0.3.3`. All four manifests synchronized at `0.4.0`.
-* **Test Suite**: `npm test` green — 892 tests across 161 suites, 0 failures.
+* **`main`**: PR #62 is merged at `559c42e`, preserving immutable trusted-base
+  checkout while provisioning the hosted runner for real Copilot lenses.
+* **Release**: `v0.4.0` remains the latest published tag. PR #64 bumps all four
+  manifests to `1.0.0` because its required `copilot_token` input intentionally
+  breaks the prior Action environment-only contract; the tag is not published.
+* **Test Suite**: `npm test` green — 893 tests across 161 suites, 0 failures.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-    entry bumped to `version 0.4.0` / `ref v0.4.0` (commit `d0a471e`). The
-    CLI's marketplace index was verified current against the bumped entry.
-* **Docs examples** (`README.md`, `docs/installation.md`,
-  `docs/github-action.md`) pin `@v0.4.0`, matching the latest tag.
-
-* **Landed**: PR [#57](https://github.com/xpepper/pr-review-gemini/pull/57)
-  (`e96d977`), fail-closed lens execution. Hosted run `34890340990` confirmed
-  the intended failure reports `spawn copilot ENOENT` in both the log and
-  escaped `::error` annotation.
-* **Landed**: PR [#60](https://github.com/xpepper/pr-review-gemini/pull/60)
-  (`ed5ab3e`), the CLI fallback honors `COPILOT_CLI_PATH`.
-* **In flight**: PR [#62](https://github.com/xpepper/pr-review-gemini/pull/62)
-  (`fix/provision-ci-copilot-runner`), pinned Copilot CLI provisioning and
-  non-interactive authentication. Hosted run `34894342377` is green: all five
-  lenses executed with zero execution errors and a genuine zero-finding result.
-* **Recovery note**: local `push.default=upstream` redirected the first feature
-  push to `main`; recovery PR #61 reverted it without rewriting history, then
-  #62 was recreated and pushed with an explicit refspec. Net content on `main`
-  remains unchanged pending #62.
+    remains at `version 0.4.0` / `ref v0.4.0`.
+* **Docs examples** pin runtime commit `629c5c7` while PR #64's Action contract
+  is unreleased; switch them to the next immutable tag during release preparation.
+* **In flight**: PR [#64](https://github.com/xpepper/pr-review-gemini/pull/64)
+  (`feat/action-bootstrap-copilot-cli`) makes the composite Action own Node.js
+  22 and pinned Copilot CLI `1.0.83` setup. It preserves trusted-base execution,
+  fail-closed forks and lenses, host-gated mutations, sanitized diagnostics,
+  and workflow-command escaping.
+* **Hosted evidence**: run `34899128103` completed successfully with all five
+  real lenses and zero execution errors. A later repeated finding on ambient
+  credential coupling was validated and fixed by removing that fallback;
+  callers must pass `copilot_token` explicitly.
+* **Post-#62 main run**: requested run `34896350107` completed with its sole job
+  skipped (`issue_comment` on `main`), so it did not validate lens execution.
 
 ## Next Actions
 
-1. Review and merge PR #62. The owner selected repository secret
-   `COPILOT_TOKEN` and accepted explicit fail-closed fork runs. The latest
-   hosted review is green and exercised real lenses.
-2. Continue dogfooding the reviewer on real pull requests; SARIF export stays
+1. Review and merge PR #64, then publish `v1.0.0` and replace the temporary
+   commit-pinned documentation references with that immutable tag.
+2. Include the required `copilot_token` migration in the release notes;
+   `v0.4.0` workflows that supplied only an Action-step
+   `COPILOT_GITHUB_TOKEN` must update.
+3. Continue dogfooding the reviewer on real pull requests; SARIF export stays
    deferred.
 
 ## Recently Landed

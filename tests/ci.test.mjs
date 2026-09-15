@@ -580,7 +580,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content, /using:\s*['"]?composite['"]?/);
 
       // Verify all required inputs
-      const requiredInputs = ['github_token', 'pr_number', 'mode', 'fail_on', 'incremental', 'action', 'select', 'guidelines_path'];
+      const requiredInputs = ['github_token', 'copilot_token', 'pr_number', 'mode', 'fail_on', 'incremental', 'action', 'select', 'guidelines_path'];
       for (const input of requiredInputs) {
         assert.match(content, new RegExp(`\\b${input}:`), `action.yml must define input '${input}'`);
       }
@@ -589,6 +589,55 @@ describe('CI Event Payload & Environment Resolution', () => {
       const requiredOutputs = ['verdict', 'findings_count', 'blocking_count', 'summary'];
       for (const output of requiredOutputs) {
         assert.match(content, new RegExp(`\\b${output}:`), `action.yml must define output '${output}'`);
+      }
+    });
+
+    it('owns pinned Copilot CLI bootstrap without exposing its credential to setup steps', () => {
+      const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
+      const authStep = content.indexOf('- name: Require Copilot authentication');
+      const nodeStep = content.indexOf('- name: Set up Node.js for Copilot CLI');
+      const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
+      const reviewStep = content.indexOf('- name: Run Gem PR Review');
+      const cleanupStep = content.indexOf('- name: Clean up GitHub Copilot CLI');
+
+      assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*true/);
+      assert.ok(authStep >= 0 && authStep < nodeStep, 'authentication must fail closed before setup');
+      assert.ok(nodeStep < installStep && installStep < reviewStep && reviewStep < cleanupStep, 'bootstrap and cleanup must surround review execution');
+      assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+      assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
+      assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
+      assert.match(content.slice(nodeStep, installStep), /node-version:\s*['"]22['"]/);
+      assert.match(content.slice(nodeStep, installStep), /cache:\s*npm/);
+      assert.match(content.slice(nodeStep, installStep), /cache-dependency-path:\s*\$\{\{\s*github\.action_path\s*\}\}\/\.github\/copilot-cli\/package-lock\.json/);
+      assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /npm ci --prefix "\$install_root"/);
+      assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
+      assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
+      assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
+      assert.match(content.slice(installStep, reviewStep), /echo "install_root=\$install_root" >> "\$GITHUB_OUTPUT"/);
+      assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+      assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
+      assert.match(content.slice(cleanupStep), /COPILOT_INSTALL_ROOT:\s*\$\{\{\s*steps\.install_copilot\.outputs\.install_root\s*\}\}/);
+      assert.match(content.slice(cleanupStep), /cleanup_root="\$\{COPILOT_INSTALL_ROOT:-\}"/);
+      assert.match(content.slice(cleanupStep), /canonical_root=.*pwd -P/);
+      assert.match(content.slice(cleanupStep), /dirname "\$canonical_root"/);
+      assert.match(content.slice(cleanupStep), /gem-pr-review-copilot\.\*/);
+      assert.match(content.slice(cleanupStep), /rm -rf -- "\$canonical_root"/);
+
+      const lockfilePath = path.resolve('.github/copilot-cli/package-lock.json');
+      assert.equal(fs.existsSync(lockfilePath), true, 'Copilot CLI lockfile must be committed');
+      const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf8'));
+      assert.equal(lockfile.lockfileVersion, 3);
+      assert.equal(lockfile.packages['node_modules/@github/copilot'].version, '1.0.83');
+      for (const [packagePath, packageMetadata] of Object.entries(lockfile.packages)) {
+        if (packagePath === '') continue;
+        assert.match(packageMetadata.resolved, /^https:\/\/registry\.npmjs\.org\//);
+        assert.match(packageMetadata.integrity, /^sha512-/);
       }
     });
   });
@@ -1894,14 +1943,107 @@ index 1111111..2222222 100644
       assert.match(content, /return pull\.base\.sha/);
       assert.match(content, /uses:\s*actions\/checkout@v7/);
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
+      assert.match(content, /id:\s*action-contract/);
+      assert.match(content, /if \[ ! -f action\.yml \]/);
+      assert.match(content, /git cat-file -e HEAD:scripts\/detect-action-contract\.rb/);
+      assert.match(content, /git show HEAD:scripts\/detect-action-contract\.rb \| ruby - action\.yml/);
+      assert.match(content, /Older trusted bases predate the detector/);
+      assert.match(content, /ruby - action\.yml <<'RUBY'/);
+      assert.match(content, /YAML\.safe_load/);
+      assert.doesNotMatch(content, /grep -Fq/);
+      assert.doesNotMatch(content, /ruby <<'RUBY'/);
+      assert.match(content, /legacy_bootstrap=true/);
+      assert.match(content, /legacy_bootstrap=false/);
+      assert.doesNotMatch(content, /gem-pr-review-action-bootstrap-v1/);
+      assert.equal(fs.existsSync(path.resolve('.github/gem-pr-review-action-bootstrap-v1')), false);
       assert.match(content, /uses:\s*actions\/setup-node@v6/);
-      assert.match(content, /node-version:\s*['"]22['"]/);
       assert.match(content, /npm install --global @github\/copilot@1\.0\.83/);
-      assert.match(content, /COPILOT_GITHUB_TOKEN:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
-      assert.match(content, /if \[ -z "\$COPILOT_GITHUB_TOKEN" \]/);
-      assert.match(content, /::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed\./);
-      assert.match(content, /uses:\s*(\.\/|xpepper\/pr-review-gemini@main)/);
+      assert.match(content, /if:\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'true'/);
+      const legacyRun = content.indexOf('- name: Run legacy base Gem PR Review');
+      const modernRun = content.indexOf('- name: Run Gem PR Review', legacyRun + 1);
+      assert.ok(legacyRun >= 0 && modernRun > legacyRun);
+      assert.match(content.slice(legacyRun, modernRun), /if:\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'true'/);
+      assert.match(content.slice(legacyRun, modernRun), /COPILOT_GITHUB_TOKEN:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+      assert.doesNotMatch(content.slice(legacyRun, modernRun), /copilot_token:/);
+      assert.match(content.slice(modernRun), /if:\s*steps\.action-contract\.outputs\.legacy_bootstrap == 'false'/);
+      assert.match(content.slice(modernRun), /copilot_token:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+      assert.doesNotMatch(content.slice(modernRun), /COPILOT_GITHUB_TOKEN:/);
+      assert.equal((content.match(/uses:\s*\.\//g) || []).length, 2);
       assert.match(content, /fail_on:\s*P1/);
+    });
+
+    it('tests the trusted action contract detector against modern, legacy, and unsupported manifests', () => {
+      const detectorPath = path.resolve('scripts/detect-action-contract.rb');
+      assert.equal(fs.existsSync(detectorPath), true, 'contract detector script must exist');
+
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-contract-'));
+      const runDetector = (manifest) => {
+        const manifestPath = path.join(tempDir, 'action.yml');
+        fs.writeFileSync(manifestPath, manifest);
+        return spawnSync('ruby', [detectorPath, manifestPath], { encoding: 'utf8' });
+      };
+
+      const modernResult = runDetector(`inputs:
+  copilot_token:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Require Copilot authentication
+      env:
+        COPILOT_GITHUB_TOKEN: '\${{ inputs.copilot_token }}'
+      run: |
+        if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+          exit 1
+        fi
+    - name: Set up Node.js for Copilot CLI
+      uses: actions/setup-node@v6
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      with:
+        node-version: '22'
+    - name: Install GitHub Copilot CLI
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      run: npm ci --prefix "$install_root" --ignore-scripts
+    - name: Run Gem PR Review
+      env:
+        COPILOT_GITHUB_TOKEN: '\${{ inputs.copilot_token }}'
+`);
+      assert.equal(modernResult.status, 0, modernResult.stderr);
+      assert.equal(modernResult.stdout.trim(), 'modern');
+
+      const legacyResult = runDetector(`inputs:
+  github_token:
+    required: false
+runs:
+  using: composite
+  steps:
+    - id: review
+      name: Run Gem PR Review
+      shell: bash
+      env:
+        GITHUB_TOKEN: '\${{ inputs.github_token }}'
+        GH_TOKEN: '\${{ inputs.github_token }}'
+      run: node scripts/ci-action.mjs
+`);
+      assert.equal(legacyResult.status, 0, legacyResult.stderr);
+      assert.equal(legacyResult.stdout.trim(), 'legacy');
+
+      const unsupportedResult = runDetector(`runs:
+  using: composite
+  steps:
+    - name: Unsupported action
+      run: echo unsupported
+`);
+      assert.equal(unsupportedResult.status, 1);
+      assert.match(unsupportedResult.stderr, /unsupported contract/);
+
+      fs.rmSync(tempDir, { recursive: true, force: true });
     });
   });
 

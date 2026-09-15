@@ -37,15 +37,20 @@ then add the Action to a repository workflow:
 
 ```yaml
 - name: AI PR Code Review
-  uses: xpepper/pr-review-gemini@v0.4.0
+  uses: xpepper/pr-review-gemini@629c5c7c9141b5b30527bee219de7ba8c80ec928
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
+    copilot_token: ${{ secrets.COPILOT_TOKEN }}
     mode: balanced
     fail_on: P1
 ```
 
-For the complete workflow, permissions, inputs, outputs, and execution
-boundary, see the [GitHub Action reference](github-action.md).
+Create `COPILOT_TOKEN` as a repository secret containing a user-owned
+fine-grained PAT with the **Copilot Requests** account permission. The Action
+pins and installs Copilot CLI itself; consumers do not need separate Node or
+CLI setup steps. For the complete workflow, permissions, inputs, outputs,
+authentication references, and execution boundary, see the
+[GitHub Action reference](github-action.md).
 
 ## Local CLI quick starts
 

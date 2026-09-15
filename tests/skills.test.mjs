@@ -394,12 +394,27 @@ describe('Agent Skill: gem-pr-review (Agent Plugins 1.0)', () => {
     assert.match(content, /only some lenses fail[\s\S]{0,200}warning annotation/i, 'Action reference should document partial lens failure warnings');
   });
 
-  it('documents hosted-runner Copilot CLI authentication and fork behavior', () => {
+  it('documents Action-owned Copilot CLI provisioning, authentication, and fork behavior', () => {
     const content = fs.readFileSync(actionReferencePath, 'utf8');
+    const readme = fs.readFileSync(readmePath, 'utf8');
+    const installation = fs.readFileSync(path.resolve('docs/installation.md'), 'utf8');
+    assert.match(content, /composite Action owns CLI bootstrap/i);
+    assert.match(content, /Node\.js 22/);
+    assert.match(content, /@github\/copilot@1\.0\.83/);
     assert.match(content, /COPILOT_TOKEN[\s\S]{0,200}Copilot Requests/i);
+    assert.match(content, /`copilot_token` input/);
+    assert.match(content, /breaking Action-contract change[\s\S]{0,100}`v1\.0\.0`/i);
     assert.match(content, /COPILOT_GITHUB_TOKEN/);
+    assert.match(content, /docs\.github\.com\/en\/copilot\/how-tos\/copilot-cli\/set-up-copilot-cli\/install-copilot-cli/);
+    assert.match(content, /docs\.github\.com\/en\/copilot\/how-tos\/copilot-cli\/set-up-copilot-cli\/authenticate-copilot-cli/);
     assert.match(content, /secrets are not passed[\s\S]{0,200}forks/i);
     assert.match(content, /forks[\s\S]{0,200}fail closed/i);
+    assert.match(readme, /ref:\s*\${{\s*github\.event\.pull_request\.base\.sha\s*}}/);
+    assert.match(readme, /copilot_token:\s*\${{\s*secrets\.COPILOT_TOKEN\s*}}/);
+    for (const publicDoc of [readme, content, installation]) {
+      assert.match(publicDoc, /xpepper\/pr-review-gemini@629c5c7c9141b5b30527bee219de7ba8c80ec928/);
+      assert.doesNotMatch(publicDoc, /xpepper\/pr-review-gemini@(main|v0\.4\.0)/);
+    }
   });
 
   it('documents COPILOT_CLI_PATH and COPILOT_SDK_PATH independently in the plugin reference', () => {

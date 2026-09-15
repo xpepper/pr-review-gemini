@@ -345,3 +345,75 @@ and documented template.
 `34894342377` installed and authenticated Copilot CLI, executed all five lenses
 with no execution errors, and passed the P1 gate with a genuine zero-finding
 summary. The full suite passes 892 tests across 161 suites.
+
+## 2026-09-14 — PR #64 Action-owned Copilot CLI bootstrap
+
+### PR / context
+
+- **PR:** [#64](https://github.com/xpepper/pr-review-gemini/pull/64), which
+  moves pinned Copilot CLI provisioning into the published composite Action.
+- **Reviews:** hosted incremental runs `34897872799`, `34898776092`, and
+  `34899128103`, plus `npm run dogfood:pr 64` balanced local dry-run.
+
+### What Gem PR Review did
+
+The first hosted run failed closed because the immutable base checkout loaded
+pre-#63 `action.yml`, proving the workflow did not execute PR-head Action code
+with the Copilot credential. A conditional self-hosting rollout path then
+provisioned the old trusted-base Action. The final hosted run executed all five
+lenses with zero execution errors and passed the P1 gate with one P2 finding.
+The local dogfood run reported one P1 and one P2.
+
+### What was useful
+
+- The workflow's indentation-sensitive Action-contract detection was a valid
+  maintenance risk. It was replaced with safe manifest-derived contract
+  detection that validates the Action-owned modern bootstrap and the known
+  legacy contract, fails closed for unsupported shapes, and reads the
+  detector from the immutable trusted base.
+- The authentication wording was clarified: the Action guard prevents Copilot
+  CLI fallback to the GitHub API credentials even though the upstream CLI
+  supports those variables.
+- Pre-commit reviews correctly identified that setup/install must clear all
+  three documented Copilot credential variables. Tests now pin that boundary.
+
+### What was incorrect, missing, noisy, or confusing
+
+- The hosted P1 requesting an integrity-pinned install was valid and was
+  remediated by committing the Copilot CLI lockfile, installing with
+  `npm ci --ignore-scripts` in a unique temporary directory, and cleaning only
+  the directory owned by that invocation.
+- The reviewer initially auto-resolved that integrity finding only because its
+  anchor moved; that was a false resolution signal. The later lockfile and
+  cleanup commits are the evidence that the concern was actually addressed.
+- The local P2 about trusted-base detection using the stale base SHA described
+  the intended security boundary. The workflow now derives the decision from
+  the immutable trusted base's `action.yml`, validates explicit modern and
+  legacy contracts, and keeps the two invocation paths mutually exclusive.
+- The repeated ambient-state finding was valid. An explicit opt-in still left
+  credential resolution dependent on caller environment scope, so the fallback
+  was removed. The new contract requires `copilot_token`; no caller ambient
+  token can satisfy the guard. Because that breaks the `v0.4.0` Action contract,
+  all manifests were bumped to `1.0.0` and the migration is documented.
+- The P3 about passing an undeclared input to the old base Action was valid.
+  Mutually exclusive legacy and modern invocation steps now pass only the
+  credential shape understood by their trusted Action revision, eliminating
+  the rollout warning.
+- The later P2 calling the rollout marker ambient state was superseded by the
+  manifest-derived detector. No marker file or PR-head state drives bootstrap;
+  the workflow parses the immutable trusted base's `action.yml` and fails
+  closed for unsupported contracts.
+
+### Recommended follow-up
+
+Merge #64, publish the next immutable release, update the temporary
+commit-pinned examples to the `v1.0.0` tag, and call out the required
+`copilot_token` input in the release migration notes. Keep the committed
+Copilot CLI lockfile current when bumping the pinned version, and preserve the
+explicit modern/legacy contract checks when changing the Action bootstrap.
+
+**Priority:** now
+
+**Evidence:** final hosted run `34899128103` passed after all five lenses ran
+with zero execution errors; `npm run dogfood:pr 64` completed with two findings
+that were validated as intentional behavior; 893 tests across 161 suites pass.

@@ -62,29 +62,11 @@ jobs:
         with:
           ref: ${{ steps.base.outputs.result }}
 
-      - name: Require Copilot authentication
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
-        run: |
-          if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
-            echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
-            exit 1
-          fi
-
-      - name: Set up Node.js for Copilot CLI
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-
-      - name: Install GitHub Copilot CLI
-        run: npm install --global @github/copilot@1.0.83
-
       - name: Run Gem PR Review
-        uses: xpepper/pr-review-gemini@v0.4.0
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+        uses: xpepper/pr-review-gemini@629c5c7c9141b5b30527bee219de7ba8c80ec928
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
           incremental: auto
@@ -101,18 +83,34 @@ unless the commenter is explicitly allowlisted.
 
 ## Copilot CLI provisioning and authentication
 
-The workflow follows GitHub's documented npm installation path, using its
-required Node.js 22 runtime and pinning the currently verified package release,
-then discovers the resulting `copilot` binary through `PATH`. For
-non-interactive CI authentication, create the `COPILOT_TOKEN` repository secret
-as a user-owned fine-grained personal access token with the **Copilot Requests**
-account permission. The workflow maps that secret to `COPILOT_GITHUB_TOKEN`,
-which has precedence over `GH_TOKEN` and `GITHUB_TOKEN`. Classic personal access
-tokens are not supported.
+The composite Action owns CLI bootstrap: it configures GitHub's required
+Node.js 22 runtime, installs `@github/copilot@1.0.83` from the committed
+`.github/copilot-cli/package-lock.json` with `npm ci --ignore-scripts`, and
+discovers the resulting `copilot` binary through `PATH`. The lockfile records
+integrity values for the CLI and its platform dependencies, and disabling
+package lifecycle scripts keeps installation from executing fetched code.
+Consumers do not need separate setup or installation steps.
+
+For non-interactive CI authentication, create the `COPILOT_TOKEN` repository
+secret as a user-owned fine-grained personal access token with the **Copilot
+Requests** account permission, then pass it through the required
+`copilot_token` input. Ambient credentials cannot satisfy the guard: the Action
+never falls back to `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` from
+the caller environment. The Action exposes the input credential as
+`COPILOT_GITHUB_TOKEN` only to its authentication guard and review process;
+setup and installation never receive the credential. The dedicated variable
+keeps Copilot authentication separate from the GitHub API credentials in
+`GH_TOKEN` and `GITHUB_TOKEN`; the authentication guard prevents fallback to
+either. Classic personal access tokens are not supported.
 
 See GitHub's official documentation for
 [installation](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 and [authentication](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli).
+
+This required input is the intentional breaking Action-contract change for
+`v1.0.0`. Workflows pinned to `v0.4.0` that configured only an Action-step
+`COPILOT_GITHUB_TOKEN` must migrate by passing the same repository secret as
+`copilot_token` when updating to `v1.0.0`.
 
 Repository secrets are not passed to `pull_request` workflows triggered from
 forks. By owner decision, those runs remain enabled and fail closed at an
@@ -124,6 +122,7 @@ reporting an unreviewed success.
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `github_token` | Token used to authenticate GitHub API calls and post reviews. | No | `${{ github.token }}` |
+| `copilot_token` | User-owned fine-grained PAT with **Copilot Requests** permission; exposed only as `COPILOT_GITHUB_TOKEN` during authentication and review. | Yes | None |
 | `pr_number` | Pull request number; read from `GITHUB_EVENT_PATH` when omitted. | No | Auto-detected |
 | `mode` | Review mode: `quick`, `balanced`, `full`, or `deep`. | No | `balanced` |
 | `fail_on` | Severity that fails the job: `P0`, `P1`, `P2`, `P3`, or `none`. | No | `none` |
@@ -170,9 +169,8 @@ defects; branch protection can then require that check before merging.
 
 ## Lens execution failures
 
-Review lenses run through the Copilot CLI, which must be installed and able to
-authenticate on the runner. The starter workflow provisions it because the
-`ubuntu-latest` image does not include it. If every review lens fails to execute
+Review lenses run through the Copilot CLI, which the composite Action installs
+and authenticates on the runner. If every review lens fails to execute
 (for example `spawn copilot ENOENT`),
 no review was performed, so the Action fails the job with verdict `FAIL` and an
 error annotation instead of reporting zero findings. This applies to `dry-run`
@@ -184,6 +182,10 @@ and the Action emits a warning annotation without failing the job.
 The Action keeps the repository checkout on the trusted base branch and obtains
 the pull request diff through GitHub APIs. It therefore does not check out or
 execute untrusted PR-head code by default.
+
+The starter workflow derives its legacy-versus-modern bootstrap path by
+parsing the trusted base `action.yml` contract, so a partial rollback cannot
+silently select a path that does not match the Action implementation.
 
 Optional detached-worktree verification is maintainer initiated. In CI it is
 limited to same-repository branches and canonical safe profiles (`test`,

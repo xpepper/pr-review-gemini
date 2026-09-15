@@ -64,10 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.base.ref }}
-      - uses: xpepper/pr-review-gemini@v0.4.0
+          ref: ${{ github.event.pull_request.base.sha }}
+      - uses: xpepper/pr-review-gemini@629c5c7c9141b5b30527bee219de7ba8c80ec928
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          copilot_token: ${{ secrets.COPILOT_TOKEN }}
           mode: balanced
           fail_on: P1
 ```

@@ -10,6 +10,9 @@ inputs:
     description: 'GitHub token for authenticating API requests and posting reviews'
     required: false
     default: '${{ github.token }}'
+  copilot_token:
+    description: 'User-owned fine-grained PAT with the Copilot Requests account permission'
+    required: true
   pr_number:
     description: 'Pull request number to review (auto-detected from GITHUB_EVENT_PATH if omitted)'
     required: false
@@ -66,10 +69,49 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Require Copilot authentication
+      shell: bash
+      env:
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token }}
+      run: |
+        if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+          echo "::error title=Gem PR Review::Copilot authentication is unavailable; fork pull requests fail closed."
+          exit 1
+        fi
+
+    - name: Set up Node.js for Copilot CLI
+      uses: actions/setup-node@v6
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/.github/copilot-cli/package-lock.json
+
+    - name: Install GitHub Copilot CLI
+      id: install_copilot
+      shell: bash
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      run: |
+        set -euo pipefail
+        install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
+        : > "$install_root/.gem-pr-review-copilot-owned"
+        echo "install_root=$install_root" >> "$GITHUB_OUTPUT"
+        cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
+        cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
+        npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
+        echo "$install_root/node_modules/.bin" >> "$GITHUB_PATH"
+
     - name: Run Gem PR Review
       id: review
       shell: bash
       env:
+        COPILOT_GITHUB_TOKEN: ${{ inputs.copilot_token }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         INPUT_PR_NUMBER: ${{ inputs.pr_number }}
         INPUT_MODE: ${{ inputs.mode }}
@@ -83,3 +125,34 @@ runs:
         GH_TOKEN: ${{ inputs.github_token }}
       run: |
         node "${{ github.action_path }}/scripts/ci-action.mjs"
+
+    - name: Clean up GitHub Copilot CLI
+      if: ${{ always() && steps.install_copilot.outcome != 'skipped' }}
+      shell: bash
+      env:
+        COPILOT_INSTALL_ROOT: ${{ steps.install_copilot.outputs.install_root }}
+      run: |
+        set -euo pipefail
+        cleanup_root="${COPILOT_INSTALL_ROOT:-}"
+        if [ -z "$cleanup_root" ]; then
+          exit 0
+        fi
+        runner_temp="$(cd "${RUNNER_TEMP:-/tmp}" && pwd -P)"
+        canonical_root="$(cd "$cleanup_root" && pwd -P)"
+        if [ "$(dirname "$canonical_root")" != "$runner_temp" ]; then
+          echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
+          exit 1
+        fi
+        case "$(basename "$canonical_root")" in
+          gem-pr-review-copilot.*)
+            ;;
+          *)
+            echo "::error title=Gem PR Review::Unexpected Copilot CLI install path."
+            exit 1
+            ;;
+        esac
+        if [ ! -f "$canonical_root/.gem-pr-review-copilot-owned" ]; then
+          echo "::error title=Gem PR Review::Copilot CLI install ownership marker is missing."
+          exit 1
+        fi
+        rm -rf -- "$canonical_root"
