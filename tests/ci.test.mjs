@@ -639,7 +639,8 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.doesNotMatch(content, /BASHPID/, 'lease owners must come from the invoking shell, not a caller-supplied PID');
       assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
       assert.match(content.slice(cleanupStep), /COPILOT_INSTALL_ROOT:\s*\$\{\{\s*steps\.install_copilot\.outputs\.install_root\s*\}\}/);
-      assert.match(content.slice(cleanupStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" cleanup-current/);
+      assert.match(content.slice(cleanupStep), /INSTALL_OUTCOME:\s*\$\{\{\s*steps\.install_copilot\.outcome\s*\}\}/);
+      assert.match(content.slice(cleanupStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" cleanup-current "\$COPILOT_INSTALL_ROOT"$/m);
 
       const lockfilePath = path.resolve('.github/copilot-cli/package-lock.json');
       assert.equal(fs.existsSync(lockfilePath), true, 'Copilot CLI lockfile must be committed');
@@ -785,31 +786,39 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(fs.existsSync(reusedPidInstall), false, 'must not treat a reused PID as an active lease');
 
         const validCurrentInstall = makeOwnedInstall('gem-pr-review-copilot.current', now);
-        const cleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
+        const environmentRootResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
           encoding: 'utf8',
           env: { ...process.env, RUNNER_TEMP: runnerTemp, COPILOT_INSTALL_ROOT: validCurrentInstall },
+        });
+        assert.equal(environmentRootResult.status, 1, 'must require an explicit install root argument');
+        assert.equal(fs.existsSync(validCurrentInstall), true, 'must not clean an install named only by the environment');
+        const emptyRootResult = spawnSync('bash', [cleanupScript, 'cleanup-current', ''], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(emptyRootResult.status, 1, 'must fail closed for an empty install root');
+        const cleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current', validCurrentInstall], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
         });
         assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
         assert.equal(fs.existsSync(validCurrentInstall), false, 'must clean the current owned installation');
 
         const activeCurrentInstall = makeOwnedInstall('gem-pr-review-copilot.current-active', now, process.pid);
-        const activeCleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
+        const activeCleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current', activeCurrentInstall], {
           encoding: 'utf8',
-          env: { ...process.env, RUNNER_TEMP: runnerTemp, COPILOT_INSTALL_ROOT: activeCurrentInstall },
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
         });
         assert.equal(activeCleanupResult.status, 1, 'must fail closed for an active current installation');
         assert.equal(fs.existsSync(activeCurrentInstall), true, 'must preserve an active current installation');
 
         const traversalRoot = path.join(runnerTemp, 'gem-pr-review-copilot.traversal');
         fs.mkdirSync(traversalRoot);
-        const traversalResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            RUNNER_TEMP: runnerTemp,
-            COPILOT_INSTALL_ROOT: path.join(traversalRoot, '..', '..', 'outside'),
-          },
-        });
+        const traversalResult = spawnSync(
+          'bash',
+          [cleanupScript, 'cleanup-current', path.join(traversalRoot, '..', '..', 'outside')],
+          { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: runnerTemp } },
+        );
         assert.equal(traversalResult.status, 1, 'must fail closed for a traversal cleanup path');
         assert.equal(fs.existsSync(outside), true, 'must preserve traversal targets outside RUNNER_TEMP');
 
@@ -859,6 +868,49 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(spoofedResult.status, 1, 'must reject a caller-supplied lease PID');
         assert.match(spoofedResult.stderr, /Unexpected Copilot CLI cleanup arguments/);
         assert.equal(fs.readFileSync(leaseMarker, 'utf8'), leaseBeforeSpoof, 'a rejected lease request must not change the lease');
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('cleans up the published Copilot CLI install root and fails closed when a successful install published none', () => {
+      const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
+      const cleanupStep = content.indexOf('- name: Clean up GitHub Copilot CLI');
+      // The cleanup step is the last Action step, so its run block extends to the end of the file.
+      const cleanupRun = content.slice(cleanupStep).split('run: |\n')[1]
+        .split('\n')
+        .map((line) => line.replace(/^ {8}/, ''))
+        .join('\n')
+        .replaceAll('${{ steps.action_path.outputs.root }}', path.resolve('.'));
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-cleanup-step-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const installRoot = path.join(runnerTemp, 'gem-pr-review-copilot.step');
+      const runCleanupStep = (publishedRoot, installOutcome) => spawnSync('bash', ['-c', cleanupRun], {
+        encoding: 'utf8',
+        env: { ...process.env, RUNNER_TEMP: runnerTemp, COPILOT_INSTALL_ROOT: publishedRoot, INSTALL_OUTCOME: installOutcome },
+      });
+
+      try {
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.chmodSync(installRoot, 0o700);
+        fs.writeFileSync(
+          path.join(installRoot, '.gem-pr-review-copilot-owned'),
+          `version=2\ninstall_id=gem-pr-review-copilot.step\ncreated_at=${Math.floor(Date.now() / 1000)}\n`,
+        );
+        fs.writeFileSync(path.join(installRoot, '.gem-pr-review-copilot-lease'), 'pid=99999999\nstarted_at=not-running\n');
+
+        const failedInstallResult = runCleanupStep('', 'failure');
+        assert.equal(failedInstallResult.status, 0, failedInstallResult.stdout + failedInstallResult.stderr);
+
+        const missingRootResult = runCleanupStep('', 'success');
+        assert.equal(missingRootResult.status, 1, 'must fail closed when a successful install published no root');
+        assert.match(missingRootResult.stdout, /::error title=Gem PR Review::Copilot CLI install root is unavailable\./);
+        assert.equal(fs.existsSync(installRoot), true);
+
+        const cleanupResult = runCleanupStep(installRoot, 'success');
+        assert.equal(cleanupResult.status, 0, cleanupResult.stdout + cleanupResult.stderr);
+        assert.equal(fs.existsSync(installRoot), false, 'must clean the published install root');
       } finally {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }

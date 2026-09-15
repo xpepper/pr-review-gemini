@@ -160,6 +160,15 @@ runs:
       shell: bash
       env:
         COPILOT_INSTALL_ROOT: ${{ steps.install_copilot.outputs.install_root }}
+        INSTALL_OUTCOME: ${{ steps.install_copilot.outcome }}
       run: |
         set -euo pipefail
-        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" cleanup-current
+        if [ -z "$COPILOT_INSTALL_ROOT" ]; then
+          # An install that failed before publishing its root owns nothing to clean up.
+          if [ "$INSTALL_OUTCOME" = 'success' ]; then
+            echo "::error title=Gem PR Review::Copilot CLI install root is unavailable."
+            exit 1
+          fi
+          exit 0
+        fi
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" cleanup-current "$COPILOT_INSTALL_ROOT"

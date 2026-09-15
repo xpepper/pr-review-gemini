@@ -369,13 +369,13 @@ remove_current_install_locked() {
 }
 
 remove_current_install() {
+  local install_path="$1"
   local runner_temp
   local canonical_install
 
-  [ -n "${COPILOT_INSTALL_ROOT:-}" ] || exit 0
   runner_temp="$(validate_runner_temp)" ||
     fail 'RUNNER_TEMP is unavailable.'
-  canonical_install="$(validate_install_path "$COPILOT_INSTALL_ROOT" "$runner_temp")" ||
+  canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
   with_install_lock "$canonical_install" "$runner_temp" \
     remove_current_install_locked "$canonical_install" "$runner_temp" ||
@@ -498,8 +498,8 @@ case "${1:-}" in
     prune_stale_installs
     ;;
   cleanup-current)
-    [ "$#" -eq 1 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
-    remove_current_install
+    [ "$#" -eq 2 ] || fail 'Unexpected Copilot CLI cleanup arguments.'
+    remove_current_install "$2"
     ;;
   # Leases belong to the invoking step shell, never to a caller-chosen PID.
   initialize-install)
