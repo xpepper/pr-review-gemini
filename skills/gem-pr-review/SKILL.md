@@ -4,7 +4,7 @@ description: Comprehensive parallel AI code review for GitHub pull requests usin
 license: MIT
 compatibility: Node.js >= 20.0.0, GitHub CLI (gh), Agent Plugins 1.0
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
 allowed-tools: Bash, gh, git, node
 ---
 

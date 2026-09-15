@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1] - 2026-09-15
+
+### 🐛 Bug Fixes
+
+- **action:** normalize local dependency cache paths (`ec939fb`)
+
 ## [1.0.0] - 2026-09-15
 
 ### 🚀 Features
