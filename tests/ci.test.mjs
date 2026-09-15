@@ -705,6 +705,7 @@ describe('CI Event Payload & Environment Resolution', () => {
           path.join(oversizedTimestamp, '.gem-pr-review-copilot-owned'),
           'version=2\ninstall_id=gem-pr-review-copilot.oversized\ncreated_at=999999999999\n',
         );
+        const futureInstall = makeOwnedInstall('gem-pr-review-copilot.future', now + 3600);
         const malformedLease = makeOwnedInstall('gem-pr-review-copilot.bad-lease', now - retentionSeconds - 1);
         fs.writeFileSync(path.join(malformedLease, '.gem-pr-review-copilot-lease'), 'pid=invalid\n');
         const interruptedInstall = makeOwnedInstall('gem-pr-review-copilot.interrupted', now - retentionSeconds - 1);
@@ -736,7 +737,12 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(fs.existsSync(insecureInstall), true, 'must preserve non-private installation directories');
         assert.match(pruneResult.stderr, /without a valid ownership marker/, 'must classify oversized timestamps as invalid metadata');
         assert.match(pruneResult.stderr, /invalid path/, 'must report skipped non-private installation directories');
-        assert.doesNotMatch(pruneResult.stderr, /future ownership metadata/, 'must reject oversized timestamps before age evaluation');
+        assert.equal(fs.existsSync(futureInstall), true, 'must preserve installations with future ownership metadata');
+        assert.equal(
+          pruneResult.stderr.match(/future ownership metadata/g)?.length,
+          1,
+          'must report only the future-dated install; oversized timestamps are rejected before age evaluation',
+        );
         assert.equal(fs.lstatSync(symlinkInstall).isSymbolicLink(), true, 'must not follow symlinked installation paths');
         assert.equal(fs.existsSync(outside), true, 'must not remove a symlink target');
 

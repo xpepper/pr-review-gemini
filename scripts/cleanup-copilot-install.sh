@@ -398,31 +398,44 @@ remove_current_install() {
     fail 'Copilot CLI install is being changed by another invocation.'
 }
 
+# Prints the canonical install when it is owned and past the retention window.
+# Returns 1 when the install must be kept, warning when its metadata is unusable.
+stale_install_candidate() {
+  local install_path="$1"
+  local runner_temp="$2"
+  local now="$3"
+  local canonical_install
+  local created_at
+
+  canonical_install="$(validate_install_path "$install_path" "$runner_temp")" || {
+    warn 'Skipping Copilot CLI install with an invalid path.'
+    return 1
+  }
+  created_at="$(read_created_at "$canonical_install")" || {
+    warn 'Skipping Copilot CLI install without a valid ownership marker.'
+    return 1
+  }
+  if [ "$created_at" -gt "$now" ]; then
+    warn 'Skipping Copilot CLI install with future ownership metadata.'
+    return 1
+  fi
+  [ $((now - created_at)) -ge "$STALE_INSTALL_RETENTION_SECONDS" ] ||
+    return 1
+  printf '%s\n' "$canonical_install"
+}
+
 prune_stale_install_locked() {
   local canonical_install="$1"
   local runner_temp="$2"
   local now="$3"
-  local created_at
   local lease_marker
   local lease
   local lease_pid
   local lease_started_at
 
-  canonical_install="$(validate_install_path "$canonical_install" "$runner_temp")" || {
-    warn 'Skipping Copilot CLI install with an invalid path.'
+  # Re-check under the lock: the install may have changed since it was discovered.
+  canonical_install="$(stale_install_candidate "$canonical_install" "$runner_temp" "$now")" ||
     return 0
-  }
-  created_at="$(read_created_at "$canonical_install")" || {
-    warn 'Skipping Copilot CLI install without a valid ownership marker.'
-    return 0
-  }
-  if [ "$created_at" -gt "$now" ]; then
-    warn 'Skipping Copilot CLI install with future ownership metadata.'
-    return 0
-  fi
-  if [ $((now - created_at)) -lt "$STALE_INSTALL_RETENTION_SECONDS" ]; then
-    return 0
-  fi
   lease_marker="$canonical_install/$LEASE_MARKER"
   if [ ! -e "$lease_marker" ] && [ ! -L "$lease_marker" ]; then
     remove_install_via_quarantine "$canonical_install" "$runner_temp"
@@ -470,7 +483,6 @@ prune_stale_installs() {
   local now
   local candidate
   local canonical_install
-  local created_at
   local lock_status
 
   runner_temp="$(validate_runner_temp)" ||
@@ -479,21 +491,10 @@ prune_stale_installs() {
   prune_abandoned_quarantines "$runner_temp" "$now"
   shopt -s nullglob
   for candidate in "$runner_temp"/"$INSTALL_PREFIX"*; do
-    canonical_install="$(validate_install_path "$candidate" "$runner_temp")" || {
-      warn 'Skipping Copilot CLI install with an invalid path.'
+    # Filter before locking so cleanup never contends for the locks of fresh
+    # installs that concurrent invocations are still using.
+    canonical_install="$(stale_install_candidate "$candidate" "$runner_temp" "$now")" ||
       continue
-    }
-    created_at="$(read_created_at "$canonical_install")" || {
-      warn 'Skipping Copilot CLI install without a valid ownership marker.'
-      continue
-    }
-    if [ "$created_at" -gt "$now" ]; then
-      warn 'Skipping Copilot CLI install with future ownership metadata.'
-      continue
-    fi
-    if [ $((now - created_at)) -lt "$STALE_INSTALL_RETENTION_SECONDS" ]; then
-      continue
-    fi
     if with_install_lock "$canonical_install" "$runner_temp" \
       prune_stale_install_locked "$canonical_install" "$runner_temp" "$now"; then
       continue
