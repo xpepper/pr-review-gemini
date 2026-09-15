@@ -79,6 +79,19 @@ runs:
           exit 1
         fi
 
+    - name: Resolve Action path for dependency cache
+      id: action_path
+      shell: bash
+      run: |
+        set -euo pipefail
+        source_path="${{ github.action_path }}"
+        if [ -z "$source_path" ] || [ ! -d "$source_path" ]; then
+          echo "::error title=Gem PR Review::Action path is unavailable."
+          exit 1
+        fi
+        action_path="$(cd "$source_path" && pwd -P)"
+        echo "root=$action_path" >> "$GITHUB_OUTPUT"
+
     - name: Set up Node.js for Copilot CLI
       uses: actions/setup-node@v6
       env:
@@ -88,7 +101,7 @@ runs:
       with:
         node-version: '22'
         cache: npm
-        cache-dependency-path: ${{ github.action_path }}/.github/copilot-cli/package-lock.json
+        cache-dependency-path: ${{ steps.action_path.outputs.root }}/.github/copilot-cli/package-lock.json
 
     - name: Install GitHub Copilot CLI
       id: install_copilot
