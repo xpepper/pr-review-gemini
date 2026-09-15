@@ -246,6 +246,22 @@ with_install_lock() (
   "$@"
 )
 
+write_marker() {
+  local marker="$1"
+  local staged_marker
+
+  shift
+  staged_marker="$(mktemp "$(dirname "$marker")/.gem-pr-review-copilot-marker.XXXXXX")" ||
+    return 1
+  # Hard-link the staged file into place: link(2) never follows the marker path, and
+  # -n keeps ln from treating a symlink to a directory as the destination directory.
+  if ! printf '%s\n' "$@" > "$staged_marker" || ! ln -fn -- "$staged_marker" "$marker"; then
+    rm -f -- "$staged_marker"
+    return 1
+  fi
+  rm -f -- "$staged_marker"
+}
+
 initialize_install_locked() {
   local canonical_install="$1"
   local created_at="$2"
@@ -261,8 +277,9 @@ initialize_install_locked() {
   ownership_marker="$canonical_install/$OWNERSHIP_MARKER"
   [ ! -e "$ownership_marker" ] && [ ! -L "$ownership_marker" ] ||
     fail 'Copilot CLI install ownership marker already exists.'
-  printf 'version=2\ninstall_id=%s\ncreated_at=%s\n' \
-    "$(basename "$canonical_install")" "$created_at" > "$ownership_marker"
+  write_marker "$ownership_marker" 'version=2' \
+    "install_id=$(basename "$canonical_install")" "created_at=$created_at" ||
+    fail 'Could not write Copilot CLI install ownership marker.'
   if ! update_lease "$canonical_install" "$lease_pid"; then
     rm -f -- "$ownership_marker"
     fail 'Copilot CLI install lease metadata is invalid.'
@@ -281,8 +298,7 @@ update_lease() {
     return 1
   started_at="$(process_start_time "$lease_pid")" ||
     return 1
-  umask 077
-  printf 'pid=%s\nstarted_at=%s\n' "$lease_pid" "$started_at" > "$marker"
+  write_marker "$marker" "pid=$lease_pid" "started_at=$started_at"
 }
 
 initialize_install() {

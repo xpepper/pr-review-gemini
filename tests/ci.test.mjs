@@ -915,6 +915,78 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     });
+
+    it('does not follow a lease marker swapped for a symlink while the lease is refreshed', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const realPs = spawnSync('bash', ['-c', 'command -v ps'], { encoding: 'utf8' }).stdout.trim();
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-swap-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const shimBin = path.join(fixtureRoot, 'bin');
+      const psCalls = path.join(fixtureRoot, 'ps-calls');
+      const runFromShell = (env, ...args) => spawnSync(
+        'bash',
+        ['-c', 'bash "$0" "$@"; status=$?; echo "shell_pid=$$"; exit "$status"', cleanupScript, ...args],
+        { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: runnerTemp, ...env } },
+      );
+
+      try {
+        fs.mkdirSync(runnerTemp);
+        fs.chmodSync(runnerTemp, 0o700);
+        // activate-lease looks up the lock owner and then the lease owner with ps; the second
+        // lookup happens after the lease marker was validated and before it is written.
+        fs.mkdirSync(shimBin);
+        fs.writeFileSync(
+          path.join(shimBin, 'ps'),
+          [
+            '#!/usr/bin/env bash',
+            `count=$(( $(cat '${psCalls}' 2>/dev/null || echo 0) + 1 ))`,
+            `echo "$count" > '${psCalls}'`,
+            'if [ "$count" -eq 2 ]; then rm -f "$SWAP_MARKER"; ln -s "$SWAP_TARGET" "$SWAP_MARKER"; fi',
+            `exec '${realPs}' "$@"`,
+            '',
+          ].join('\n'),
+          { mode: 0o755 },
+        );
+
+        for (const targetKind of ['file', 'directory']) {
+          const installRoot = path.join(runnerTemp, `gem-pr-review-copilot.swap-${targetKind}`);
+          const leaseMarker = path.join(installRoot, '.gem-pr-review-copilot-lease');
+          const swapTarget = path.join(fixtureRoot, `swap-target-${targetKind}`);
+          fs.mkdirSync(installRoot);
+          fs.chmodSync(installRoot, 0o700);
+          if (targetKind === 'file') {
+            fs.writeFileSync(swapTarget, 'victim\n');
+          } else {
+            fs.mkdirSync(swapTarget);
+          }
+          const initializeResult = runFromShell({}, 'initialize-install', installRoot, String(Math.floor(Date.now() / 1000)));
+          assert.equal(initializeResult.status, 0, initializeResult.stderr);
+
+          fs.rmSync(psCalls, { force: true });
+          const activateResult = runFromShell(
+            { PATH: `${shimBin}${path.delimiter}${process.env.PATH}`, SWAP_MARKER: leaseMarker, SWAP_TARGET: swapTarget },
+            'activate-lease',
+            installRoot,
+          );
+          assert.equal(fs.readFileSync(psCalls, 'utf8').trim(), '2', `the ${targetKind} symlink swap must happen inside the lease refresh`);
+          if (targetKind === 'file') {
+            assert.equal(fs.readFileSync(swapTarget, 'utf8'), 'victim\n', 'must not write lease metadata through a symlinked file');
+          } else {
+            assert.deepEqual(fs.readdirSync(swapTarget), [], 'must not place lease metadata inside a symlinked directory');
+          }
+          assert.equal(activateResult.status, 0, activateResult.stderr);
+          assert.equal(fs.lstatSync(leaseMarker).isSymbolicLink(), false, `must replace the ${targetKind} symlink with a regular lease marker`);
+          assert.match(fs.readFileSync(leaseMarker, 'utf8'), new RegExp(`^pid=${activateResult.stdout.match(/^shell_pid=(\d+)$/m)?.[1]}$`, 'm'));
+          assert.deepEqual(
+            fs.readdirSync(installRoot).sort(),
+            ['.gem-pr-review-copilot-lease', '.gem-pr-review-copilot-owned'],
+            'must not leave staged marker files behind',
+          );
+        }
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('CI Action Runner (scripts/ci-action.mjs)', () => {
