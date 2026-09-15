@@ -56,21 +56,29 @@ jobs:
             echo "::error title=Gem PR Review::Trusted-base action.yml is unavailable."
             exit 1
           fi
-          if ! contract=$(ruby <<'RUBY'
+          if git cat-file -e HEAD:scripts/detect-action-contract.rb 2>/dev/null; then
+            # Load the detector from the same trusted base commit as action.yml.
+            if ! contract=$(git show HEAD:scripts/detect-action-contract.rb | ruby - action.yml); then
+              echo "::error title=Gem PR Review::Trusted-base action.yml could not be parsed."
+              exit 1
+            fi
+          else
+            # Older trusted bases predate the detector; validate only their legacy contract inline.
+            if ! contract=$(ruby - action.yml <<'RUBY'
           require 'yaml'
 
           manifest = YAML.safe_load(
-            File.read('action.yml'),
+            File.read(ARGV.fetch(0)),
             permitted_classes: [],
             permitted_symbols: [],
             aliases: false
           )
           abort 'action.yml must contain a mapping' unless manifest.is_a?(Hash)
           inputs = manifest.fetch('inputs', {})
-          runs = manifest.fetch('runs')
-          steps = runs.fetch('steps')
+          runs = manifest['runs']
           abort 'action.yml inputs must be a mapping' unless inputs.is_a?(Hash)
           abort 'action.yml runs must be a mapping' unless runs.is_a?(Hash)
+          steps = runs['steps']
           abort 'action.yml steps must be a list of mappings' unless steps.is_a?(Array) && steps.all? { |step| step.is_a?(Hash) }
 
           def blank_setup_env?(step)
@@ -87,14 +95,13 @@ jobs:
           review_step = steps.find { |step| step['name'] == 'Run Gem PR Review' }
           auth_run = auth_step.fetch('run', '').to_s if auth_step
           install_run = install_step.fetch('run', '').to_s if install_step
-          copilot_input = inputs['copilot_token']
           expression_start = '$' + '{{ '
           copilot_token_expression = expression_start + 'inputs.copilot_token }}'
           github_token_expression = expression_start + 'inputs.github_token }}'
           modern =
             runs['using'] == 'composite' &&
-            copilot_input.is_a?(Hash) &&
-            copilot_input['required'] == true &&
+            inputs['copilot_token'].is_a?(Hash) &&
+            inputs['copilot_token']['required'] == true &&
             auth_step &&
             auth_step.dig('env', 'COPILOT_GITHUB_TOKEN') == copilot_token_expression &&
             auth_run.include?('if [ -z "$COPILOT_GITHUB_TOKEN" ]') &&
@@ -127,9 +134,10 @@ jobs:
             abort 'action.yml has an unsupported contract'
           end
           RUBY
-          ); then
-            echo "::error title=Gem PR Review::Trusted-base action.yml could not be parsed."
-            exit 1
+            ); then
+              echo "::error title=Gem PR Review::Trusted-base action contract is unsupported."
+              exit 1
+            fi
           fi
           case "$contract" in
             modern)

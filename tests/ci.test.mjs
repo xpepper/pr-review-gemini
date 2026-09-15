@@ -1943,28 +1943,13 @@ index 1111111..2222222 100644
       assert.match(content, /ref:\s*\${{\s*steps\.base\.outputs\.result\s*}}/);
       assert.match(content, /id:\s*action-contract/);
       assert.match(content, /if \[ ! -f action\.yml \]/);
-      assert.match(content, /ruby <<'RUBY'/);
-      assert.match(content, /YAML\.safe_load\([\s\S]*File\.read\('action\.yml'\)/);
-      assert.match(content, /permitted_classes:\s*\[\]/);
-      assert.match(content, /aliases:\s*false/);
-      assert.doesNotMatch(content, /YAML\.load_file/);
-      assert.match(content, /auth_step = steps\.find/);
-      assert.match(content, /node_step\['uses'\] == 'actions\/setup-node@v6'/);
-      assert.match(content, /install_run\.include\?\('npm ci --prefix'\)/);
-      assert.match(content, /blank_setup_env\?\(node_step\)/);
-      assert.match(content, /blank_setup_env\?\(install_step\)/);
-      assert.match(content, /review_step\.dig\('env', 'COPILOT_GITHUB_TOKEN'\)/);
-      assert.match(content, /expression_start = '\$' \+ '\{\{ '/);
-      assert.match(content, /copilot_token_expression = expression_start/);
-      assert.match(content, /github_token_expression = expression_start/);
-      assert.match(content, /legacy =/);
-      assert.match(content, /!inputs\.key\?\('copilot_token'\)/);
-      assert.match(content, /steps\.length == 1/);
-      assert.match(content, /review_step\['id'\] == 'review'/);
-      assert.match(content, /scripts\/ci-action\.mjs/);
-      assert.match(content, /if modern/);
-      assert.match(content, /elsif legacy/);
-      assert.match(content, /abort 'action\.yml has an unsupported contract'/);
+      assert.match(content, /git cat-file -e HEAD:scripts\/detect-action-contract\.rb/);
+      assert.match(content, /git show HEAD:scripts\/detect-action-contract\.rb \| ruby - action\.yml/);
+      assert.match(content, /Older trusted bases predate the detector/);
+      assert.match(content, /ruby - action\.yml <<'RUBY'/);
+      assert.match(content, /YAML\.safe_load/);
+      assert.doesNotMatch(content, /grep -Fq/);
+      assert.doesNotMatch(content, /ruby <<'RUBY'/);
       assert.match(content, /legacy_bootstrap=true/);
       assert.match(content, /legacy_bootstrap=false/);
       assert.doesNotMatch(content, /gem-pr-review-action-bootstrap-v1/);
@@ -1983,6 +1968,80 @@ index 1111111..2222222 100644
       assert.doesNotMatch(content.slice(modernRun), /COPILOT_GITHUB_TOKEN:/);
       assert.equal((content.match(/uses:\s*\.\//g) || []).length, 2);
       assert.match(content, /fail_on:\s*P1/);
+    });
+
+    it('tests the trusted action contract detector against modern, legacy, and unsupported manifests', () => {
+      const detectorPath = path.resolve('scripts/detect-action-contract.rb');
+      assert.equal(fs.existsSync(detectorPath), true, 'contract detector script must exist');
+
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'action-contract-'));
+      const runDetector = (manifest) => {
+        const manifestPath = path.join(tempDir, 'action.yml');
+        fs.writeFileSync(manifestPath, manifest);
+        return spawnSync('ruby', [detectorPath, manifestPath], { encoding: 'utf8' });
+      };
+
+      const modernResult = runDetector(`inputs:
+  copilot_token:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Require Copilot authentication
+      env:
+        COPILOT_GITHUB_TOKEN: '\${{ inputs.copilot_token }}'
+      run: |
+        if [ -z "$COPILOT_GITHUB_TOKEN" ]; then
+          exit 1
+        fi
+    - name: Set up Node.js for Copilot CLI
+      uses: actions/setup-node@v6
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      with:
+        node-version: '22'
+    - name: Install GitHub Copilot CLI
+      env:
+        COPILOT_GITHUB_TOKEN: ''
+        GH_TOKEN: ''
+        GITHUB_TOKEN: ''
+      run: npm ci --prefix "$install_root" --ignore-scripts
+    - name: Run Gem PR Review
+      env:
+        COPILOT_GITHUB_TOKEN: '\${{ inputs.copilot_token }}'
+`);
+      assert.equal(modernResult.status, 0, modernResult.stderr);
+      assert.equal(modernResult.stdout.trim(), 'modern');
+
+      const legacyResult = runDetector(`inputs:
+  github_token:
+    required: false
+runs:
+  using: composite
+  steps:
+    - id: review
+      name: Run Gem PR Review
+      shell: bash
+      env:
+        GITHUB_TOKEN: '\${{ inputs.github_token }}'
+        GH_TOKEN: '\${{ inputs.github_token }}'
+      run: node scripts/ci-action.mjs
+`);
+      assert.equal(legacyResult.status, 0, legacyResult.stderr);
+      assert.equal(legacyResult.stdout.trim(), 'legacy');
+
+      const unsupportedResult = runDetector(`runs:
+  using: composite
+  steps:
+    - name: Unsupported action
+      run: echo unsupported
+`);
+      assert.equal(unsupportedResult.status, 1);
+      assert.match(unsupportedResult.stderr, /unsupported contract/);
+
+      fs.rmSync(tempDir, { recursive: true, force: true });
     });
   });
 
