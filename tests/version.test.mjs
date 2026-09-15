@@ -354,6 +354,25 @@ BREAKING CHANGE: tiers configuration now requires an object with light, medium, 
       assert.equal(result.commits.length, 1);
       assert.equal(result.commits[0].subject, 'feat: add release notes support');
     });
+
+    it('normalizes separators between git log records before parsing hashes', async () => {
+      const mockGit = async (args) => {
+        if (args[0] === 'log') {
+          return [
+            'abcdef0123456789abcdef0123456789abcdef01\x1ffeat: first change\x1f\x1e',
+            '1234567890abcdef1234567890abcdef12345678\x1ffix: second change\x1f\x1e',
+          ].join('\n');
+        }
+        return '';
+      };
+
+      const result = await getGitCommitsSinceTag({ execGitFn: mockGit });
+
+      assert.deepEqual(
+        result.commits.map((commit) => commit.shortHash),
+        ['abcdef0', '1234567']
+      );
+    });
   });
 
   describe('Atomic Manifest Bump Utility', () => {
