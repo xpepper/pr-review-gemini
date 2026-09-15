@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-09-15
+
+### 🚀 Features
+
+- **action:** bootstrap pinned Copilot CLI (#64) (#64) (`871bd53`)
+- **host-gates:** enforce expectedHeadSha, verify head cross-check, diagnostics re-sanitization (#56) (#56) (`72ffa88`)
+
+### 🐛 Bug Fixes
+
+- **release:** preserve commit fields while normalizing hashes (`2da893f`)
+- **release:** normalize git log record separators (`6d3214e`)
+- **ci:** provision Copilot CLI for review lenses (#62) (#62) (`559c42e`)
+- **ci:** provision Copilot CLI for review lenses (`3fc782a`)
+- **subagents:** honor COPILOT_CLI_PATH in the CLI fallback (#60) (#60) (`ed5ab3e`)
+- **ci:** fail closed when review lenses cannot execute (#57) (#57) (`e96d977`)
+- **ci:** provision Copilot CLI for review lenses (`cf002a1`)
+
+### 📝 Documentation
+
+- record v0.4.0 release, refresh pinned examples, and log CI review degradation (#55) (#55) (`331a13c`)
+
+### 🔧 Maintenance & Chores
+
+- Revert "fix(ci): provision Copilot CLI for review lenses" (#61) (#61) (`79f3e0b`)
+- Revert "fix(ci): provision Copilot CLI for review lenses" (`f78cafd`)
+
 ## [0.4.0] - 2026-09-14
 
 ### 🚀 Features
