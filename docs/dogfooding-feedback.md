@@ -367,8 +367,10 @@ The local dogfood run reported one P1 and one P2.
 ### What was useful
 
 - The workflow's indentation-sensitive Action-contract detection was a valid
-  maintenance risk. It was replaced with an explicit versioned marker plus a
-  fail-fast `action.yml` existence check.
+  maintenance risk. It was replaced with safe manifest-derived contract
+  detection that validates the Action-owned modern bootstrap and the known
+  legacy contract, fails closed for unsupported shapes, and reads the
+  detector from the immutable trusted base.
 - The authentication wording was clarified: the Action guard prevents Copilot
   CLI fallback to the GitHub API credentials even though the upstream CLI
   supports those variables.
@@ -377,19 +379,17 @@ The local dogfood run reported one P1 and one P2.
 
 ### What was incorrect, missing, noisy, or confusing
 
-- The hosted P1 requesting a lockfile/integrity-pinned global install was not
-  actioned. GitHub's official installation path is global npm installation,
-  the package version is exact, and npm registry metadata for `1.0.83`
-  includes a SHA-512 `dist.integrity` that npm verifies. A separate lockfile
-  installer would add machinery beyond issue #63 without demonstrating an
-  exploit in the pinned official path.
-- The reviewer later auto-resolved that integrity finding only because its
-  anchor moved; the implementation did not change. This is a false resolution
-  signal and must not be treated as evidence that the concern was fixed.
-- The local P2 that trusted-base detection uses the stale base SHA describes
-  the intended security boundary. The rollout marker deliberately selects the
-  legacy bootstrap for this PR, then selects Action-owned bootstrap once the
-  marker lands on `main`.
+- The hosted P1 requesting an integrity-pinned install was valid and was
+  remediated by committing the Copilot CLI lockfile, installing with
+  `npm ci --ignore-scripts` in a unique temporary directory, and cleaning only
+  the directory owned by that invocation.
+- The reviewer initially auto-resolved that integrity finding only because its
+  anchor moved; that was a false resolution signal. The later lockfile and
+  cleanup commits are the evidence that the concern was actually addressed.
+- The local P2 about trusted-base detection using the stale base SHA described
+  the intended security boundary. The workflow now derives the decision from
+  the immutable trusted base's `action.yml`, validates explicit modern and
+  legacy contracts, and keeps the two invocation paths mutually exclusive.
 - The repeated ambient-state finding was valid. An explicit opt-in still left
   credential resolution dependent on caller environment scope, so the fallback
   was removed. The new contract requires `copilot_token`; no caller ambient
@@ -399,17 +399,18 @@ The local dogfood run reported one P1 and one P2.
   Mutually exclusive legacy and modern invocation steps now pass only the
   credential shape understood by their trusted Action revision, eliminating
   the rollout warning.
-- The later P2 calling the version marker ambient state was not actionable. The
-  marker is the explicit repository-scoped version indicator suggested by the
-  preceding review, is read from the immutable trusted base, and is pinned by a
-  regression test. Deriving the decision from PR-head state would violate the
-  security boundary this rollout exists to preserve.
+- The later P2 calling the rollout marker ambient state was superseded by the
+  manifest-derived detector. No marker file or PR-head state drives bootstrap;
+  the workflow parses the immutable trusted base's `action.yml` and fails
+  closed for unsupported contracts.
 
 ### Recommended follow-up
 
 Merge #64, publish the next immutable release, update the temporary
 commit-pinned examples to the `v1.0.0` tag, and call out the required
-`copilot_token` input in the release migration notes.
+`copilot_token` input in the release migration notes. Keep the committed
+Copilot CLI lockfile current when bumping the pinned version, and preserve the
+explicit modern/legacy contract checks when changing the Action bootstrap.
 
 **Priority:** now
 
