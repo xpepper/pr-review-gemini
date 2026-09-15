@@ -597,13 +597,14 @@ describe('CI Event Payload & Environment Resolution', () => {
       const authStep = content.indexOf('- name: Require Copilot authentication');
       const actionPathStep = content.indexOf('- name: Resolve Action path for dependency cache');
       const nodeStep = content.indexOf('- name: Set up Node.js for Copilot CLI');
+      const staleCleanupStep = content.indexOf('- name: Clean stale GitHub Copilot CLI installs');
       const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
       const reviewStep = content.indexOf('- name: Run Gem PR Review');
       const cleanupStep = content.indexOf('- name: Clean up GitHub Copilot CLI');
 
       assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*true/);
       assert.ok(authStep >= 0 && authStep < actionPathStep && actionPathStep < nodeStep, 'authentication and path normalization must precede setup');
-      assert.ok(nodeStep < installStep && installStep < reviewStep && reviewStep < cleanupStep, 'bootstrap and cleanup must surround review execution');
+      assert.ok(nodeStep < staleCleanupStep && staleCleanupStep < installStep && installStep < reviewStep && reviewStep < cleanupStep, 'bootstrap and cleanup must surround review execution');
       assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
       assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
       assert.match(content.slice(actionPathStep, nodeStep), /id:\s*action_path/);
@@ -618,22 +619,26 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(staleCleanupStep, installStep), /set -euo pipefail/);
+      assert.match(content.slice(staleCleanupStep, installStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" prune-stale/);
+      assert.match(content.slice(staleCleanupStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(staleCleanupStep, installStep), /GH_TOKEN:\s*['"]{2}/);
+      assert.match(content.slice(staleCleanupStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /npm ci --prefix "\$install_root"/);
       assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
       assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
       assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
+      assert.match(content.slice(installStep, reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" initialize-install "\$install_root" "\$created_at" "\$BASHPID"/);
       assert.match(content.slice(installStep, reviewStep), /echo "install_root=\$install_root" >> "\$GITHUB_OUTPUT"/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(reviewStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
+      assert.match(content.slice(reviewStep), /COPILOT_INSTALL_ROOT:\s*\${{\s*steps\.install_copilot\.outputs\.install_root\s*}}/);
+      assert.match(content.slice(reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" activate-lease "\$COPILOT_INSTALL_ROOT" "\$BASHPID"/);
       assert.match(content.slice(cleanupStep), /if:\s*\$\{\{\s*always\(\).*steps\.install_copilot\.outcome.*skipped/);
       assert.match(content.slice(cleanupStep), /COPILOT_INSTALL_ROOT:\s*\$\{\{\s*steps\.install_copilot\.outputs\.install_root\s*\}\}/);
-      assert.match(content.slice(cleanupStep), /cleanup_root="\$\{COPILOT_INSTALL_ROOT:-\}"/);
-      assert.match(content.slice(cleanupStep), /canonical_root=.*pwd -P/);
-      assert.match(content.slice(cleanupStep), /dirname "\$canonical_root"/);
-      assert.match(content.slice(cleanupStep), /gem-pr-review-copilot\.\*/);
-      assert.match(content.slice(cleanupStep), /rm -rf -- "\$canonical_root"/);
+      assert.match(content.slice(cleanupStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" cleanup-current/);
 
       const lockfilePath = path.resolve('.github/copilot-cli/package-lock.json');
       assert.equal(fs.existsSync(lockfilePath), true, 'Copilot CLI lockfile must be committed');
@@ -644,6 +649,179 @@ describe('CI Event Payload & Environment Resolution', () => {
         if (packagePath === '') continue;
         assert.match(packageMetadata.resolved, /^https:\/\/registry\.npmjs\.org\//);
         assert.match(packageMetadata.integrity, /^sha512-/);
+      }
+    });
+
+    it('removes only stale owned Copilot CLI installations and rejects unsafe cleanup paths', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      assert.equal(fs.existsSync(cleanupScript), true, 'Copilot CLI cleanup script must exist');
+
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-cleanup-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const outside = path.join(fixtureRoot, 'outside');
+      const retentionSeconds = 7 * 24 * 60 * 60;
+      const now = Math.floor(Date.now() / 1000);
+      const processStartTime = spawnSync(
+        'ps',
+        ['-o', 'lstart=', '-p', String(process.pid)],
+        { encoding: 'utf8' },
+      ).stdout.trim();
+      const makeOwnedInstall = (name, createdAt, leasePid = '99999999') => {
+        const installRoot = path.join(runnerTemp, name);
+        const leaseStartedAt = leasePid === process.pid ? processStartTime : 'not-running';
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(installRoot, 0o700);
+        fs.writeFileSync(
+          path.join(installRoot, '.gem-pr-review-copilot-owned'),
+          `version=2\ninstall_id=${name}\ncreated_at=${createdAt}\n`,
+        );
+        fs.writeFileSync(
+          path.join(installRoot, '.gem-pr-review-copilot-lease'),
+          `pid=${leasePid}\nstarted_at=${leaseStartedAt}\n`,
+        );
+        return installRoot;
+      };
+
+      try {
+        fs.mkdirSync(runnerTemp, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.mkdirSync(outside);
+        const activeInstall = makeOwnedInstall('gem-pr-review-copilot.active', now, process.pid);
+        const oldActiveInstall = makeOwnedInstall('gem-pr-review-copilot.active-old', now - retentionSeconds - 1, process.pid);
+        const staleInstall = makeOwnedInstall('gem-pr-review-copilot.stale', now - retentionSeconds - 1);
+        const missingMarker = path.join(runnerTemp, 'gem-pr-review-copilot.unowned');
+        fs.mkdirSync(missingMarker);
+        fs.chmodSync(missingMarker, 0o700);
+        const malformedMarker = path.join(runnerTemp, 'gem-pr-review-copilot.malformed');
+        fs.mkdirSync(malformedMarker);
+        fs.chmodSync(malformedMarker, 0o700);
+        fs.writeFileSync(path.join(malformedMarker, '.gem-pr-review-copilot-owned'), 'version=2\ncreated_at=invalid\n');
+        const oversizedTimestamp = path.join(runnerTemp, 'gem-pr-review-copilot.oversized');
+        fs.mkdirSync(oversizedTimestamp);
+        fs.chmodSync(oversizedTimestamp, 0o700);
+        fs.writeFileSync(
+          path.join(oversizedTimestamp, '.gem-pr-review-copilot-owned'),
+          'version=2\ninstall_id=gem-pr-review-copilot.oversized\ncreated_at=999999999999\n',
+        );
+        const malformedLease = makeOwnedInstall('gem-pr-review-copilot.bad-lease', now - retentionSeconds - 1);
+        fs.writeFileSync(path.join(malformedLease, '.gem-pr-review-copilot-lease'), 'pid=invalid\n');
+        const interruptedInstall = makeOwnedInstall('gem-pr-review-copilot.interrupted', now - retentionSeconds - 1);
+        fs.rmSync(path.join(interruptedInstall, '.gem-pr-review-copilot-lease'));
+        const transplantedMarker = makeOwnedInstall('gem-pr-review-copilot.transplanted', now - retentionSeconds - 1);
+        fs.writeFileSync(
+          path.join(transplantedMarker, '.gem-pr-review-copilot-owned'),
+          'version=2\ninstall_id=gem-pr-review-copilot.someone-else\ncreated_at=1\n',
+        );
+        const insecureInstall = makeOwnedInstall('gem-pr-review-copilot.insecure', now - retentionSeconds - 1);
+        fs.chmodSync(insecureInstall, 0o755);
+        const symlinkInstall = path.join(runnerTemp, 'gem-pr-review-copilot.symlink');
+        fs.symlinkSync(outside, symlinkInstall);
+
+        const pruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(pruneResult.status, 0, pruneResult.stderr);
+        assert.equal(fs.existsSync(activeInstall), true, 'must preserve a concurrent active installation');
+        assert.equal(fs.existsSync(oldActiveInstall), true, 'must preserve an active installation regardless of its age');
+        assert.equal(fs.existsSync(staleInstall), false, 'must remove stale owned installations');
+        assert.equal(fs.existsSync(missingMarker), true, 'must preserve directories without the ownership marker');
+        assert.equal(fs.existsSync(malformedMarker), true, 'must preserve malformed ownership metadata');
+        assert.equal(fs.existsSync(oversizedTimestamp), true, 'must preserve oversized timestamp metadata');
+        assert.equal(fs.existsSync(malformedLease), true, 'must preserve malformed lease metadata');
+        assert.equal(fs.existsSync(interruptedInstall), false, 'must reclaim an interrupted initialization with a valid ownership record but no lease');
+        assert.equal(fs.existsSync(transplantedMarker), true, 'must preserve an installation with ownership metadata copied from another directory');
+        assert.equal(fs.existsSync(insecureInstall), true, 'must preserve non-private installation directories');
+        assert.match(pruneResult.stderr, /without a valid ownership marker/, 'must classify oversized timestamps as invalid metadata');
+        assert.match(pruneResult.stderr, /invalid path/, 'must report skipped non-private installation directories');
+        assert.doesNotMatch(pruneResult.stderr, /future ownership metadata/, 'must reject oversized timestamps before age evaluation');
+        assert.equal(fs.lstatSync(symlinkInstall).isSymbolicLink(), true, 'must not follow symlinked installation paths');
+        assert.equal(fs.existsSync(outside), true, 'must not remove a symlink target');
+
+        const lockedStaleInstall = makeOwnedInstall('gem-pr-review-copilot.locked', now - retentionSeconds - 1);
+        const installLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.locked');
+        fs.mkdirSync(installLock, { mode: 0o700 });
+        const lockedPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(lockedPruneResult.status, 0, lockedPruneResult.stderr);
+        assert.equal(fs.existsSync(lockedStaleInstall), true, 'must preserve an installation while another invocation owns its mutation lock');
+        assert.match(lockedPruneResult.stderr, /being changed by another invocation/);
+
+        const staleLockInstall = makeOwnedInstall('gem-pr-review-copilot.stale-lock', now - retentionSeconds - 1);
+        const staleLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.stale-lock');
+        fs.mkdirSync(staleLock, { mode: 0o700 });
+        fs.writeFileSync(path.join(staleLock, 'pid'), 'pid=99999999\nstarted_at=not-running\n');
+        const staleLockPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(staleLockPruneResult.status, 0, staleLockPruneResult.stderr);
+        assert.equal(fs.existsSync(staleLockInstall), false, 'must reclaim a stale mutation lock before pruning its stale installation');
+        assert.equal(fs.existsSync(staleLock), false, 'must remove reclaimed lock metadata');
+
+        const abandonedQuarantine = fs.mkdtempSync(path.join(runnerTemp, '.gem-pr-review-copilot-quarantine.'));
+        fs.chmodSync(abandonedQuarantine, 0o700);
+        fs.utimesSync(abandonedQuarantine, now - retentionSeconds - 1, now - retentionSeconds - 1);
+        const quarantinePruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(quarantinePruneResult.status, 0, quarantinePruneResult.stderr);
+        assert.equal(fs.existsSync(abandonedQuarantine), false, 'must remove stale abandoned cleanup quarantines');
+
+        const reusedPidInstall = makeOwnedInstall('gem-pr-review-copilot.reused-pid', now - retentionSeconds - 1, process.pid);
+        fs.writeFileSync(
+          path.join(reusedPidInstall, '.gem-pr-review-copilot-lease'),
+          `pid=${process.pid}\nstarted_at=not-the-current-process\n`,
+        );
+        const reusedPidPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(reusedPidPruneResult.status, 0, reusedPidPruneResult.stderr);
+        assert.equal(fs.existsSync(reusedPidInstall), false, 'must not treat a reused PID as an active lease');
+
+        const validCurrentInstall = makeOwnedInstall('gem-pr-review-copilot.current', now);
+        const cleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp, COPILOT_INSTALL_ROOT: validCurrentInstall },
+        });
+        assert.equal(cleanupResult.status, 0, cleanupResult.stderr);
+        assert.equal(fs.existsSync(validCurrentInstall), false, 'must clean the current owned installation');
+
+        const activeCurrentInstall = makeOwnedInstall('gem-pr-review-copilot.current-active', now, process.pid);
+        const activeCleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp, COPILOT_INSTALL_ROOT: activeCurrentInstall },
+        });
+        assert.equal(activeCleanupResult.status, 1, 'must fail closed for an active current installation');
+        assert.equal(fs.existsSync(activeCurrentInstall), true, 'must preserve an active current installation');
+
+        const traversalRoot = path.join(runnerTemp, 'gem-pr-review-copilot.traversal');
+        fs.mkdirSync(traversalRoot);
+        const traversalResult = spawnSync('bash', [cleanupScript, 'cleanup-current'], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            RUNNER_TEMP: runnerTemp,
+            COPILOT_INSTALL_ROOT: path.join(traversalRoot, '..', '..', 'outside'),
+          },
+        });
+        assert.equal(traversalResult.status, 1, 'must fail closed for a traversal cleanup path');
+        assert.equal(fs.existsSync(outside), true, 'must preserve traversal targets outside RUNNER_TEMP');
+
+        const sharedRunnerTemp = path.join(fixtureRoot, 'shared-runner-temp');
+        fs.mkdirSync(sharedRunnerTemp);
+        fs.chmodSync(sharedRunnerTemp, 0o777);
+        const sharedRootResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: sharedRunnerTemp },
+        });
+        assert.equal(sharedRootResult.status, 1, 'must fail closed for a shared RUNNER_TEMP root');
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     });
   });
