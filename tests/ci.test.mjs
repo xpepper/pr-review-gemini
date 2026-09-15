@@ -595,20 +595,26 @@ describe('CI Event Payload & Environment Resolution', () => {
     it('owns pinned Copilot CLI bootstrap without exposing its credential to setup steps', () => {
       const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
       const authStep = content.indexOf('- name: Require Copilot authentication');
+      const actionPathStep = content.indexOf('- name: Resolve Action path for dependency cache');
       const nodeStep = content.indexOf('- name: Set up Node.js for Copilot CLI');
       const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
       const reviewStep = content.indexOf('- name: Run Gem PR Review');
       const cleanupStep = content.indexOf('- name: Clean up GitHub Copilot CLI');
 
       assert.match(content, /copilot_token:\s*\n\s*description:[^\n]+\n\s*required:\s*true/);
-      assert.ok(authStep >= 0 && authStep < nodeStep, 'authentication must fail closed before setup');
+      assert.ok(authStep >= 0 && authStep < actionPathStep && actionPathStep < nodeStep, 'authentication and path normalization must precede setup');
       assert.ok(nodeStep < installStep && installStep < reviewStep && reviewStep < cleanupStep, 'bootstrap and cleanup must surround review execution');
       assert.match(content.slice(authStep, nodeStep), /COPILOT_GITHUB_TOKEN:\s*\${{\s*inputs\.copilot_token\s*}}/);
       assert.doesNotMatch(content, /allow_legacy_copilot_token|env\.COPILOT_GITHUB_TOKEN/);
+      assert.match(content.slice(actionPathStep, nodeStep), /id:\s*action_path/);
+      assert.match(content.slice(actionPathStep, nodeStep), /set -euo pipefail/);
+      assert.match(content.slice(actionPathStep, nodeStep), /source_path="\$\{\{\s*github\.action_path\s*\}\}"/);
+      assert.match(content.slice(actionPathStep, nodeStep), /\[ ! -d "\$source_path" \]/);
+      assert.match(content.slice(actionPathStep, nodeStep), /pwd -P/);
       assert.match(content.slice(nodeStep, installStep), /uses:\s*actions\/setup-node@v6/);
       assert.match(content.slice(nodeStep, installStep), /node-version:\s*['"]22['"]/);
       assert.match(content.slice(nodeStep, installStep), /cache:\s*npm/);
-      assert.match(content.slice(nodeStep, installStep), /cache-dependency-path:\s*\$\{\{\s*github\.action_path\s*\}\}\/\.github\/copilot-cli\/package-lock\.json/);
+      assert.match(content.slice(nodeStep, installStep), /cache-dependency-path:\s*\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/\.github\/copilot-cli\/package-lock\.json/);
       assert.match(content.slice(nodeStep, installStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GH_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(nodeStep, installStep), /GITHUB_TOKEN:\s*['"]{2}/);
