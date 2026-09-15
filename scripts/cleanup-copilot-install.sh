@@ -224,7 +224,7 @@ with_install_lock() (
       lock_pid="${lock_identity%%|*}"
       lock_started_at="${lock_identity#*|}"
       is_lease_active "$lock_pid" "$lock_started_at" && return 75
-    elif [ ! -e "$lock_directory/pid" ]; then
+    elif [ ! -e "$lock_directory/pid" ] && [ ! -L "$lock_directory/pid" ]; then
       lock_modified_at="$(file_modified_at "$lock_directory")" || return 75
       now="$(date +%s)"
       [ "$lock_modified_at" -le "$now" ] &&
@@ -259,9 +259,14 @@ initialize_install_locked() {
   [ "$created_at" -le "$now" ] ||
     fail 'Copilot CLI install ownership timestamp is invalid.'
   ownership_marker="$canonical_install/$OWNERSHIP_MARKER"
+  [ ! -e "$ownership_marker" ] && [ ! -L "$ownership_marker" ] ||
+    fail 'Copilot CLI install ownership marker already exists.'
   printf 'version=2\ninstall_id=%s\ncreated_at=%s\n' \
     "$(basename "$canonical_install")" "$created_at" > "$ownership_marker"
-  update_lease "$canonical_install" "$lease_pid"
+  if ! update_lease "$canonical_install" "$lease_pid"; then
+    rm -f -- "$ownership_marker"
+    fail 'Copilot CLI install lease metadata is invalid.'
+  fi
 }
 
 update_lease() {
@@ -271,9 +276,11 @@ update_lease() {
   local started_at
 
   [[ "$lease_pid" =~ ^[1-9][0-9]*$ ]] ||
-    fail 'Copilot CLI install lease PID is invalid.'
+    return 1
+  [ ! -L "$marker" ] ||
+    return 1
   started_at="$(process_start_time "$lease_pid")" ||
-    fail 'Copilot CLI install lease PID is not active.'
+    return 1
   umask 077
   printf 'pid=%s\nstarted_at=%s\n' "$lease_pid" "$started_at" > "$marker"
 }
@@ -300,7 +307,8 @@ activate_lease_locked() {
 
   read_created_at "$canonical_install" >/dev/null ||
     fail 'Copilot CLI install ownership marker is invalid.'
-  update_lease "$canonical_install" "$lease_pid"
+  update_lease "$canonical_install" "$lease_pid" ||
+    fail 'Copilot CLI install lease metadata is invalid.'
 }
 
 activate_lease() {
