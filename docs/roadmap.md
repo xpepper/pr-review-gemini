@@ -284,13 +284,16 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     lenses with zero execution errors; local `npm run dogfood:pr 64` findings
     were validated rather than accepted automatically. Published as `v1.0.0`
     after manifest, tag, and release-workflow verification.
+  - Follow-up PR #70 normalized local composite-Action paths before
+    `actions/setup-node` consumes the npm cache dependency path; published as
+    patch release `v1.0.1`.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
 
 ## Post-MVP Roadmap
 
-The MVP increments (0–22) are complete. Release `v1.0.0` is published and the
+The MVP increments (0–22) are complete. Release `v1.0.1` is published and the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live in the Code quality and Continuous integration categories.
 

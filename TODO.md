@@ -8,7 +8,7 @@
 
 ## Status: MVP Complete — Post-MVP Polish & Dogfooding
 
-All MVP increments (0–22) are complete. Release `v1.0.0` is published, the
+All MVP increments (0–22) are complete. Release `v1.0.1` is published, the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live, and the Action is listed in Code quality and Continuous integration.
 
@@ -76,6 +76,9 @@ is live, and the Action is listed in Code quality and Continuous integration.
     errors; `npm run dogfood:pr 64` findings were individually validated.
     Published as `v1.0.0` after manifest, tag, and release-workflow
     verification.
+  - Follow-up PR #70 normalized local composite-Action paths before
+    `actions/setup-node` consumes the npm cache dependency path; published as
+    patch release `v1.0.1`.
   - Completed (PR #60, test-first): the CLI fallback runner
     honors `COPILOT_CLI_PATH` (resolved like the SDK branch; failure messages
     name only the binary's base name), and `docs/plugin.md` documents the two

@@ -3,22 +3,23 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **`main`**: PR #64 is merged at `871bd53`; release commit `668cd5c` publishes
-  the Action-owned Copilot CLI bootstrap while preserving immutable trusted-base
-  checkout, fail-closed authentication, and host-gated publication.
-* **Release**: `v1.0.0` is published at
-  https://github.com/xpepper/pr-review-gemini/releases/tag/v1.0.0. The required
+* **`main`**: PR #70 is merged at `ec939fb` on top of PR #64 (`871bd53`);
+  release commit `d8b3ae8` includes the local Action-path normalization needed
+  by `actions/setup-node` while preserving immutable trusted-base checkout,
+  fail-closed authentication, and host-gated publication.
+* **Release**: `v1.0.1` is published at
+  https://github.com/xpepper/pr-review-gemini/releases/tag/v1.0.1. The required
   `copilot_token` input intentionally breaks the prior Action environment-only
   contract; migration guidance is in the Action documentation.
-* **Test Suite**: `npm test` green after adding release-parser regression
-  coverage; manifests remain synchronized at `1.0.0`.
+* **Test Suite**: `npm test` green after adding release-parser and Action-path
+  regression coverage; manifests remain synchronized at `1.0.1`.
 * **Marketplaces**:
   * GitHub Action listing: [Gem PR Review](https://github.com/marketplace/actions/gem-pr-review).
   * Copilot plugin marketplace: [`xpepper/copilot-plugins`](https://github.com/xpepper/copilot-plugins)
-    still needs its `gem-pr-review` entry updated to `version 1.0.0` / `ref v1.0.0`.
+    still needs its `gem-pr-review` entry updated to `version 1.0.1` / `ref v1.0.1`.
 * **Docs examples** in `README.md`, `docs/installation.md`, and
   `docs/github-action.md` now pin the immutable release commit
-  `@668cd5cf756894976a1b8f526bbfaffd0eb6c851` with a `v1.0.0` annotation.
+  `@d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2` with a `v1.0.1` annotation.
 * **Follow-ups**: #65 tracks consolidation of the trusted Action contract
   detector; #66 tracks conservative stale-install cleanup on persistent
   self-hosted runners. SARIF export remains deferred.
@@ -32,7 +33,7 @@
 ## Next Actions
 
 1. Update and merge the `gem-pr-review` entry in
-   `xpepper/copilot-plugins` to version/ref `v1.0.0`.
+   `xpepper/copilot-plugins` to version/ref `v1.0.1`.
 2. Dogfood a downstream workflow using `copilot_token` and verify the
    `v0.4.0` migration path in a real consumer repository.
 3. Prioritize #65 or #66 based on whether trusted-base compatibility or
