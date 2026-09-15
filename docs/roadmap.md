@@ -287,6 +287,14 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
   - Follow-up PR #70 normalized local composite-Action paths before
     `actions/setup-node` consumes the npm cache dependency path; published as
     patch release `v1.0.1`.
+- [x] **Post-MVP Increment (2026-09-15): Trusted Action Contract Detector Consolidation (PR #73 / issue #65)**
+  - Consolidated modern and legacy Action-contract validation into one
+    YAML-safe, fail-closed Ruby detector while retaining trusted-base
+    `action.yml` provenance and the established credential boundary.
+  - The workflow uses the base copy only when it matches the immutable
+    `v1.0.1` artifact checksum. Older bases get a credential-free sparse
+    checkout of the pinned detector artifact, never PR-head code.
+  - Test-first; focused, full, local, and hosted Gem PR Review passes completed.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---

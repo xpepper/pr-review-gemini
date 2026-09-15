@@ -3,9 +3,8 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **`main`**: PR #70 is merged at `ec939fb` on top of PR #64 (`871bd53`);
-  release commit `d8b3ae8` includes the local Action-path normalization needed
-  by `actions/setup-node` while preserving immutable trusted-base checkout,
+* **`main`**: PR #73 is merged at `54b13df`, consolidating trusted
+  Action-contract detection while preserving immutable trusted-base checkout,
   fail-closed authentication, and host-gated publication.
 * **Release**: `v1.0.1` is published at
   https://github.com/xpepper/pr-review-gemini/releases/tag/v1.0.1. The required
@@ -21,9 +20,9 @@
 * **Docs examples** in `README.md`, `docs/installation.md`, and
   `docs/github-action.md` now pin the immutable release commit
   `@d8b3ae8f104e4e7a95ca129072c04148f3f5ddb2` with a `v1.0.1` annotation.
-* **Follow-ups**: #65 tracks consolidation of the trusted Action contract
-  detector; #66 tracks conservative stale-install cleanup on persistent
-  self-hosted runners. SARIF export remains deferred.
+* **Follow-ups**: #65 is complete through PR #73. #66 tracks conservative
+  stale-install cleanup on persistent self-hosted runners. SARIF export remains
+  deferred.
 * **Hosted evidence**: run `34899128103` completed successfully with all five
   real lenses and zero execution errors. A later repeated finding on ambient
   credential coupling was validated and fixed by removing that fallback;
@@ -36,10 +35,20 @@
 
 1. Dogfood a downstream workflow using `copilot_token` and verify the
    `v0.4.0` migration path in a real consumer repository.
-2. Prioritize #65 or #66 based on whether trusted-base compatibility or
-   persistent-runner hygiene is the more immediate operational need.
+2. Implement #66's conservative stale Copilot CLI install cleanup on persistent
+   self-hosted runners.
 
 ## Recently Landed
+
+* **PR #73 / issue #65 (trusted Action contract detector, 2026-09-15)**:
+  removed the workflow's duplicate modern/legacy validation logic and retained
+  the already-published YAML-safe detector as the versioned contract artifact.
+  The workflow executes the trusted-base detector only when its SHA-256 matches
+  the immutable `v1.0.1` artifact; bases that predate it use a credential-free
+  sparse checkout of that same known-good artifact. Focused, full, local, and
+  hosted reviews passed. The host-gated resolver verified the final review
+  finding but did not close its GitHub thread; required-conversation branch
+  protection therefore required a documented administrator merge exception.
 
 * **PR #56 (host-gate hardening, 2026-09-14)**: `expectedHeadSha` is
   required and enforced on both MCP publish tools; `runVerification`
