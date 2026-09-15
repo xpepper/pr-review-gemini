@@ -628,7 +628,7 @@ describe('CI Event Payload & Environment Resolution', () => {
       assert.match(content.slice(installStep, reviewStep), /--ignore-scripts/);
       assert.doesNotMatch(content.slice(installStep, reviewStep), /npm install --global/);
       assert.match(content.slice(installStep, reviewStep), /id:\s*install_copilot/);
-      assert.match(content.slice(installStep, reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" initialize-install "\$install_root" "\$created_at";/);
+      assert.match(content.slice(installStep, reviewStep), /bash "\$\{\{\s*steps\.action_path\.outputs\.root\s*\}\}\/scripts\/cleanup-copilot-install\.sh" initialize-install "\$install_root" "\$created_at"$/m);
       assert.match(content.slice(installStep, reviewStep), /echo "install_root=\$install_root" >> "\$GITHUB_OUTPUT"/);
       assert.match(content.slice(installStep, reviewStep), /COPILOT_GITHUB_TOKEN:\s*['"]{2}/);
       assert.match(content.slice(installStep, reviewStep), /GH_TOKEN:\s*['"]{2}/);
@@ -989,6 +989,71 @@ describe('CI Event Payload & Environment Resolution', () => {
             'must not leave staged marker files behind',
           );
         }
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
+    it('removes an initialized Copilot CLI install when the install step fails before publishing its root', () => {
+      const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
+      const installStep = content.indexOf('- name: Install GitHub Copilot CLI');
+      const reviewStep = content.indexOf('- name: Run Gem PR Review');
+      const installRun = content.slice(installStep, reviewStep).split('run: |\n')[1]
+        .split('\n')
+        .map((line) => line.replace(/^ {8}/, ''))
+        .join('\n')
+        .replaceAll('${{ steps.action_path.outputs.root }}', path.resolve('.'))
+        .replaceAll('${{ github.action_path }}', path.resolve('.'));
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-step-'));
+      const shimBin = path.join(fixtureRoot, 'bin');
+      const githubPath = path.join(fixtureRoot, 'github-path');
+      const makeRunnerTemp = (name, mode) => {
+        const runnerTemp = path.join(fixtureRoot, name);
+        fs.mkdirSync(runnerTemp);
+        fs.chmodSync(runnerTemp, mode);
+        return runnerTemp;
+      };
+      const installsIn = (runnerTemp) => fs.readdirSync(runnerTemp).filter((entry) => entry.startsWith('gem-pr-review-copilot.'));
+      const runInstallStep = (runnerTemp, githubOutput) => spawnSync('bash', ['-e', '-o', 'pipefail', '-c', installRun], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          RUNNER_TEMP: runnerTemp,
+          GITHUB_OUTPUT: githubOutput,
+          GITHUB_PATH: githubPath,
+          PATH: `${shimBin}${path.delimiter}${process.env.PATH}`,
+        },
+      });
+
+      try {
+        fs.mkdirSync(shimBin);
+        // Stands in for `npm ci --prefix <root>` by creating the bin directory the step exports.
+        fs.writeFileSync(
+          path.join(shimBin, 'npm'),
+          '#!/usr/bin/env bash\nwhile [ "$#" -gt 0 ]; do [ "$1" = --prefix ] && mkdir -p "$2/node_modules/.bin"; shift; done\nexit 0\n',
+          { mode: 0o755 },
+        );
+
+        const unpublishedTemp = makeRunnerTemp('unpublished', 0o700);
+        const unwritableOutput = path.join(fixtureRoot, 'output-is-a-directory');
+        fs.mkdirSync(unwritableOutput);
+        const unpublishedResult = runInstallStep(unpublishedTemp, unwritableOutput);
+        assert.notEqual(unpublishedResult.status, 0, 'must fail when the install root cannot be published');
+        assert.deepEqual(installsIn(unpublishedTemp), [], 'must remove an initialized install whose root was never published');
+
+        const sharedTemp = makeRunnerTemp('shared', 0o777);
+        const rejectedResult = runInstallStep(sharedTemp, path.join(fixtureRoot, 'rejected-output'));
+        assert.notEqual(rejectedResult.status, 0, 'must fail when initialization is rejected');
+        assert.deepEqual(installsIn(sharedTemp), [], 'must remove an install whose initialization was rejected');
+
+        const publishedTemp = makeRunnerTemp('published', 0o700);
+        const githubOutput = path.join(fixtureRoot, 'published-output');
+        const publishedResult = runInstallStep(publishedTemp, githubOutput);
+        assert.equal(publishedResult.status, 0, publishedResult.stderr);
+        const [publishedInstall] = installsIn(publishedTemp);
+        assert.ok(publishedInstall, 'must keep the published install for the review and cleanup steps');
+        assert.match(fs.readFileSync(githubOutput, 'utf8'), new RegExp(`^install_root=.*/${publishedInstall}$`, 'm'));
+        assert.match(fs.readFileSync(githubPath, 'utf8'), new RegExp(`/${publishedInstall}/node_modules/\\.bin$`, 'm'));
       } finally {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }

@@ -123,12 +123,12 @@ runs:
       run: |
         set -euo pipefail
         install_root="$(mktemp -d "${RUNNER_TEMP:-/tmp}/gem-pr-review-copilot.XXXXXX")"
+        # The cleanup step can find this install only after its root is published.
+        trap 'rm -rf -- "$install_root"' EXIT
         created_at="$(date +%s)"
-        if ! bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at"; then
-          rm -rf -- "$install_root"
-          exit 1
-        fi
+        bash "${{ steps.action_path.outputs.root }}/scripts/cleanup-copilot-install.sh" initialize-install "$install_root" "$created_at"
         echo "install_root=$install_root" >> "$GITHUB_OUTPUT"
+        trap - EXIT
         cp "${{ github.action_path }}/.github/copilot-cli/package.json" "$install_root/package.json"
         cp "${{ github.action_path }}/.github/copilot-cli/package-lock.json" "$install_root/package-lock.json"
         npm ci --prefix "$install_root" --ignore-scripts --omit=dev --no-audit --no-fund
