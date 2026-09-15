@@ -269,27 +269,28 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     on Node.js 22 and authenticate via `COPILOT_GITHUB_TOKEN`.
   - Test-first; 892 tests passing. Hosted run `34894342377` executed all five
     real lenses without execution errors and passed with zero findings.
-- [ ] **Post-MVP Increment (2026-09-14): Action-Owned Copilot CLI Bootstrap (PR #64 / issue #63, in review)**
+- [x] **Post-MVP Increment (2026-09-14): Action-Owned Copilot CLI Bootstrap (PR #64 / issue #63)**
   - Move Node.js 22 setup and pinned `@github/copilot@1.0.83` installation into
     `action.yml`, eliminating bootstrap duplication from consumer workflows.
   - Require `copilot_token`, expose it only as `COPILOT_GITHUB_TOKEN` during the
     authentication guard and review, and clear all GitHub credential variables
     from setup/install steps. Ambient credentials cannot satisfy the Action
     contract; missing secrets and fork runs still fail closed. This intentional
-    breaking contract sets the next release to `v1.0.0`.
+    breaking contract shipped in release `v1.0.0`.
   - Preserve the trusted-base checkout. A versioned marker lets this repository
     provision the old base Action only during rollout without executing the PR
     head with the credential.
   - Test-first; 893 tests passing. Hosted run `34899128103` executed all five
     lenses with zero execution errors; local `npm run dogfood:pr 64` findings
-    were validated rather than accepted automatically.
+    were validated rather than accepted automatically. Published as `v1.0.0`
+    after manifest, tag, and release-workflow verification.
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
 
 ## Post-MVP Roadmap
 
-The MVP increments (0–22) are complete. Release `v0.4.0` is published and the
+The MVP increments (0–22) are complete. Release `v1.0.0` is published and the
 [Gem PR Review Marketplace listing](https://github.com/marketplace/actions/gem-pr-review)
 is live in the Code quality and Continuous integration categories.
 
