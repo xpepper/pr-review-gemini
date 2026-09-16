@@ -595,7 +595,7 @@ Note: this PR is itself the first merge gated by the new required checks — if 
 - [ ] **Step 6: Final verification**
 
 ```bash
-gh api repos/xpepper/pr-review-gemini/branches/main --jq '.protection.enabled'
+gh api repos/xpepper/pr-review-gemini/branches/main --jq '.protected'
 ```
 
 Expected: `true`. Merge to `main` now requires both CI checks; `npm run release` still works from a local admin clone.
