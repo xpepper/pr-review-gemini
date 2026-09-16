@@ -3659,3 +3659,33 @@ index 1111111..2222222 100644
       assert.doesNotMatch(replyWithoutVerbose, /Verbose Diagnostics/i);
     });
   });
+
+describe('action.yml modern Action contract', () => {
+  const content = fs.readFileSync(path.resolve('action.yml'), 'utf8');
+
+  it('describes the action and runs a composite, not a container', () => {
+    assert.match(content, /^description:\s*.+/m, 'action.yml must have a description');
+    assert.match(content, /using:\s*['"]?composite['"]?/, 'action.yml must use the composite runner');
+    assert.doesNotMatch(content, /using:\s*['"]?docker['"]?/, 'action.yml must not use the docker runner');
+  });
+
+  it('documents every declared input with a description', () => {
+    const inputsBlock = content.split('inputs:')[1]?.split('outputs:')[0] ?? '';
+    const inputNames = [...inputsBlock.matchAll(/^  ([A-Za-z0-9_-]+):$/gm)].map((m) => m[1]);
+    assert.ok(
+      inputNames.length >= 10,
+      `expected at least the 10 documented inputs, found ${inputNames.length}`,
+    );
+    for (const name of inputNames) {
+      assert.match(
+        inputsBlock,
+        new RegExp(`^  ${name}:\\n    description:`, 'm'),
+        `input '${name}' must declare a description as its first property`,
+      );
+    }
+  });
+
+  it('executes the review through the repo entrypoint script', () => {
+    assert.match(content, /scripts\/ci-action\.mjs/, 'composite steps must invoke scripts/ci-action.mjs');
+  });
+});
