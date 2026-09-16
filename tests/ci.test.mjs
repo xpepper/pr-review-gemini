@@ -898,6 +898,68 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('treats an install removed by a concurrent invocation as cleaned rather than failing', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const realMktemp = spawnSync('bash', ['-c', 'command -v mktemp'], { encoding: 'utf8' }).stdout.trim();
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lost-race-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const shimBin = path.join(fixtureRoot, 'bin');
+      const raceFired = path.join(fixtureRoot, 'race-fired');
+      const installRoot = path.join(runnerTemp, 'gem-pr-review-copilot.lost');
+      const retentionSeconds = 7 * 24 * 60 * 60;
+      const now = Math.floor(Date.now() / 1000);
+
+      try {
+        fs.mkdirSync(runnerTemp, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.mkdirSync(installRoot);
+        fs.chmodSync(installRoot, 0o700);
+        fs.writeFileSync(
+          path.join(installRoot, '.gem-pr-review-copilot-owned'),
+          `version=2\ninstall_id=gem-pr-review-copilot.lost\ncreated_at=${now - retentionSeconds - 1}\n`,
+        );
+        fs.writeFileSync(path.join(installRoot, '.gem-pr-review-copilot-lease'), 'pid=99999999\nstarted_at=not-running\n');
+
+        // Another invocation removes the install while this one stages its quarantine:
+        // the window between judging the install stale and moving it away.
+        fs.mkdirSync(shimBin);
+        fs.writeFileSync(
+          path.join(shimBin, 'mktemp'),
+          [
+            '#!/usr/bin/env bash',
+            'case "$*" in',
+            `  *quarantine*) rm -rf "$RACE_INSTALL"; echo fired > '${raceFired}' ;;`,
+            'esac',
+            `exec '${realMktemp}' "$@"`,
+            '',
+          ].join('\n'),
+          { mode: 0o755 },
+        );
+
+        const pruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${shimBin}${path.delimiter}${process.env.PATH}`,
+            RUNNER_TEMP: runnerTemp,
+            RACE_INSTALL: installRoot,
+          },
+        });
+
+        assert.equal(fs.existsSync(raceFired), true, 'the competing removal must happen inside the quarantine window');
+        assert.equal(pruneResult.status, 0, pruneResult.stderr);
+        assert.doesNotMatch(pruneResult.stderr, /path changed during cleanup/, 'losing the race is not a cleanup failure');
+        assert.equal(fs.existsSync(installRoot), false, 'the install must be gone either way');
+        assert.deepEqual(
+          fs.readdirSync(runnerTemp).filter((entry) => entry.startsWith('.gem-pr-review-copilot-quarantine.')),
+          [],
+          'must not leave the staged quarantine behind',
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
     it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
       const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));

@@ -108,7 +108,10 @@ its lease PID is no longer alive and it exceeds the seven-day retention window.
 The scan root must be runner-owned and not group- or world-writable; otherwise
 cleanup fails closed. A short-lived per-install mutation lock serializes lease
 changes with cleanup; dead lock holders are reclaimed, as are locks whose
-metadata names no holder once they pass the retention window. Interrupted
+metadata names no holder once they pass the retention window. That lock limits
+contention rather than guaranteeing exclusion, because reclaiming a stale lock
+cannot be made atomic with `mkdir` alone; an install that another invocation
+removed first therefore counts as cleaned instead of failing the run. Interrupted
 quarantine deletion is also retried after the same retention period. The
 per-invocation cleanup fails closed until its prior review lease has exited,
 and requires the same validated ownership and lease metadata.

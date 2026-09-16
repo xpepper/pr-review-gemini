@@ -362,7 +362,15 @@ remove_install_via_quarantine() {
   quarantine_install="$quarantine_root/install"
   if ! mv "$install_path" "$quarantine_install"; then
     rm -rf -- "$quarantine_root"
-    fail 'Copilot CLI install path changed during cleanup.'
+    # Another invocation can remove the install first: the per-install lock limits
+    # contention rather than guaranteeing exclusion, because reclaiming a stale
+    # lock cannot be made atomic with mkdir alone. The install being gone is all
+    # this operation promises, so losing that race is not a failure. Anything
+    # still at the path means the move failed for a real reason.
+    [ ! -e "$install_path" ] && [ ! -L "$install_path" ] ||
+      fail 'Copilot CLI install path changed during cleanup.'
+    warn 'Copilot CLI install was already removed by another invocation.'
+    return 0
   fi
   rm -rf -- "$quarantine_root"
 }
