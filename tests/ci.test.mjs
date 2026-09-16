@@ -769,6 +769,49 @@ describe('CI Event Payload & Environment Resolution', () => {
         assert.equal(fs.existsSync(staleLockInstall), false, 'must reclaim a stale mutation lock before pruning its stale installation');
         assert.equal(fs.existsSync(staleLock), false, 'must remove reclaimed lock metadata');
 
+        // A crash between creating the lock and finishing its pid record leaves metadata that
+        // names no holder; it must not block the install forever once the lock is past retention.
+        const partialLockInstall = makeOwnedInstall('gem-pr-review-copilot.partial-lock', now - retentionSeconds - 1);
+        const partialLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.partial-lock');
+        fs.mkdirSync(partialLock, { mode: 0o700 });
+        fs.writeFileSync(path.join(partialLock, 'pid'), 'pid=99999999\n');
+        fs.utimesSync(partialLock, now - retentionSeconds - 1, now - retentionSeconds - 1);
+        const partialLockPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(partialLockPruneResult.status, 0, partialLockPruneResult.stderr);
+        assert.equal(fs.existsSync(partialLockInstall), false, 'must reclaim a lock whose pid record was never completed');
+        assert.equal(fs.existsSync(partialLock), false, 'must remove reclaimed partial lock metadata');
+
+        // Within the retention window the same unreadable metadata still fails closed.
+        const recentPartialLockInstall = makeOwnedInstall('gem-pr-review-copilot.recent-partial-lock', now - retentionSeconds - 1);
+        const recentPartialLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.recent-partial-lock');
+        fs.mkdirSync(recentPartialLock, { mode: 0o700 });
+        fs.writeFileSync(path.join(recentPartialLock, 'pid'), 'pid=99999999\n');
+        const recentPartialLockPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(recentPartialLockPruneResult.status, 0, recentPartialLockPruneResult.stderr);
+        assert.equal(fs.existsSync(recentPartialLockInstall), true, 'must preserve an install whose lock metadata is unreadable but recent');
+        assert.match(recentPartialLockPruneResult.stderr, /being changed by another invocation/);
+
+        // An interrupted marker write can leave a staged file in the lock directory; it must
+        // not keep the lock alive past retention either.
+        const stagedLockInstall = makeOwnedInstall('gem-pr-review-copilot.staged-lock', now - retentionSeconds - 1);
+        const stagedLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.staged-lock');
+        fs.mkdirSync(stagedLock, { mode: 0o700 });
+        fs.writeFileSync(path.join(stagedLock, '.gem-pr-review-copilot-marker.ab12cd'), 'pid=99999999\n');
+        fs.utimesSync(stagedLock, now - retentionSeconds - 1, now - retentionSeconds - 1);
+        const stagedLockPruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(stagedLockPruneResult.status, 0, stagedLockPruneResult.stderr);
+        assert.equal(fs.existsSync(stagedLockInstall), false, 'must reclaim a lock holding only a staged marker file');
+        assert.equal(fs.existsSync(stagedLock), false, 'must remove reclaimed staged lock metadata');
+
         const abandonedQuarantine = fs.mkdtempSync(path.join(runnerTemp, '.gem-pr-review-copilot-quarantine.'));
         fs.chmodSync(abandonedQuarantine, 0o700);
         fs.utimesSync(abandonedQuarantine, now - retentionSeconds - 1, now - retentionSeconds - 1);

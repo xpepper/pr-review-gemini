@@ -224,16 +224,20 @@ with_install_lock() (
       lock_pid="${lock_identity%%|*}"
       lock_started_at="${lock_identity#*|}"
       is_lease_active "$lock_pid" "$lock_started_at" && return 75
-    elif [ ! -e "$lock_directory/pid" ] && [ ! -L "$lock_directory/pid" ]; then
+    else
+      # Metadata that names no holder (never written, or a write cut short) is
+      # reclaimed only once the lock itself is past the retention window, so a
+      # lock another invocation is still setting up is never stolen.
       lock_modified_at="$(file_modified_at "$lock_directory")" || return 75
       now="$(date +%s)"
       [ "$lock_modified_at" -le "$now" ] &&
         [ $((now - lock_modified_at)) -ge "$STALE_INSTALL_RETENTION_SECONDS" ] ||
         return 75
-    else
-      return 75
     fi
-    rm -f -- "$lock_directory/pid" && rmdir -- "$lock_directory" || return 75
+    # An interrupted marker write can leave a staged file behind, so clear those too;
+    # rmdir still fails closed on anything else the lock directory may hold.
+    rm -f -- "$lock_directory/pid" "$lock_directory"/.gem-pr-review-copilot-marker.* &&
+      rmdir -- "$lock_directory" || return 75
     (
       umask 077
       mkdir "$lock_directory"
@@ -242,7 +246,10 @@ with_install_lock() (
   trap 'release_install_lock_if_owner "$lock_directory" "$lock_owner_identity"' EXIT
   lock_owner_started_at="$(process_start_time "$BASHPID")" || return 75
   lock_owner_identity="$BASHPID|$lock_owner_started_at"
-  printf 'pid=%s\nstarted_at=%s\n' "$BASHPID" "$lock_owner_started_at" > "$lock_directory/pid"
+  # Publish the record atomically: a partial pid file names no holder and would
+  # keep every later invocation out of this install until the lock ages out.
+  write_marker "$lock_directory/pid" "pid=$BASHPID" "started_at=$lock_owner_started_at" ||
+    return 75
   "$@"
 )
 
