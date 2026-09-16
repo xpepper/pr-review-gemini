@@ -5,6 +5,7 @@ set -euo pipefail
 readonly OWNERSHIP_MARKER='.gem-pr-review-copilot-owned'
 readonly LEASE_MARKER='.gem-pr-review-copilot-lease'
 readonly INSTALL_PREFIX='gem-pr-review-copilot.'
+readonly LOCK_PREFIX='.gem-pr-review-copilot-lock.'
 readonly STALE_INSTALL_RETENTION_SECONDS=$((7 * 24 * 60 * 60))
 
 fail() {
@@ -213,7 +214,7 @@ with_install_lock() (
   local now
 
   shift 2
-  lock_directory="$runner_temp/.gem-pr-review-copilot-lock.$(basename "$install_path")"
+  lock_directory="$runner_temp/$LOCK_PREFIX$(basename "$install_path")"
   if ! (
     umask 077
     mkdir "$lock_directory"
@@ -535,6 +536,71 @@ prune_abandoned_quarantines() {
   done
 }
 
+# Reclaims a mutation lock that has outlived its install. An invocation killed
+# between removing its install and releasing the lock leaves a directory nothing
+# would otherwise revisit, because the install scan drives every other cleanup and
+# there is no install left to drive one.
+prune_orphaned_locks() {
+  local runner_temp="$1"
+  local now="$2"
+  local candidate
+  local canonical_candidate
+  local install_name
+  local lock_identity
+  local lock_pid
+  local lock_started_at
+  local modified_at
+  local quarantine_root
+
+  shopt -s nullglob
+  for candidate in "$runner_temp"/"$LOCK_PREFIX"*; do
+    [ -d "$candidate" ] && [ ! -L "$candidate" ] || continue
+    canonical_candidate="$(canonical_directory "$candidate")" || continue
+    [ "$(dirname "$canonical_candidate")" = "$runner_temp" ] ||
+      continue
+    [ "$(file_owner "$canonical_candidate")" = "$(id -u)" ] &&
+      [ "$(file_mode "$canonical_candidate")" = '700' ] ||
+      continue
+    install_name="$(basename "$canonical_candidate")"
+    install_name="${install_name#"$LOCK_PREFIX"}"
+    case "$install_name" in
+      "$INSTALL_PREFIX"*)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    # Only a lock with no install left belongs to this scan. While the install is
+    # there, the lock is that install's business and is taken under it.
+    [ ! -e "$runner_temp/$install_name" ] && [ ! -L "$runner_temp/$install_name" ] ||
+      continue
+    if lock_identity="$(read_process_identity "$canonical_candidate/pid")"; then
+      lock_pid="${lock_identity%%|*}"
+      lock_started_at="${lock_identity#*|}"
+      is_lease_active "$lock_pid" "$lock_started_at" && continue
+    else
+      # Metadata naming no holder is reclaimed only once the lock has aged out,
+      # which is the rule with_install_lock already applies.
+      modified_at="$(file_modified_at "$canonical_candidate")" || continue
+      [[ "$modified_at" =~ ^[0-9]{10}$ ]] &&
+        [ "$modified_at" -le "$now" ] &&
+        [ $((now - modified_at)) -ge "$STALE_INSTALL_RETENTION_SECONDS" ] ||
+        continue
+    fi
+    # Move the whole directory aside in one rename rather than emptying it and then
+    # removing it: the two-step form leaves a moment where the lock exists but is
+    # empty, and whatever is taken away here goes with it, pid record and any staged
+    # marker included. An interrupted move leaves a quarantine that the scan above
+    # collects on a later run.
+    quarantine_root="$(mktemp -d "$runner_temp/.gem-pr-review-copilot-quarantine.XXXXXX")" ||
+      continue
+    # A failed move means the lock is already gone or is no longer ours to take, and
+    # either way this candidate is simply skipped rather than failing the whole scan.
+    mv "$canonical_candidate" "$quarantine_root/lock" 2>/dev/null || true
+    rm -rf -- "$quarantine_root"
+  done
+}
+
 prune_stale_installs() {
   local runner_temp_root="$1"
   local runner_temp
@@ -547,6 +613,7 @@ prune_stale_installs() {
     fail 'RUNNER_TEMP is unavailable.'
   now="$(date +%s)"
   prune_abandoned_quarantines "$runner_temp" "$now"
+  prune_orphaned_locks "$runner_temp" "$now"
   shopt -s nullglob
   for candidate in "$runner_temp"/"$INSTALL_PREFIX"*; do
     # Filter before locking so cleanup never contends for the locks of fresh

@@ -1042,6 +1042,70 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('reclaims mutation locks whose install is gone and keeps the rest', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-orphan-lock-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const retentionSeconds = 7 * 24 * 60 * 60;
+      const now = Math.floor(Date.now() / 1000);
+      const liveStartedAt = spawnSync(
+        'ps',
+        ['-o', 'lstart=', '-p', String(process.pid)],
+        { encoding: 'utf8' },
+      ).stdout.trim();
+      const makeLock = (installName, record, modifiedAt) => {
+        const lockDirectory = path.join(runnerTemp, `.gem-pr-review-copilot-lock.${installName}`);
+        fs.mkdirSync(lockDirectory, { mode: 0o700 });
+        fs.writeFileSync(path.join(lockDirectory, 'pid'), record);
+        if (modifiedAt !== undefined) {
+          fs.utimesSync(lockDirectory, modifiedAt, modifiedAt);
+        }
+        return lockDirectory;
+      };
+
+      try {
+        fs.mkdirSync(runnerTemp, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+
+        // An invocation killed after its install was removed, but before the EXIT trap
+        // released the lock, leaves the lock behind with no install to drive cleanup.
+        const deadOrphan = makeLock('gem-pr-review-copilot.dead', 'pid=99999999\nstarted_at=not-running\n');
+        const liveOrphan = makeLock('gem-pr-review-copilot.live', `pid=${process.pid}\nstarted_at=${liveStartedAt}\n`);
+        const unusableRecent = makeLock('gem-pr-review-copilot.recent', 'pid=99999999\n');
+        const unusableOld = makeLock('gem-pr-review-copilot.old', 'pid=99999999\n', now - retentionSeconds - 1);
+
+        // A lock whose install is still present belongs to that install, not to this scan.
+        const pairedInstall = path.join(runnerTemp, 'gem-pr-review-copilot.paired');
+        fs.mkdirSync(pairedInstall, { mode: 0o700 });
+        fs.writeFileSync(
+          path.join(pairedInstall, '.gem-pr-review-copilot-owned'),
+          `version=2\ninstall_id=gem-pr-review-copilot.paired\ncreated_at=${now}\n`,
+        );
+        fs.writeFileSync(path.join(pairedInstall, '.gem-pr-review-copilot-lease'), 'pid=99999999\nstarted_at=not-running\n');
+        const pairedLock = makeLock('gem-pr-review-copilot.paired', 'pid=99999999\nstarted_at=not-running\n');
+
+        const pruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+
+        assert.equal(pruneResult.status, 0, pruneResult.stderr);
+        assert.equal(fs.existsSync(deadOrphan), false, 'must reclaim an orphaned lock whose holder is dead');
+        assert.equal(fs.existsSync(unusableOld), false, 'must reclaim an orphaned lock with unusable metadata past retention');
+        assert.equal(fs.existsSync(liveOrphan), true, 'must keep a lock a live invocation still holds');
+        assert.equal(fs.existsSync(unusableRecent), true, 'must keep an orphaned lock with unusable metadata inside the window');
+        assert.equal(fs.existsSync(pairedLock), true, 'must keep a lock whose install is still present');
+        assert.equal(fs.existsSync(pairedInstall), true, 'must not disturb a fresh install');
+        assert.deepEqual(
+          fs.readdirSync(runnerTemp).filter((entry) => entry.startsWith('.gem-pr-review-copilot-quarantine.')),
+          [],
+          'must not leave the staging directory used to remove a lock behind',
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
     it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
       const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));
