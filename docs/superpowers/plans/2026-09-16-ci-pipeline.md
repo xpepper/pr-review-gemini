@@ -88,10 +88,12 @@ describe('Agent Plugins 1.0 bundle conformance', () => {
     assert.match(pkg.version, semver, 'package.json version must be SemVer');
     assert.match(plugin.version, semver, 'plugin.json version must be SemVer');
     assert.match(mcp.version, semver, 'mcp.json version must be SemVer');
-    assert.equal(pkg.version, plugin.version, 'package.json and plugin.json versions must match');
     const skillVersion = skillFrontmatter.match(/^  version:\s*"?(\d+\.\d+\.\d+)"?/m)?.[1];
     assert.ok(skillVersion, 'SKILL.md metadata must carry a version');
     assert.match(skillVersion, semver, 'SKILL.md version must be SemVer');
+    assert.equal(plugin.version, pkg.version, 'plugin.json version must match package.json');
+    assert.equal(mcp.version, pkg.version, 'mcp.json version must match package.json');
+    assert.equal(skillVersion, pkg.version, 'SKILL.md version must match package.json');
   });
 
   it('keeps every skills/ directory a valid skill named after its directory', () => {
