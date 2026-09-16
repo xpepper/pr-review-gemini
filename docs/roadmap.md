@@ -295,6 +295,7 @@ This project ports **[`pi-pr-review`](https://pi.dev/packages/pi-pr-review?name=
     `v1.0.1` artifact checksum. Older bases get a credential-free sparse
     checkout of the pinned detector artifact, never PR-head code.
   - Test-first; focused, full, local, and hosted Gem PR Review passes completed.
+- CI pipeline: merge gate on main + shared release gate (2026-09)
 - [ ] **Backlog (De-prioritized): SARIF 2.1.0 Report Export for GitHub Code Scanning Integration**
 
 ---
