@@ -960,6 +960,44 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('refuses to publish a marker whose path was replaced by a real directory', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-marker-dir-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const installRoot = path.join(runnerTemp, 'gem-pr-review-copilot.markerdir');
+      const leaseMarker = path.join(installRoot, '.gem-pr-review-copilot-lease');
+      const runFromShell = (...args) => spawnSync(
+        'bash',
+        ['-c', 'bash "$0" "$@"; status=$?; echo "shell_pid=$$"; exit "$status"', cleanupScript, ...args],
+        { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: runnerTemp } },
+      );
+
+      try {
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.chmodSync(installRoot, 0o700);
+        const initializeResult = runFromShell('initialize-install', installRoot, String(Math.floor(Date.now() / 1000)));
+        assert.equal(initializeResult.status, 0, initializeResult.stderr);
+
+        // A same-user process swaps the lease marker for a real directory. `-n` only protects
+        // against a symlink: both GNU and BSD `ln -fn` link the staged file *inside* a real
+        // directory and still exit 0, so a published lease cannot be inferred from that status.
+        fs.rmSync(leaseMarker);
+        fs.mkdirSync(leaseMarker);
+
+        const activateResult = runFromShell('activate-lease', installRoot);
+        assert.equal(activateResult.status, 1, 'must not report a lease it did not publish');
+        assert.match(activateResult.stderr, /lease metadata is invalid/);
+        assert.deepEqual(
+          fs.readdirSync(leaseMarker),
+          [],
+          'must not leave a staged marker linked inside the directory',
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
     it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
       const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));

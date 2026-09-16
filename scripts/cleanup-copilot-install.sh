@@ -37,6 +37,11 @@ file_modified_at() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1"
 }
 
+# Device and inode: what a path currently resolves to, as opposed to the name itself.
+file_identity() {
+  stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1"
+}
+
 validate_runner_temp() {
   local runner_temp
   local mode
@@ -258,15 +263,29 @@ write_marker() {
   local staged_marker
 
   shift
+  # A real directory at the marker path is the dangerous case: GNU and BSD ln both
+  # link the staged file *inside* it and still exit 0. A symlink to a directory is
+  # safe here, because -n makes ln replace the link itself.
+  if [ -d "$marker" ] && [ ! -L "$marker" ]; then
+    return 1
+  fi
   staged_marker="$(mktemp "$(dirname "$marker")/.gem-pr-review-copilot-marker.XXXXXX")" ||
     return 1
   # Hard-link the staged file into place: link(2) never follows the marker path, and
   # -n keeps ln from treating a symlink to a directory as the destination directory.
-  if ! printf '%s\n' "$@" > "$staged_marker" || ! ln -fn -- "$staged_marker" "$marker"; then
+  # The identity check confirms the marker *is* the staged file, because ln's exit
+  # status alone cannot tell a publish apart from a link made inside a directory.
+  if printf '%s\n' "$@" > "$staged_marker" &&
+    ln -fn -- "$staged_marker" "$marker" &&
+    [ "$(file_identity "$marker")" = "$(file_identity "$staged_marker")" ]; then
     rm -f -- "$staged_marker"
-    return 1
+    return 0
+  fi
+  if [ -d "$marker" ] && [ ! -L "$marker" ]; then
+    rm -f -- "$marker/$(basename "$staged_marker")"
   fi
   rm -f -- "$staged_marker"
+  return 1
 }
 
 initialize_install_locked() {
