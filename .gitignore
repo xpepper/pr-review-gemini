@@ -10,3 +10,4 @@ scratch/
 .gem-pr-cache/
 .cache/
 .worktrees/
+.pr-review/
