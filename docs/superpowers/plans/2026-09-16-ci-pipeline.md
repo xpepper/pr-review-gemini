@@ -201,19 +201,7 @@ describe('action.yml modern Action contract', () => {
 });
 ```
 
-Then delete the placeholder assertion line: remove the first `assert.match(inputsBlock, new RegExp(\`^  ${name}:\\\\n(?:    capture-block-placeholder\\\\n)?\`), ...)` block entirely — it exists only as a scaffold marker; keep only the two real assertions (declaration + description). The final loop body is exactly:
-
-```js
-    for (const name of inputNames) {
-      assert.match(
-        inputsBlock,
-        new RegExp(`^  ${name}:\\n    description:`, 'm'),
-        `input '${name}' must declare a description as its first property`,
-      );
-    }
-```
-
-(The `inputNames.length >= 10` assertion above already proves every listed input is declared.)
+The `inputNames.length >= 10` assertion already proves every listed input is declared; the per-input assertion proves each has a description.
 
 - [ ] **Step 2: Run the new tests — expect PASS**
 
