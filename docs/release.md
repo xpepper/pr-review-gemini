@@ -31,12 +31,22 @@ Performance, Refactoring, Documentation, Tests, and Maintenance sections.
 
 ## Release workflow
 
-Pushing a `v*` tag triggers the `verify` job: manifest synchronization,
-tag alignment (`v$PKG_VERSION`), and the full test suite. Publishing a
-GitHub Release is **dispatch-only**: run the release workflow via
-`workflow_dispatch` with the tag input. Publishing refuses to overwrite —
-if a release already exists for the tag, it fails (delete the existing
-release first); publishing is not idempotent by design.
+Pushing a `v*` tag triggers two parallel gates: `verify-tag` (tag ↔
+`package.json` version alignment) and `ci` (the shared reusable workflow
+`.github/workflows/ci.yml`, running manifest sync, the full test suite,
+and spec-conformance checks at the tag ref). Publishing a GitHub Release
+is **dispatch-only** and requires both gates green: run the release
+workflow via `workflow_dispatch` with the tag input. Publishing refuses to
+overwrite — if a release already exists for the tag, it fails (delete the
+existing release first); publishing is not idempotent by design.
+
+Because the release gate and the merge gate share the same workflow
+definition, a release cannot be published while CI is broken — the checks
+re-run at the tag ref even if someone bypassed branch protection. Note
+the ref semantics: on `workflow_dispatch` the workflow definitions
+resolve from the dispatched branch (checkouts are pinned to the tag),
+while on tag push both the definitions and the checkouts come from the
+tag commit.
 
 ## Marketplace maintenance at release time
 
