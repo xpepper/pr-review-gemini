@@ -408,6 +408,20 @@ remove_current_install() {
     fail 'Copilot CLI install is being changed by another invocation.'
 }
 
+# Prints the age of an install from a release that marked ownership with an empty
+# file. The marker's own timestamp stands in for the missing created_at. Reclaiming
+# one cannot disturb a running job: GitHub stops self-hosted jobs after five days,
+# inside the retention window this timestamp is then measured against.
+legacy_created_at() {
+  local marker="$1/$OWNERSHIP_MARKER"
+  local modified_at
+
+  [ -f "$marker" ] && [ ! -L "$marker" ] && [ ! -s "$marker" ] || return 1
+  modified_at="$(file_modified_at "$marker")" || return 1
+  [[ "$modified_at" =~ ^[0-9]{10}$ ]] || return 1
+  printf '%s\n' "$modified_at"
+}
+
 # Prints the canonical install when it is owned and past the retention window.
 # Returns 1 when the install must be kept, warning when its metadata is unusable.
 stale_install_candidate() {
@@ -421,10 +435,11 @@ stale_install_candidate() {
     warn 'Skipping Copilot CLI install with an invalid path.'
     return 1
   }
-  created_at="$(read_created_at "$canonical_install")" || {
-    warn 'Skipping Copilot CLI install without a valid ownership marker.'
-    return 1
-  }
+  created_at="$(read_created_at "$canonical_install")" ||
+    created_at="$(legacy_created_at "$canonical_install")" || {
+      warn 'Skipping Copilot CLI install without a valid ownership marker.'
+      return 1
+    }
   if [ "$created_at" -gt "$now" ]; then
     warn 'Skipping Copilot CLI install with future ownership metadata.'
     return 1

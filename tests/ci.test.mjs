@@ -683,6 +683,16 @@ describe('CI Event Payload & Environment Resolution', () => {
         );
         return installRoot;
       };
+      // v1.0.0 and v1.0.1 created the ownership marker empty, with `: > "$marker"`.
+      const makeLegacyInstall = (name, markerModifiedAt) => {
+        const installRoot = path.join(runnerTemp, name);
+        const marker = path.join(installRoot, '.gem-pr-review-copilot-owned');
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(installRoot, 0o700);
+        fs.writeFileSync(marker, '');
+        fs.utimesSync(marker, markerModifiedAt, markerModifiedAt);
+        return installRoot;
+      };
 
       try {
         fs.mkdirSync(runnerTemp, { recursive: true });
@@ -719,6 +729,8 @@ describe('CI Event Payload & Environment Resolution', () => {
         fs.chmodSync(insecureInstall, 0o755);
         const symlinkInstall = path.join(runnerTemp, 'gem-pr-review-copilot.symlink');
         fs.symlinkSync(outside, symlinkInstall);
+        const legacyInstall = makeLegacyInstall('gem-pr-review-copilot.legacy', now - retentionSeconds - 1);
+        const recentLegacyInstall = makeLegacyInstall('gem-pr-review-copilot.legacy-recent', now);
 
         const pruneResult = spawnSync('bash', [cleanupScript, 'prune-stale'], {
           encoding: 'utf8',
@@ -745,6 +757,8 @@ describe('CI Event Payload & Environment Resolution', () => {
         );
         assert.equal(fs.lstatSync(symlinkInstall).isSymbolicLink(), true, 'must not follow symlinked installation paths');
         assert.equal(fs.existsSync(outside), true, 'must not remove a symlink target');
+        assert.equal(fs.existsSync(legacyInstall), false, 'must reclaim a legacy empty-marker install past the retention window');
+        assert.equal(fs.existsSync(recentLegacyInstall), true, 'must preserve a legacy empty-marker install inside the retention window');
 
         const lockedStaleInstall = makeOwnedInstall('gem-pr-review-copilot.locked', now - retentionSeconds - 1);
         const installLock = path.join(runnerTemp, '.gem-pr-review-copilot-lock.gem-pr-review-copilot.locked');

@@ -98,13 +98,17 @@ process-start-time-bound PID lease markers. Cleanup canonicalizes candidates,
 accepts only direct `RUNNER_TEMP` children named `gem-pr-review-copilot.*`,
 requires a runner-user owned private `0700` install directory, and skips
 malformed markers, symlinks, unsafe paths, copied ownership records, and any
-installation with an active lease regardless of age. The cleanup script binds
+installation with an active lease regardless of age. Installations from earlier
+releases carry an empty ownership marker; those are reclaimed on the marker's own
+age, which no running job can hold back, because GitHub stops self-hosted jobs
+well inside the retention window. The cleanup script binds
 the lease to the install and review step shells that invoke it and accepts no
 caller-supplied PID, so interrupted invocations naturally leave a dead PID. A directory becomes eligible only when
 its lease PID is no longer alive and it exceeds the seven-day retention window.
 The scan root must be runner-owned and not group- or world-writable; otherwise
 cleanup fails closed. A short-lived per-install mutation lock serializes lease
-changes with cleanup, and dead lock holders are reclaimed. Interrupted
+changes with cleanup; dead lock holders are reclaimed, as are locks whose
+metadata names no holder once they pass the retention window. Interrupted
 quarantine deletion is also retried after the same retention period. The
 per-invocation cleanup fails closed until its prior review lease has exited,
 and requires the same validated ownership and lease metadata.
