@@ -59,8 +59,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -91,6 +91,15 @@ event default.
   and the current LTS (24). Matrix legs produce check names `checks (20)`
   and `checks (24)`.
 - Action pins (`checkout@v7`, `setup-node@v7`) match `release.yml`.
+- Concurrency: the group is namespaced by workflow name and keyed only on
+  trusted `github.*` context (never `inputs.*`), and only `pull_request`
+  runs are cancelled. Rationale: when called from `release.yml`, the
+  called workflow's concurrency is evaluated in the caller's context, so
+  a release-invoked CI run lands in a `ci-Release-*` group — it can never
+  collide with or cancel a `ci-CI-refs/heads/main` push run, and queued
+  (not cancelled) release dispatches serialize instead of killing an
+  in-flight publish. PR supersession — the one place cancellation
+  matters — still cancels stale runs.
 - Public repo, zero npm dependencies: the matrix adds negligible cost
   (suite runs in ~20 s per leg).
 - Spec validation lives in the test suite (`tests/plugin-manifest.test.mjs`,
