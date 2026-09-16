@@ -83,9 +83,12 @@ describe('Agent Plugins 1.0 bundle conformance', () => {
   });
 
   it('carries a SemVer version in every manifest', () => {
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const semver = /^\d+\.\d+\.\d+$/;
+    assert.match(pkg.version, semver, 'package.json version must be SemVer');
     assert.match(plugin.version, semver, 'plugin.json version must be SemVer');
     assert.match(mcp.version, semver, 'mcp.json version must be SemVer');
+    assert.equal(pkg.version, plugin.version, 'package.json and plugin.json versions must match');
     const skillVersion = skillFrontmatter.match(/^  version:\s*"?(\d+\.\d+\.\d+)"?/m)?.[1];
     assert.ok(skillVersion, 'SKILL.md metadata must carry a version');
     assert.match(skillVersion, semver, 'SKILL.md version must be SemVer');
@@ -176,7 +179,7 @@ describe('action.yml modern Action contract', () => {
 
   it('documents every declared input with a description', () => {
     const inputsBlock = content.split('inputs:')[1]?.split('outputs:')[0] ?? '';
-    const inputNames = [...inputsBlock.matchAll(/^  ([a-z_]+):$/gm)].map((m) => m[1]);
+    const inputNames = [...inputsBlock.matchAll(/^  ([A-Za-z0-9_-]+):$/gm)].map((m) => m[1]);
     assert.ok(
       inputNames.length >= 10,
       `expected at least the 10 documented inputs, found ${inputNames.length}`,
@@ -337,13 +340,99 @@ gh pr merge --squash --delete-branch
 
 **Files:**
 - Modify: `.github/workflows/release.yml` (replace the `verify` job; rewire `publish`)
+- Modify: `tests/ci.test.mjs:2815-2885` (rewrite the two `Release Workflow Template` tests)
 - Modify: `docs/release.md` (Release workflow section)
 
 **Interfaces:**
 - Consumes: `./.github/workflows/ci.yml` from Task 3, `workflow_call` input `ref` (string).
 - Produces: release gate = `verify-tag` + `ci` jobs; publish blocked unless both pass. No other workflows reference release.yml.
 
-- [ ] **Step 1: Rewrite release.yml**
+- [ ] **Step 1: Rewrite the release-workflow tests (TDD red first)**
+
+In `tests/ci.test.mjs`, replace the entire `describe('Release Workflow Template (.github/workflows/release.yml)')` block with:
+
+```js
+  describe('Release Workflow Template (.github/workflows/release.yml)', () => {
+    it('verifies release workflow gates publish on tag alignment and shared CI, dispatch-only', () => {
+      const workflowPath = path.resolve('.github/workflows/release.yml');
+      assert.equal(fs.existsSync(workflowPath), true, 'release.yml workflow must exist');
+
+      const content = fs.readFileSync(workflowPath, 'utf8');
+      assert.match(content, /name:\s*['"]?Release['"]?/);
+      assert.match(content, /workflow_dispatch:/);
+      assert.match(content, /description:\s*['"]Existing git tag to publish \(e\.g\. v0\.2\.0\)['"]/);
+      assert.match(content, /push:\s*\n\s*tags:\s*\n\s*-\s*['"]v\*['"]/);
+      assert.match(content, /ref:\s*\$\{\{\s*github\.event\.inputs\.tag \|\| github\.ref\s*\}\}/);
+      assert.match(content, /uses:\s*\.\/\.github\/workflows\/ci\.yml/);
+      assert.match(content, /needs:\s*\[verify-tag, ci\]/);
+      assert.match(content, /if:\s*github\.event_name\s*==\s*['"]workflow_dispatch['"]/);
+      assert.match(content, /name:\s*['"]Publish GitHub Release['"]/);
+      const existingReleaseCheck = content.indexOf('releases/tags/${TAG_NAME}');
+      const releaseCreation = content.indexOf('gh release create "$TAG_NAME"');
+      assert.ok(existingReleaseCheck >= 0, 'publish job must reject an existing release');
+      assert.ok(existingReleaseCheck < releaseCreation, 'existing release check must run before release creation');
+      assert.match(content, /gh api "repos\/\$\{GITHUB_REPOSITORY\}\/releases\/tags\/\$\{TAG_NAME\}"/);
+      assert.match(content, /\*"Not Found"\*\)/);
+      assert.match(content, /Unable to verify whether a release exists/);
+    });
+
+    it('fails closed unless the release lookup confirms the tag is missing', () => {
+      const content = fs.readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8');
+      const stepStart = content.indexOf('      - name: Check for Existing Release');
+      const stepEnd = content.indexOf('      - name: Generate Release Notes', stepStart);
+      const runStart = content.indexOf('        run: |\n', stepStart) + '        run: |\n'.length;
+      const script = content
+        .slice(runStart, stepEnd)
+        .split('\n')
+        .map((line) => line.replace(/^          /, ''))
+        .join('\n');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-guard-'));
+      const ghStub = path.join(tmpDir, 'gh');
+
+      fs.writeFileSync(ghStub, '#!/bin/sh\nprintf "%s" "$GH_OUTPUT" >&2\nexit "$GH_EXIT"\n');
+      fs.chmodSync(ghStub, 0o755);
+
+      const runGuard = (exitCode, output) => spawnSync(
+        '/bin/bash',
+        ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GH_EXIT: String(exitCode),
+            GH_OUTPUT: output,
+            PATH: `${tmpDir}:${process.env.PATH}`,
+            GITHUB_REPOSITORY: 'xpepper/pr-review-gemini',
+            TAG_NAME: 'v1.2.3',
+          },
+        },
+      );
+
+      try {
+        const existing = runGuard(0, '');
+        assert.equal(existing.status, 1);
+        assert.match(existing.stdout, /release for tag 'v1\.2\.3' already exists/);
+
+        const missing = runGuard(1, 'gh: Not Found (HTTP 404)');
+        assert.equal(missing.status, 0);
+
+        const apiFailure = runGuard(1, 'gh: API rate limit exceeded (HTTP 403)');
+        assert.equal(apiFailure.status, 1);
+        assert.match(apiFailure.stdout, /Unable to verify whether a release exists/);
+        assert.match(apiFailure.stderr, /API rate limit exceeded/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
+```
+
+- [ ] **Step 2: Run the tests — expect FAIL (red)**
+
+Run: `node --test tests/ci.test.mjs`
+Expected: both `Release Workflow Template` tests FAIL against the current release.yml (no `uses: ./.github/workflows/ci.yml`, no `needs: [verify-tag, ci]`, no `gh api .../releases/tags/...`).
+
+- [ ] **Step 3: Rewrite release.yml**
 
 Full new content of `.github/workflows/release.yml`:
 
@@ -447,14 +536,17 @@ jobs:
             --verify-tag
 ```
 
-Deliberate changes vs the old file: the old `verify` job's manifest-sync check (`node scripts/bump-version.mjs --check`) and `npm test` steps are gone — they now run inside the called CI workflow; `verify-tag` keeps only the release-specific tag alignment; the `ci` job runs in parallel with `verify-tag` (no `needs`), and `publish` waits for both. The existing-release check is also hardened (found by the repo's self-review gate during plan review): it now queries `gh api repos/.../releases/tags/<tag>` and treats only the REST API's `Not Found` response as "no release yet" — every other failure (auth, rate limit, outage) aborts — instead of string-matching `gh release view`'s human-readable output. Publish behavior is unchanged.
+Deliberate changes vs the old file: the old `verify` job's manifest-sync check (`node scripts/bump-version.mjs --check`) and `npm test` steps are gone — they now run inside the called CI workflow; `verify-tag` keeps only the release-specific tag alignment; the `ci` job runs in parallel with `verify-tag` (no `needs`), and `publish` waits for both. The existing-release check is also hardened (found by the repo's self-review gate during plan review): it now queries `gh api repos/.../releases/tags/<tag>` and treats only the REST API's `Not Found` response as "no release yet" — every other failure (auth, rate limit, outage) aborts — instead of string-matching `gh release view`'s human-readable output. Publish behavior is unchanged, and the two `Release Workflow Template` tests in `tests/ci.test.mjs` are rewritten in Step 1 to assert the new guard (the executed-script test stubs `gh` and now feeds `gh: Not Found (HTTP 404)` as the missing-release case).
 
-- [ ] **Step 2: Local syntax sanity check**
+- [ ] **Step 4: Verify — YAML parses and tests go green**
 
 Run: `ruby -ryaml -e 'YAML.load_file(".github/workflows/release.yml"); puts "yaml ok"'`
 Expected: `yaml ok`.
 
-- [ ] **Step 3: Update docs/release.md**
+Run: `node --test tests/ci.test.mjs && npm test`
+Expected: all pass, 0 failures.
+
+- [ ] **Step 5: Update docs/release.md**
 
 In `docs/release.md`, replace the paragraph under `## Release workflow` (starting "Pushing a `v*` tag triggers the `verify` job...") with:
 
@@ -473,19 +565,19 @@ definition, a release cannot be published while CI is broken — the checks
 re-run at the tag commit even if someone bypassed branch protection.
 ```
 
-- [ ] **Step 4: Commit, PR, merge**
+- [ ] **Step 6: Commit, PR, merge**
 
 ```bash
 git checkout -b ci/release-gate
-git add .github/workflows/release.yml docs/release.md
+git add .github/workflows/release.yml tests/ci.test.mjs docs/release.md
 git commit -m "ci: gate release on shared CI workflow"
 git push -u origin ci/release-gate
 gh pr create --title "ci: gate release on shared CI workflow" \
-  --body "Reworks release.yml: verify-tag (alignment) + ci (reusable workflow_call at the tag ref) both gate publish (design spec Task 4)."
+  --body "Reworks release.yml: verify-tag (alignment) + ci (reusable workflow_call at the tag ref) both gate publish; release-guard tests rewritten for the API-based lookup (design spec Task 4)."
 gh pr checks --watch && gh pr merge --squash --delete-branch
 ```
 
-- [ ] **Step 5: Smoke test — tag push (safe, publish skipped)**
+- [ ] **Step 7: Smoke test — tag push (safe, publish skipped)**
 
 On merged `main`, push a throwaway tag and watch the Release workflow:
 
@@ -502,7 +594,7 @@ Expected: `Verify Release Tag` FAILS with `Release tag 'v0.0.0-ci-smoke' does no
 git push origin :refs/tags/v0.0.0-ci-smoke && git tag -d v0.0.0-ci-smoke
 ```
 
-- [ ] **Step 6: Smoke test — dispatch against an already-released tag (safe end-to-end)**
+- [ ] **Step 8: Smoke test — dispatch against an already-released tag (safe end-to-end)**
 
 ```bash
 gh workflow run Release --ref main -f tag=v1.0.1
