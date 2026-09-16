@@ -13,8 +13,14 @@ on:
 permissions:
   contents: write
 
+# Serialize release runs (never cancel an in-flight publish). Dispatches for
+# the same tag queue instead of racing the existence check against creation.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  verify:
+  verify-tag:
     name: 'Verify Release Tag'
     runs-on: ubuntu-latest
     steps:
@@ -29,23 +35,31 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Verify Manifest Synchronization & Tag Alignment
+      - name: Verify Tag Alignment
         env:
           TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          node scripts/bump-version.mjs --check
           PKG_VERSION=$(node -p "require('./package.json').version")
           if [ "$TAG_NAME" != "v$PKG_VERSION" ]; then
             echo "::error::Release tag '$TAG_NAME' does not match manifest version 'v$PKG_VERSION'"
             exit 1
           fi
 
-      - name: Run Test Suite
-        run: npm test
+  # Shared merge gate (same definition PRs run). Ref semantics are deliberate:
+  # `uses:` resolves the called workflow definition from the caller's commit —
+  # the tag commit on tag push, the dispatched branch on workflow_dispatch —
+  # while `with.ref` pins the checked-out source to the tag. GitHub Actions
+  # does not allow dynamic refs in `uses:`, so dispatch always validates the
+  # tag with the dispatched branch's check definition.
+  ci:
+    name: 'CI'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ github.event.inputs.tag || github.ref }}
 
   publish:
     name: 'Publish GitHub Release'
-    needs: verify
+    needs: [verify-tag, ci]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -65,14 +79,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.event.inputs.tag }}
         run: |
-          if release_lookup=$(gh release view "$TAG_NAME" 2>&1); then
+          response="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" 2>&1)" && {
             echo "::error::A release for tag '$TAG_NAME' already exists. Publish is not idempotent by design — delete the existing release first if you intend to republish, or dispatch a different tag."
             exit 1
-          elif [ "$release_lookup" != "release not found" ]; then
-            echo "::error::Unable to verify whether a release exists for tag '$TAG_NAME'."
-            echo "$release_lookup" >&2
-            exit 1
-          fi
+          }
+          case "$response" in
+            *"Not Found"*) ;;
+            *)
+              echo "::error::Unable to verify whether a release exists for tag '$TAG_NAME'."
+              echo "$response" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Generate Release Notes
         id: notes

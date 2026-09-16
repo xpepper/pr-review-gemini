@@ -2813,7 +2813,7 @@ runs:
   });
 
   describe('Release Workflow Template (.github/workflows/release.yml)', () => {
-    it('verifies release workflow validates tags and only publishes on explicit dispatch', () => {
+    it('verifies release workflow gates publish on tag alignment and shared CI, dispatch-only', () => {
       const workflowPath = path.resolve('.github/workflows/release.yml');
       assert.equal(fs.existsSync(workflowPath), true, 'release.yml workflow must exist');
 
@@ -2822,16 +2822,17 @@ runs:
       assert.match(content, /workflow_dispatch:/);
       assert.match(content, /description:\s*['"]Existing git tag to publish \(e\.g\. v0\.2\.0\)['"]/);
       assert.match(content, /push:\s*\n\s*tags:\s*\n\s*-\s*['"]v\*['"]/);
-      assert.match(content, /ref:\s*\${{\s*github\.event\.inputs\.tag \|\| github\.ref\s*}}/);
-      assert.match(content, /needs:\s*verify/);
+      assert.match(content, /ref:\s*\$\{\{\s*github\.event\.inputs\.tag \|\| github\.ref\s*\}\}/);
+      assert.match(content, /uses:\s*\.\/\.github\/workflows\/ci\.yml/);
+      assert.match(content, /needs:\s*\[verify-tag, ci\]/);
       assert.match(content, /if:\s*github\.event_name\s*==\s*['"]workflow_dispatch['"]/);
       assert.match(content, /name:\s*['"]Publish GitHub Release['"]/);
-      const existingReleaseCheck = content.indexOf('gh release view "$TAG_NAME"');
+      const existingReleaseCheck = content.indexOf('releases/tags/${TAG_NAME}');
       const releaseCreation = content.indexOf('gh release create "$TAG_NAME"');
       assert.ok(existingReleaseCheck >= 0, 'publish job must reject an existing release');
       assert.ok(existingReleaseCheck < releaseCreation, 'existing release check must run before release creation');
-      assert.match(content, /release_lookup=\$\(gh release view "\$TAG_NAME" 2>&1\)/);
-      assert.match(content, /\[\s*"\$release_lookup"\s*!=\s*"release not found"\s*\]/);
+      assert.match(content, /gh api "repos\/\$\{GITHUB_REPOSITORY\}\/releases\/tags\/\$\{TAG_NAME\}"/);
+      assert.match(content, /\*"Not Found"\*\)/);
       assert.match(content, /Unable to verify whether a release exists/);
     });
 
@@ -2861,6 +2862,7 @@ runs:
             GH_EXIT: String(exitCode),
             GH_OUTPUT: output,
             PATH: `${tmpDir}:${process.env.PATH}`,
+            GITHUB_REPOSITORY: 'xpepper/pr-review-gemini',
             TAG_NAME: 'v1.2.3',
           },
         },
@@ -2871,7 +2873,7 @@ runs:
         assert.equal(existing.status, 1);
         assert.match(existing.stdout, /release for tag 'v1\.2\.3' already exists/);
 
-        const missing = runGuard(1, 'release not found');
+        const missing = runGuard(1, 'gh: Not Found (HTTP 404)');
         assert.equal(missing.status, 0);
 
         const apiFailure = runGuard(1, 'gh: API rate limit exceeded (HTTP 403)');
