@@ -201,7 +201,7 @@ describe('action.yml modern Action contract', () => {
 });
 ```
 
-The `inputNames.length >= 10` assertion already proves every listed input is declared; the per-input assertion proves each has a description.
+The `inputNames` list is extracted from `action.yml` itself, so declaration is true by construction for every listed name; the `>= 10` length assertion only guards the extraction against silently matching nothing. The explicit required-input name set is already asserted by the existing `requiredInputs` check in `tests/ci.test.mjs`'s `action.yml Manifest Schema Validation` describe.
 
 - [ ] **Step 2: Run the new tests — expect PASS**
 
