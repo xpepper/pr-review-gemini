@@ -38,11 +38,11 @@ describe('Agent Plugins 1.0 bundle conformance', () => {
 
   it('carries a SemVer version in every manifest', () => {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const semver = /^\d+\.\d+\.\d+$/;
+    const semver = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
     assert.match(pkg.version, semver, 'package.json version must be SemVer');
     assert.match(plugin.version, semver, 'plugin.json version must be SemVer');
     assert.match(mcp.version, semver, 'mcp.json version must be SemVer');
-    const skillVersion = skillFrontmatter.match(/^  version:\s*"?(\d+\.\d+\.\d+)"?/m)?.[1];
+    const skillVersion = skillFrontmatter.match(/^  version:\s*"?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)"?/m)?.[1];
     assert.ok(skillVersion, 'SKILL.md metadata must carry a version');
     assert.match(skillVersion, semver, 'SKILL.md version must be SemVer');
     assert.equal(plugin.version, pkg.version, 'plugin.json version must match package.json');
@@ -58,7 +58,8 @@ describe('Agent Plugins 1.0 bundle conformance', () => {
     for (const dir of dirs) {
       const skillPath = `skills/${dir.name}/SKILL.md`;
       assert.ok(fs.existsSync(skillPath), `${skillPath} must exist`);
-      const name = fs.readFileSync(skillPath, 'utf8').match(/^name:\s*(\S+)/m)?.[1];
+      const frontmatter = fs.readFileSync(skillPath, 'utf8').match(/^---\n([\s\S]*?)\n---/)?.[1] ?? '';
+      const name = frontmatter.match(/^name:\s*(\S+)/m)?.[1];
       assert.equal(name, dir.name, `skill name in ${skillPath} must match its directory name`);
     }
   });
