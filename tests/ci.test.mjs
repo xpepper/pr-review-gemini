@@ -2812,6 +2812,32 @@ runs:
     });
   });
 
+  describe('CI Workflow Template (.github/workflows/ci.yml)', () => {
+    it('pins CI workflow name, triggers, permissions, concurrency, and the branch-protection check matrix', () => {
+      const workflowPath = path.resolve('.github/workflows/ci.yml');
+      assert.equal(fs.existsSync(workflowPath), true, 'ci.yml workflow must exist');
+
+      const content = fs.readFileSync(workflowPath, 'utf8');
+      assert.match(content, /name:\s*['"]?CI['"]?/);
+      assert.match(content, /^  pull_request:\s*$/m);
+      assert.match(content, /push:\s*\n\s*branches:\s*\[main\]/);
+      assert.match(content, /workflow_call:\s*\n\s*inputs:\s*\n\s*ref:\s*\n\s*description:[^\n]+\n\s*type:\s*['"]?string['"]?\s*\n\s*default:\s*['"]{2}/);
+      assert.match(content, /permissions:\s*\n\s*contents:\s*read/);
+      assert.match(content, /group:\s*ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}/);
+      assert.match(content, /cancel-in-progress:\s*\$\{\{ github\.event_name == 'pull_request' \}\}/);
+      assert.match(content, /checks:\s*\n\s*name:\s*checks/);
+      // The quoted matrix values derive the check names 'checks (20)' and 'checks (24)' that
+      // branch protection pins as required contexts; drift here stalls the merge gate silently.
+      assert.match(content, /matrix:\s*\n\s*node-version:\s*\['20',\s*'24'\]/);
+      assert.match(content, /ref:\s*\$\{\{ inputs\.ref \|\| github\.ref \}\}/);
+      const versionCheckStep = content.indexOf('run: npm run version:check');
+      const testStep = content.indexOf('run: npm test');
+      assert.ok(versionCheckStep >= 0, 'ci.yml must run npm run version:check');
+      assert.ok(testStep >= 0, 'ci.yml must run npm test');
+      assert.ok(versionCheckStep < testStep, 'version:check must run before the test suite');
+    });
+  });
+
   describe('Release Workflow Template (.github/workflows/release.yml)', () => {
     it('verifies release workflow gates publish on tag alignment and shared CI, dispatch-only', () => {
       const workflowPath = path.resolve('.github/workflows/release.yml');
