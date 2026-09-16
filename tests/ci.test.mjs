@@ -998,6 +998,50 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('acquires install locks under the bash the system ships, including macOS bash 3.2', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      // BASHPID arrived in bash 4. Under `set -u` it aborts every lock acquisition on the
+      // 3.2 that macOS ships, and the suite would not notice: `bash` on PATH is 5.x here.
+      // Match an expansion, not a mention: the script explains in a comment why it
+      // avoids this variable, and that explanation should not trip the guard.
+      assert.equal(
+        /\$\{?BASHPID\b/.test(fs.readFileSync(cleanupScript, 'utf8')),
+        false,
+        'must not expand variables that bash 3.2 does not define',
+      );
+
+      const systemBash = '/bin/bash';
+      const systemBashMajor = spawnSync(systemBash, ['-c', 'echo "${BASH_VERSINFO[0]}"'], { encoding: 'utf8' }).stdout.trim();
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-system-bash-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const installRoot = path.join(runnerTemp, 'gem-pr-review-copilot.systembash');
+
+      try {
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+        fs.chmodSync(installRoot, 0o700);
+
+        const initializeResult = spawnSync(
+          systemBash,
+          [cleanupScript, 'initialize-install', installRoot, String(Math.floor(Date.now() / 1000))],
+          { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: runnerTemp } },
+        );
+        assert.equal(initializeResult.status, 0, `bash ${systemBashMajor}: ${initializeResult.stderr}`);
+        assert.equal(
+          fs.existsSync(path.join(installRoot, '.gem-pr-review-copilot-lease')),
+          true,
+          'initialization must publish a lease under the system bash',
+        );
+        assert.deepEqual(
+          fs.readdirSync(runnerTemp).filter((entry) => entry.startsWith('.gem-pr-review-copilot-lock.')),
+          [],
+          'the lock must be released, not left behind',
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
     it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
       const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));

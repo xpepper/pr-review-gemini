@@ -249,11 +249,16 @@ with_install_lock() (
     ) || return 75
   fi
   trap 'release_install_lock_if_owner "$lock_directory" "$lock_owner_identity"' EXIT
-  lock_owner_started_at="$(process_start_time "$BASHPID")" || return 75
-  lock_owner_identity="$BASHPID|$lock_owner_started_at"
+  # The holder is this script process rather than the subshell. $$ means the same
+  # thing in the bash 3.2 that macOS ships, where BASHPID does not exist at all and
+  # would abort the lock under `set -u`. Only one lock is held at a time, so the
+  # script process names it unambiguously, and the recorded start time still tells
+  # it apart from a later process that reuses the PID.
+  lock_owner_started_at="$(process_start_time "$$")" || return 75
+  lock_owner_identity="$$|$lock_owner_started_at"
   # Publish the record atomically: a partial pid file names no holder and would
   # keep every later invocation out of this install until the lock ages out.
-  write_marker "$lock_directory/pid" "pid=$BASHPID" "started_at=$lock_owner_started_at" ||
+  write_marker "$lock_directory/pid" "pid=$$" "started_at=$lock_owner_started_at" ||
     return 75
   "$@"
 )
