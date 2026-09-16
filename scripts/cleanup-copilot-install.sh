@@ -340,14 +340,19 @@ initialize_install() {
   local runner_temp_root="$4"
   local runner_temp
   local canonical_install
+  local lock_status
 
   runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
-  with_install_lock "$canonical_install" "$runner_temp" \
-    initialize_install_locked "$canonical_install" "$created_at" "$lease_pid" ||
-    fail 'Copilot CLI install is being changed by another invocation.'
+  if with_install_lock "$canonical_install" "$runner_temp" \
+    initialize_install_locked "$canonical_install" "$created_at" "$lease_pid"; then
+    return 0
+  else
+    lock_status="$?"
+  fi
+  fail_lock_status "$lock_status"
 }
 
 activate_lease_locked() {
@@ -366,14 +371,19 @@ activate_lease() {
   local runner_temp_root="$3"
   local runner_temp
   local canonical_install
+  local lock_status
 
   runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
-  with_install_lock "$canonical_install" "$runner_temp" \
-    activate_lease_locked "$canonical_install" "$lease_pid" ||
-    fail 'Copilot CLI install is being changed by another invocation.'
+  if with_install_lock "$canonical_install" "$runner_temp" \
+    activate_lease_locked "$canonical_install" "$lease_pid"; then
+    return 0
+  else
+    lock_status="$?"
+  fi
+  fail_lock_status "$lock_status"
 }
 
 remove_install_via_quarantine() {
@@ -426,19 +436,35 @@ remove_current_install_locked() {
   remove_install_via_quarantine "$canonical_install" "$runner_temp"
 }
 
+# with_install_lock raises 75 only when the lock itself could not be taken. Any other
+# status came from the operation run under it, which has already reported its own
+# error, so it is passed through rather than relabelled as contention.
+fail_lock_status() {
+  local lock_status="$1"
+
+  [ "$lock_status" -eq 75 ] ||
+    exit "$lock_status"
+  fail 'Copilot CLI install is being changed by another invocation.'
+}
+
 remove_current_install() {
   local install_path="$1"
   local runner_temp_root="$2"
   local runner_temp
   local canonical_install
+  local lock_status
 
   runner_temp="$(validate_runner_temp "$runner_temp_root")" ||
     fail 'RUNNER_TEMP is unavailable.'
   canonical_install="$(validate_install_path "$install_path" "$runner_temp")" ||
     fail 'Unexpected Copilot CLI install path.'
-  with_install_lock "$canonical_install" "$runner_temp" \
-    remove_current_install_locked "$canonical_install" "$runner_temp" ||
-    fail 'Copilot CLI install is being changed by another invocation.'
+  if with_install_lock "$canonical_install" "$runner_temp" \
+    remove_current_install_locked "$canonical_install" "$runner_temp"; then
+    return 0
+  else
+    lock_status="$?"
+  fi
+  fail_lock_status "$lock_status"
 }
 
 # Prints the age of an install from a release that marked ownership with an empty

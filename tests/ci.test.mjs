@@ -1106,6 +1106,69 @@ describe('CI Event Payload & Environment Resolution', () => {
       }
     });
 
+    it('reports the real failure from a locked operation instead of calling it contention', () => {
+      const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
+      const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-error-'));
+      const runnerTemp = path.join(fixtureRoot, 'runner-temp');
+      const now = Math.floor(Date.now() / 1000);
+      const liveStartedAt = spawnSync(
+        'ps',
+        ['-o', 'lstart=', '-p', String(process.pid)],
+        { encoding: 'utf8' },
+      ).stdout.trim();
+      const makeInstall = (name, owned, lease) => {
+        const installRoot = path.join(runnerTemp, name);
+        fs.mkdirSync(installRoot, { recursive: true });
+        fs.chmodSync(installRoot, 0o700);
+        fs.writeFileSync(path.join(installRoot, '.gem-pr-review-copilot-owned'), owned);
+        fs.writeFileSync(path.join(installRoot, '.gem-pr-review-copilot-lease'), lease);
+        return installRoot;
+      };
+
+      try {
+        fs.mkdirSync(runnerTemp, { recursive: true });
+        fs.chmodSync(runnerTemp, 0o700);
+
+        // The lock is acquired successfully in both cases below. What fails is the
+        // operation performed under it, and that is what the caller should be told.
+        const brokenMarker = makeInstall(
+          'gem-pr-review-copilot.broken',
+          'version=1\n',
+          'pid=99999999\nstarted_at=not-running\n',
+        );
+        const activateResult = spawnSync('bash', [cleanupScript, 'activate-lease', brokenMarker], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(activateResult.status, 1, 'must fail on invalid ownership metadata');
+        assert.match(activateResult.stderr, /ownership marker is invalid/);
+        assert.doesNotMatch(
+          activateResult.stderr,
+          /being changed by another invocation/,
+          'a failure inside the lock is not lock contention',
+        );
+
+        const activeInstall = makeInstall(
+          'gem-pr-review-copilot.leased',
+          `version=2\ninstall_id=gem-pr-review-copilot.leased\ncreated_at=${now}\n`,
+          `pid=${process.pid}\nstarted_at=${liveStartedAt}\n`,
+        );
+        const cleanupResult = spawnSync('bash', [cleanupScript, 'cleanup-current', activeInstall], {
+          encoding: 'utf8',
+          env: { ...process.env, RUNNER_TEMP: runnerTemp },
+        });
+        assert.equal(cleanupResult.status, 1, 'must fail while the install is still leased');
+        assert.match(cleanupResult.stderr, /still active/);
+        assert.doesNotMatch(
+          cleanupResult.stderr,
+          /being changed by another invocation/,
+          'an active lease is not lock contention',
+        );
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    });
+
     it('binds Copilot CLI install leases to the invoking shell instead of a caller-supplied PID', () => {
       const cleanupScript = path.resolve('scripts/cleanup-copilot-install.sh');
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copilot-install-lease-'));
