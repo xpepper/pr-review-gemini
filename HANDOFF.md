@@ -3,9 +3,17 @@
 ## Current State
 
 * **Repository**: `https://github.com/xpepper/pr-review-gemini`
-* **`main`**: PR #73 is merged at `54b13df`, consolidating trusted
-  Action-contract detection while preserving immutable trusted-base checkout,
-  fail-closed authentication, and host-gated publication.
+* **`main`**: at `5bfcae0` after the CI-pipeline increments (PRs #80–#83),
+  which added the shared CI workflow, bundle/action contract tests, and the
+  release gate on top of the PR #73 trusted Action-contract consolidation.
+* **Branch protection**: `main` is protected — required checks `checks (20)`
+  and `checks (24)`, admin bypass (`enforce_admins: false`), no required
+  approvals, force pushes and deletions blocked (conversation resolution
+  remains required from the earlier configuration). If the CI matrix ever
+  changes, the check names in the protection rule must be updated to match.
+* **Release flow**: unchanged for the operator — `npm run release` locally,
+  then the dispatch; `release.yml` gates publish on `verify-tag` plus the
+  shared CI at the tag ref.
 * **Release**: `v1.0.1` is published at
   https://github.com/xpepper/pr-review-gemini/releases/tag/v1.0.1. The required
   `copilot_token` input intentionally breaks the prior Action environment-only

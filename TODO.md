@@ -113,6 +113,11 @@ is live, and the Action is listed in Code quality and Continuous integration.
 ---
 
 ## Completed Increments
+- [x] **Increment 23 / CI Pipeline: merge gate + shared release gate**
+  - [x] Dual-trigger `.github/workflows/ci.yml` (push main, PRs, workflow_call) running `version:check` + full suite on Node 20/24.
+  - [x] Agent Plugins 1.0 bundle conformance and action.yml modern-contract tests.
+  - [x] `release.yml` gates publish on `verify-tag` + shared CI at the tag ref.
+  - [x] Branch protection on `main`: required checks `checks (20)`/`checks (24)`, admin bypass, no required approvals.
 - [x] **Increment 22 / PR #40: Safe Verbose Review Diagnostics & Execution Telemetry**
   - [x] Implemented telemetry collector module in `src/diagnostics.js` (`createDiagnosticsCollector`, `measurePhase`, `startPhase`, `endPhase`, `formatDiagnosticReport`, `formatDiagnosticsJson`).
   - [x] Strict data redaction guarantees: `sanitizeTelemetry`, `redactSensitiveString` eliminating tokens, secrets, raw prompt/diff bodies, and developer machine paths.
