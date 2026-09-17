@@ -48,6 +48,36 @@ resolve from the dispatched branch (checkouts are pinned to the tag),
 while on tag push both the definitions and the checkouts come from the
 tag commit.
 
+## Release runbook
+
+The operator sequence, validated end-to-end with v1.0.2 (2026-09-17).
+Requires admin rights on the repository. **Start from an up-to-date
+`main`** (`git checkout main && git pull origin main`): the release
+commit and tag are created at your current HEAD, so running the sequence
+from another branch leaves them unreachable from `main`.
+
+1. `npm run release` — computes the next version from conventional
+   commits since the last tag, syncs the four manifests, prepends
+   `CHANGELOG.md`, commits `chore(release): v<N>`, and creates the
+   annotated tag `v<N>`. It does **not** push anything.
+2. `git push origin main --follow-tags` — pushes the release commit and
+   the tag together. The direct push to `main` relies on the admin
+   bypass in branch protection (`enforce_admins: false`). Use annotated
+   tags: environments with `tag.gpgsign=true` reject lightweight tags,
+   and `npm run release` already creates annotated ones.
+3. The tag push automatically triggers the Release workflow's two gates
+   (`verify-tag` + shared CI at the tag). Find the run with
+   `gh run list --workflow=Release --event=push --limit 1` (filtering by
+   event avoids picking an unrelated dispatch run) and watch it with
+   `gh run watch <id>`. The `Publish GitHub Release` job stays
+   **skipped** on tag pushes — that is by design, not a failure.
+4. Publish (dispatch-only): `gh workflow run Release --ref main -f tag=v<N>`,
+   then find and watch the new run with
+   `gh run list --workflow=Release --event=workflow_dispatch --limit 1`.
+   Publishing fails outright if a release already exists for the tag
+   (non-idempotent by design).
+5. Bump the marketplace entry (next section).
+
 ## Marketplace maintenance at release time
 
 Two listings track releases, with different mechanics:
