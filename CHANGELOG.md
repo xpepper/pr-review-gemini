@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-09-17
+
+### 🐛 Bug Fixes
+
+- cleanup stale copilot installs (#78) (#78) (`b2be840`)
+- **ci:** consolidate trusted action contract detector (#73) (#73) (`54b13df`)
+
+### 📝 Documentation
+
+- record CI pipeline gates (#84) (#84) (`a8f6822`)
+- CI pipeline design spec (#79) (#79) (`da11305`)
+- finalize trusted detector follow-up (#74) (#74) (`452fdb8`)
+- finalize v1.0.1 handoff (`28d9d49`)
+- pin examples to v1.0.1 (`271e368`)
+
+### 🧪 Tests
+
+- CI workflow contract test and SemVer prerelease support (#85) (#85) (`52c5709`)
+- action.yml modern composite contract (#81) (#81) (`593cd2f`)
+- Agent Plugins 1.0 bundle conformance tests (#80) (#80) (`e5fcb58`)
+
+### 🔧 Maintenance & Chores
+
+- gate release on shared CI workflow (#83) (#83) (`5bfcae0`)
+- add CI workflow (#82) (#82) (`f567f20`)
+
 ## [1.0.1] - 2026-09-15
 
 ### 🐛 Bug Fixes
