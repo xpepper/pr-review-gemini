@@ -97,6 +97,20 @@ node scripts/dogfood-review.mjs 42 --publish --interactive
 cached publication both enforce diff-anchor and current-head validation before
 the host writes to GitHub.
 
+### Reading findings
+
+A dry run prints one line per finding (severity, location, title) without the
+explanation. To read the explanations, add `--json` and use `findings[].commentary`
+(each finding also carries `severity`, `filePath`, `line`, `confidence`, and
+`title`), or open the cached result at `.gem-pr-cache/pr_<PR_NUMBER>_<head_sha>.json`.
+
+```bash
+node scripts/dogfood-pr.mjs 42 --dry-run --json
+```
+
+When the MCP tools are not loaded in a Copilot CLI session, the skill points
+agents at this runner (in the installed plugin's `scripts/` directory).
+
 ## Self-review
 
 ```text

@@ -17,6 +17,18 @@ It distributes review analysis across specialized lenses, captures high-signal f
 
 ---
 
+## When the MCP Tools Are Not Loaded
+
+If no `gem_pr_review_*` tool is available in the session, run the plugin's CLI runner instead of reviewing by hand. From the repository under review:
+
+```bash
+node ~/.copilot/installed-plugins/<marketplace>/gem-pr-review/scripts/dogfood-pr.mjs <PR_NUMBER> --dry-run --json
+```
+
+The plain output lists one line per finding (severity, location, title). `--json` adds each explanation in `findings[].commentary`. The findings are also cached in `.gem-pr-cache/pr_<PR_NUMBER>_<head_sha>.json`, so `--publish-cached` can publish a selection later without rerunning inference.
+
+---
+
 ## Review Modes
 
 Reviewers can trigger different modes based on PR complexity and speed requirements:
